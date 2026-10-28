@@ -770,11 +770,6 @@ body.immersive #tabbar { display: none; }
         ${["All"].concat(LS.CATEGORIES).map((c) => `<button class="chip ${c === "All" ? "on" : ""}" data-cat="${c}">${c}</button>`).join("")}
       </div>
       <div class="grid" id="results"></div>
-      <h3 class="sec">Effects gallery</h3>
-      <p class="hint">Tap an effect to use it on your next stream.</p>
-      <div class="fx-gallery" id="gallery">
-        ${LS.EFFECT_NAMES.map((n) => `<a class="fx-tile" href="#/golive" data-fx="${n}"><canvas class="fx"></canvas><span>${LS.effectInfo(n).icon} ${LS.effectInfo(n).label}</span></a>`).join("")}
-      </div>
       <div class="spacer"></div>`;
 
     function renderResults() {
@@ -798,12 +793,6 @@ body.immersive #tabbar { display: none; }
       renderResults();
     });
 
-    const runners = $$(".fx-tile", view).map((t) => LS.startEffect($(".fx", t), t.dataset.fx));
-    $("#gallery", view).addEventListener("click", (e) => {
-      const t = e.target.closest("[data-fx]");
-      if (t) LS.store.set("effect", t.dataset.fx);
-    });
-    return () => runners.forEach((r) => r.stop());
   };
 
   /* ---------------- Live list ---------------- */
