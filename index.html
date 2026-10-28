@@ -1,0 +1,1152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b12">
+  <title>LiveStream Studio</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ff3d71'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23fff'/%3E%3C/svg%3E">
+  <style>
+:root {
+  --bg: #0b0b12; --card: #161624; --card2: #1e1e30; --text: #f4f4f8; --muted: #9a9ab0;
+  --pink: #ff3d71; --violet: #7c5cff; --cyan: #22d3ee; --line: rgba(255, 255, 255, 0.08);
+}
+* { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; background: #050508; color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: inherit; text-decoration: none; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; }
+.hidden { display: none !important; }
+.spacer { height: 24px; }
+
+#app { max-width: 460px; margin: 0 auto; height: 100dvh; background: var(--bg); position: relative; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+#view { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; scrollbar-width: none; }
+#view::-webkit-scrollbar { display: none; }
+
+/* tab bar */
+#tabbar { flex: none; display: flex; align-items: center; justify-content: space-around; height: 64px; padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--line); background: rgba(11, 11, 18, 0.97); }
+#tabbar a { display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--muted); font-size: 11px; min-width: 56px; }
+#tabbar a span { font-size: 20px; line-height: 1; }
+#tabbar a.on { color: var(--text); }
+#tabbar a.center { min-width: 0; }
+#tabbar a.center span { width: 50px; height: 34px; border-radius: 12px; display: grid; place-items: center; font-size: 24px; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--pink), var(--violet)); }
+body.immersive #tabbar { display: none; }
+
+/* top bar */
+.topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(var(--bg) 70%, transparent); }
+.logo { font-weight: 800; font-size: 20px; letter-spacing: -0.3px; }
+.logo span { background: linear-gradient(90deg, var(--pink), var(--violet)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.icon-btn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--card2); font-size: 18px; }
+.glass { background: rgba(10, 10, 20, 0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+
+/* buttons / chips */
+.btn { display: inline-block; padding: 10px 18px; border-radius: 999px; font-weight: 700; background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; text-align: center; }
+.btn.ghost { background: var(--card2); }
+.btn.big { width: 100%; padding: 14px; font-size: 16px; margin-top: 14px; }
+.btn.danger { background: #d62839; }
+.chips { display: flex; gap: 8px; padding: 4px 16px 10px; }
+.chips.scroll { overflow-x: auto; scrollbar-width: none; }
+.chips.scroll::-webkit-scrollbar { display: none; }
+.chips.wrap { flex-wrap: wrap; padding: 4px 0 8px; }
+.chip { flex: none; padding: 8px 14px; border-radius: 999px; background: var(--card2); color: var(--muted); font-size: 14px; white-space: nowrap; }
+.chip.on { background: #fff; color: #111; font-weight: 700; }
+.badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.4px; background: var(--pink); color: #fff; }
+.pill { padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+.seg { display: flex; background: var(--card2); border-radius: 999px; padding: 3px; }
+.seg button { padding: 6px 14px; border-radius: 999px; color: var(--muted); font-size: 14px; }
+.seg button.on { background: #fff; color: #111; font-weight: 700; }
+.seg.wide { margin: 0 16px 8px; }
+.seg.wide button { flex: 1; }
+
+/* sections */
+.sec { display: flex; justify-content: space-between; align-items: baseline; padding: 18px 16px 8px; font-size: 17px; }
+.sec a { font-size: 13px; color: var(--muted); font-weight: 400; }
+.sec2 { padding: 14px 0 4px; font-size: 15px; }
+.hint, .note { padding: 0 16px; color: var(--muted); font-size: 13px; }
+.note { padding: 14px 0 0; line-height: 1.45; }
+.empty { grid-column: 1 / -1; text-align: center; color: var(--muted); padding: 30px 0; }
+.pad { padding: 8px 16px; }
+.row { display: flex; gap: 10px; margin-bottom: 6px; }
+
+/* hero */
+.hero { position: relative; margin: 4px 16px 0; height: 230px; border-radius: 22px; overflow: hidden; background: #000; }
+.hero-bg, .stage-bg { position: absolute; inset: 0; background: radial-gradient(circle at 30% 20%, hsl(var(--h, 260) 70% 30%), #07070d 70%); }
+.fx { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+.hero-body { position: absolute; left: 16px; right: 16px; bottom: 14px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.hero-body h2 { font-size: 22px; line-height: 1.15; text-shadow: 0 2px 10px #000a; }
+.hero-body p { color: #ddd; font-size: 13px; }
+.hero-body .btn { margin-top: 4px; padding: 8px 16px; font-size: 14px; }
+.fx-name { position: absolute; top: 12px; right: 12px; padding: 5px 10px; border-radius: 999px; font-size: 12px; background: rgba(0, 0, 0, 0.5); }
+.hero .badge { align-self: flex-start; }
+
+/* stories rail */
+.rail { display: flex; gap: 14px; overflow-x: auto; padding: 0 16px 6px; scrollbar-width: none; }
+.rail::-webkit-scrollbar { display: none; }
+.story { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: none; font-size: 12px; color: var(--muted); }
+.ring { display: inline-grid; place-items: center; padding: 3px; border-radius: 50%; background: conic-gradient(var(--pink), var(--violet), var(--cyan), var(--pink)); }
+.ring .av { border: 3px solid var(--bg); border-radius: 50%; display: block; }
+.ring.sm .av { border-width: 2px; }
+.ring.lg { padding: 4px; }
+
+/* cards */
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px; }
+.card { display: block; }
+.thumb { position: relative; aspect-ratio: 3 / 4; border-radius: 16px; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at 30% 20%, hsl(var(--h) 70% 38%), hsl(calc(var(--h) + 40) 60% 12%)); font-size: 44px; }
+.thumb .badge { position: absolute; top: 8px; left: 8px; }
+.thumb .views { position: absolute; bottom: 8px; left: 8px; font-size: 12px; background: rgba(0, 0, 0, 0.5); padding: 3px 8px; border-radius: 999px; }
+.thumb .fxtag { position: absolute; top: 8px; right: 8px; font-size: 16px; }
+.meta { padding: 8px 2px 0; display: flex; flex-direction: column; gap: 2px; }
+.meta b { font-size: 14px; line-height: 1.25; }
+.meta small { color: var(--muted); font-size: 12px; }
+
+/* search / lists */
+.searchbar { display: flex; align-items: center; gap: 8px; margin: 0 16px 10px; padding: 0 14px; height: 44px; border-radius: 999px; background: var(--card2); }
+.searchbar input { flex: 1; background: none; border: 0; outline: none; }
+.list { display: flex; flex-direction: column; }
+.row-item { display: flex; align-items: center; gap: 12px; padding: 10px 16px; }
+.row-item .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row-item b { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-item small { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-item .right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.dot { min-width: 20px; padding: 2px 6px; border-radius: 999px; background: var(--pink); font-size: 12px; font-weight: 700; text-align: center; }
+.act { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--card2); font-size: 20px; }
+
+/* gallery */
+.fx-gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 16px 0; }
+.fx-tile { position: relative; height: 110px; border-radius: 16px; overflow: hidden; background: radial-gradient(circle at 50% 0%, #1b1b33, #07070d); display: block; }
+.fx-tile span { position: absolute; left: 10px; bottom: 8px; font-size: 13px; font-weight: 600; text-shadow: 0 1px 6px #000; }
+
+/* room */
+.room { position: absolute; inset: 0; overflow: hidden; background: #000; }
+.stage { position: absolute; inset: 0; }
+.stage-avatar { position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 80px; opacity: 0.92; }
+.room-top { position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 12px; padding-top: calc(12px + env(safe-area-inset-top)); }
+.host { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 4px; border-radius: 999px; flex: 1; min-width: 0; }
+.host div { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.host b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.host small { font-size: 11px; color: #ccd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.follow { padding: 6px 12px; border-radius: 999px; background: var(--pink); font-size: 12px; font-weight: 700; }
+.follow.on { background: rgba(255, 255, 255, 0.2); }
+.fxbar { position: absolute; top: 64px; left: 0; right: 0; z-index: 3; padding-top: 6px; }
+.fxbar .chip { background: rgba(10, 10, 20, 0.6); color: #eee; backdrop-filter: blur(6px); padding: 6px 12px; font-size: 13px; }
+.fxbar .chip.on { background: #fff; color: #111; }
+.chat { position: absolute; left: 0; right: 70px; bottom: 74px; max-height: 34%; z-index: 3; overflow: hidden; padding: 0 12px; display: flex; flex-direction: column; justify-content: flex-end; -webkit-mask-image: linear-gradient(transparent, #000 35%); mask-image: linear-gradient(transparent, #000 35%); }
+.msg { align-self: flex-start; margin-top: 5px; padding: 5px 10px; border-radius: 14px; background: rgba(0, 0, 0, 0.45); font-size: 13.5px; line-height: 1.3; max-width: 100%; word-break: break-word; }
+.msg b { color: #ffd6e8; margin-right: 4px; }
+.msg.sys { color: #bfe6ff; }
+.msg.me b { color: #b9f3c5; }
+.msg.gift { background: rgba(255, 61, 113, 0.45); }
+.room-bottom { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; gap: 8px; align-items: center; padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, #000a); }
+.room-bottom input { flex: 1; height: 42px; padding: 0 16px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.45); outline: none; }
+.hearts { position: absolute; right: 0; bottom: 70px; width: 100px; height: 60%; pointer-events: none; z-index: 5; }
+.heart { position: absolute; bottom: 0; font-size: 26px; animation: floatup 2.1s ease-out forwards; }
+@keyframes floatup { from { transform: translate(0, 0) scale(0.6); opacity: 1; } to { transform: translate(var(--dx), -320px) scale(1.2); opacity: 0; } }
+.gift-sheet { position: absolute; left: 12px; right: 12px; bottom: 70px; z-index: 6; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px; border-radius: 18px; background: rgba(20, 20, 34, 0.95); }
+.gift-sheet button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0; border-radius: 12px; background: var(--card2); }
+.gift-sheet span { font-size: 28px; }
+.gift-sheet small { color: var(--muted); font-size: 12px; }
+
+/* go live */
+.preview { position: relative; margin: 0 16px; aspect-ratio: 3 / 4; max-height: 52vh; width: calc(100% - 32px); border-radius: 20px; overflow: hidden; background: #000; }
+.preview video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.preview-empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; color: var(--muted); font-size: 40px; line-height: 1.4; background: radial-gradient(circle at 50% 30%, #1d1d33, #07070d); }
+.preview-empty small { font-size: 13px; }
+.preview .badge { position: absolute; top: 12px; left: 12px; }
+.preview .pill { position: absolute; top: 10px; right: 12px; }
+.field { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+.field input, .field select, #fxsel { height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--text); outline: none; }
+.field input:focus, .field select:focus { border-color: var(--violet); }
+#fxsel { height: 38px; }
+
+/* thread */
+.thread { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.host-line { display: flex; align-items: center; gap: 8px; }
+.bubbles { flex: 1; overflow-y: auto; padding: 8px 16px; display: flex; flex-direction: column; gap: 8px; }
+.bubble { max-width: 78%; padding: 9px 13px; border-radius: 18px; font-size: 14.5px; line-height: 1.35; word-break: break-word; }
+.bubble.them { align-self: flex-start; background: var(--card2); border-bottom-left-radius: 5px; }
+.bubble.me { align-self: flex-end; background: linear-gradient(135deg, var(--pink), var(--violet)); border-bottom-right-radius: 5px; }
+.composer { display: flex; gap: 8px; padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.composer input { flex: 1; height: 42px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--card2); outline: none; }
+
+/* profile */
+.profile-head { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 16px 4px; text-align: center; }
+.profile-head h2 { margin-top: 8px; font-size: 22px; }
+.profile-head small { color: var(--muted); }
+.profile-head p { color: #cfcfe0; font-size: 14px; max-width: 320px; }
+.stats { display: flex; gap: 28px; margin: 10px 0 8px; }
+.stats div { display: flex; flex-direction: column; align-items: center; }
+.stats b { font-size: 18px; }
+.stats small { font-size: 12px; }
+.switch { appearance: none; width: 46px; height: 26px; border-radius: 999px; background: #3a3a52; position: relative; cursor: pointer; transition: background 0.2s; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
+.switch:checked { background: var(--violet); }
+.switch:checked::after { transform: translateX(20px); }
+.av { display: block; }
+
+@media (prefers-reduced-motion: reduce) { .heart { animation-duration: 0.6s; } }
+
+</style>
+</head>
+<body>
+  <div id="app">
+    <main id="view"></main>
+    <nav id="tabbar">
+      <a href="#/" data-tab="home"><span>🏠</span><small>Home</small></a>
+      <a href="#/discover" data-tab="discover"><span>🔍</span><small>Discover</small></a>
+      <a href="#/golive" data-tab="golive" class="center" aria-label="Go Live"><span>＋</span></a>
+      <a href="#/inbox" data-tab="inbox"><span>💬</span><small>Inbox</small></a>
+      <a href="#/profile" data-tab="profile"><span>👤</span><small>Profile</small></a>
+    </nav>
+  </div>
+  <script>
+/* Demo data + small helpers. Swap for Supabase tables later. */
+(function () {
+  const LS = (window.LS = window.LS || {});
+
+  LS.CATEGORIES = ["Music", "Gaming", "Talk", "Fitness", "Cooking", "Art", "Football", "Comedy"];
+
+  LS.CREATORS = [
+    { id: "luna", name: "Luna Park", handle: "@lunapark", hue: 280, viewers: 12400, title: "Late night chill + chat", cat: "Music", effect: "fireflies" },
+    { id: "kofi", name: "Kofi Mensah", handle: "@kofi_plays", hue: 150, viewers: 8900, title: "Ranked grind to Diamond", cat: "Gaming", effect: "matrix" },
+    { id: "amira", name: "Amira Said", handle: "@amirasays", hue: 330, viewers: 6300, title: "Ask me anything", cat: "Talk", effect: "bubbles" },
+    { id: "jay", name: "Jay Rivers", handle: "@jayfit", hue: 20, viewers: 4100, title: "Morning burn workout", cat: "Fitness", effect: "embers" },
+    { id: "nadia", name: "Nadia Chef", handle: "@nadiacooks", hue: 45, viewers: 3800, title: "Cooking jollof for 20", cat: "Cooking", effect: "fireworks" },
+    { id: "theo", name: "Theo Blue", handle: "@theoblue", hue: 210, viewers: 2900, title: "Painting a storm live", cat: "Art", effect: "storm" },
+    { id: "alexis", name: "Alexis The Footballer", handle: "@alexisthefootballer", hue: 100, viewers: 2400, title: "Match talk + predictions", cat: "Football", effect: "disco" },
+    { id: "zed", name: "Zed Laughs", handle: "@zedlaughs", hue: 190, viewers: 1700, title: "Open mic comedy night", cat: "Comedy", effect: "snow" },
+  ];
+
+  LS.byId = (id) => LS.CREATORS.find((c) => c.id === id);
+
+  LS.THREADS = LS.CREATORS.slice(0, 6).map((c, i) => ({
+    id: c.id,
+    last: ["Thanks for joining the stream! 🙌", "Collab next week?", "Love your setup 🔥", "Can you shout me out?", "GG!", "See you tonight"][i],
+    unread: [2, 0, 1, 0, 0, 3][i],
+    time: ["2m", "1h", "3h", "Yesterday", "Mon", "Sun"][i],
+  }));
+
+  LS.ACTIVITY = [
+    { icon: "❤️", text: "Luna Park liked your stream", time: "5m" },
+    { icon: "👤", text: "Kofi Mensah started following you", time: "20m" },
+    { icon: "🎁", text: "Amira Said sent you a Rose", time: "1h" },
+    { icon: "💬", text: "Jay Rivers commented: “Great energy!”", time: "2h" },
+    { icon: "🔔", text: "Nadia Chef is live now", time: "3h" },
+  ];
+
+  LS.GIFTS = [
+    { icon: "🌹", name: "Rose" },
+    { icon: "🍩", name: "Donut" },
+    { icon: "🎉", name: "Party" },
+    { icon: "👑", name: "Crown" },
+    { icon: "🚀", name: "Rocket" },
+    { icon: "🦁", name: "Lion" },
+  ];
+
+  LS.CHAT_NAMES = ["sam", "mia_k", "djbass", "ola", "kwame", "yuki", "nora", "tariq", "bella", "chidi", "leo", "fatima"];
+  LS.CHAT_LINES = [
+    "hello from Dubai! 👋", "this effect is 🔥", "yooo", "can you play that again?", "love this",
+    "first time here, already a fan", "😂😂😂", "turn the lights up!", "GOAT", "who else is watching late?",
+    "that was smooth", "following!", "gg", "❤️❤️❤️", "what's the song?", "more fireworks please",
+  ];
+
+  /* helpers */
+  LS.$ = (sel, root) => (root || document).querySelector(sel);
+  LS.$$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+  LS.esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  LS.fmt = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "K" : String(n));
+  LS.pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+  LS.store = {
+    get(k, d) { try { const v = localStorage.getItem("ls." + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem("ls." + k, JSON.stringify(v)); } catch (e) { /* ignore */ } },
+  };
+
+  LS.avatar = (name, hue, size) => {
+    size = size || 44;
+    const ini = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+    return `<svg class="av" width="${size}" height="${size}" viewBox="0 0 48 48" aria-hidden="true">
+      <defs><linearGradient id="g${hue}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="hsl(${hue} 85% 62%)"/><stop offset="1" stop-color="hsl(${(hue + 50) % 360} 80% 42%)"/>
+      </linearGradient></defs>
+      <circle cx="24" cy="24" r="24" fill="url(#g${hue})"/>
+      <text x="24" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#fff" font-family="system-ui,sans-serif">${ini}</text>
+    </svg>`;
+  };
+})();
+
+</script>
+  <script>
+/* LiveStream Studio — 8 canvas animation effects.
+   Each effect: { label, icon, init(s), frame(s, ctx, dt) }
+   s = { w, h, time } plus whatever the effect stores on it. */
+(function () {
+  const LS = (window.LS = window.LS || {});
+  const TAU = Math.PI * 2;
+  const R = (a, b) => a + Math.random() * (b - a);
+  const count = (s, per, min, max) =>
+    Math.min(max, Math.max(min, Math.round((s.w * s.h) / per)));
+
+  const defs = {};
+
+  /* ---------- Snow ---------- */
+  defs.snow = {
+    label: "Snow",
+    icon: "❄️",
+    init(s) {
+      s.f = Array.from({ length: count(s, 5500, 30, 170) }, () => ({
+        x: R(0, s.w), y: R(0, s.h), r: R(1, 3.6), v: R(25, 70), p: R(0, TAU), a: R(0.5, 1),
+      }));
+    },
+    frame(s, ctx, dt) {
+      ctx.clearRect(0, 0, s.w, s.h);
+      ctx.fillStyle = "#fff";
+      for (const f of s.f) {
+        f.y += f.v * dt;
+        f.p += dt;
+        f.x += Math.sin(f.p) * 18 * dt;
+        if (f.y > s.h + 5) { f.y = -5; f.x = R(0, s.w); }
+        ctx.globalAlpha = f.a;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, f.r, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    },
+  };
+
+  /* ---------- Fireflies ---------- */
+  defs.fireflies = {
+    label: "Fireflies",
+    icon: "✨",
+    init(s) {
+      s.f = Array.from({ length: count(s, 9000, 14, 60) }, () => ({
+        x: R(0, s.w), y: R(0, s.h), a: R(0, TAU), sp: R(10, 34), ph: R(0, TAU), r: R(1.5, 3),
+      }));
+    },
+    frame(s, ctx, dt) {
+      ctx.clearRect(0, 0, s.w, s.h);
+      ctx.globalCompositeOperation = "lighter";
+      for (const f of s.f) {
+        f.a += R(-1, 1) * dt * 3;
+        f.x += Math.cos(f.a) * f.sp * dt;
+        f.y += Math.sin(f.a) * f.sp * dt;
+        if (f.x < -10) f.x = s.w + 10;
+        if (f.x > s.w + 10) f.x = -10;
+        if (f.y < -10) f.y = s.h + 10;
+        if (f.y > s.h + 10) f.y = -10;
+        f.ph += dt * 2;
+        const g = (Math.sin(f.ph) + 1) / 2;
+        const rad = f.r * 7;
+        const grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, rad);
+        grad.addColorStop(0, `rgba(215,255,110,${0.15 + g * 0.8})`);
+        grad.addColorStop(1, "rgba(190,255,60,0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, rad, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    },
+  };
+
+  /* ---------- Bubbles ---------- */
+  defs.bubbles = {
+    label: "Bubbles",
+    icon: "🫧",
+    init(s) {
+      s.b = Array.from({ length: count(s, 14000, 8, 40) }, () => ({
+        x: R(0, s.w), y: R(0, s.h), r: R(6, 26), v: R(30, 90), p: R(0, TAU),
+      }));
+    },
+    frame(s, ctx, dt) {
+      ctx.clearRect(0, 0, s.w, s.h);
+      for (const b of s.b) {
+        b.y -= b.v * dt;
+        b.p += dt * 2;
+        b.x += Math.sin(b.p) * 22 * dt;
+        if (b.y < -b.r * 2) { b.y = s.h + b.r * 2; b.x = R(0, s.w); }
+        ctx.fillStyle = "rgba(255,255,255,0.07)";
+        ctx.strokeStyle = "rgba(190,235,255,0.6)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(255,255,255,0.75)";
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r * 0.68, Math.PI * 1.15, Math.PI * 1.45);
+        ctx.stroke();
+      }
+    },
+  };
+
+  /* ---------- Matrix ---------- */
+  const MCHARS = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄ0123456789";
+  defs.matrix = {
+    label: "Matrix",
+    icon: "🟩",
+    init(s) {
+      s.size = 16;
+      s.nc = Math.ceil(s.w / s.size);
+      s.rows = Math.ceil(s.h / s.size) + 1;
+      s.cols = Array.from({ length: s.nc }, () => ({
+        head: R(-s.rows, 0), sp: R(8, 20), len: R(8, 18),
+      }));
+    },
+    frame(s, ctx, dt) {
+      ctx.clearRect(0, 0, s.w, s.h);
+      ctx.font = "16px monospace";
+      for (let c = 0; c < s.nc; c++) {
+        const col = s.cols[c];
+        col.head += col.sp * dt;
+        if (col.head - col.len > s.rows) {
+          col.head = R(-10, 0); col.sp = R(8, 20); col.len = R(8, 18);
+        }
+        for (let k = 0; k < col.len; k++) {
+          const row = Math.floor(col.head) - k;
+          if (row < 0 || row >= s.rows) continue;
+          const a = 1 - k / col.len;
+          ctx.fillStyle = k === 0 ? "rgba(215,255,225,1)" : `rgba(0,255,90,${a * 0.85})`;
+          const ch = MCHARS[(c * 31 + row * 17 + Math.floor(s.time * 3 + ((c + row) % 5))) % MCHARS.length];
+          ctx.fillText(ch, c * s.size, row * s.size + 14);
+        }
+      }
+    },
+  };
+
+  /* ---------- Fireworks ---------- */
+  defs.fireworks = {
+    label: "Fireworks",
+    icon: "🎆",
+    init(s) { s.rockets = []; s.parts = []; s.cool = 0.2; },
+    frame(s, ctx, dt) {
+      ctx.clearRect(0, 0, s.w, s.h);
+      s.cool -= dt;
+      if (s.cool <= 0) {
+        s.cool = R(0.5, 1.3);
+        s.rockets.push({
+          x: R(0.15, 0.85) * s.w, y: s.h, vx: R(-20, 20), vy: -R(330, 450),
+          ty: R(0.15, 0.45) * s.h, hue: R(0, 360),
+        });
+      }
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = s.rockets.length - 1; i >= 0; i--) {
+        const r = s.rockets[i];
+        const px = r.x, py = r.y;
+        r.x += r.vx * dt; r.y += r.vy * dt;
+        ctx.strokeStyle = "rgba(255,230,170,0.9)";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(px, py + 8); ctx.lineTo(r.x, r.y); ctx.stroke();
+        if (r.y <= r.ty) {
+          const n = Math.round(R(40, 70));
+          const ring = Math.random() < 0.4;
+          const base = R(80, 200);
+          for (let k = 0; k < n; k++) {
+            const a = (k / n) * TAU + R(-0.05, 0.05);
+            const sp = ring ? base : R(40, 220);
+            s.parts.push({
+              x: r.x, y: r.y, px: r.x, py: r.y,
+              vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+              life: 1, decay: R(0.5, 0.9), hue: r.hue + R(-20, 20),
+            });
+          }
+          s.rockets.splice(i, 1);
+        }
+      }
+      ctx.lineWidth = 2;
+      for (let i = s.parts.length - 1; i >= 0; i--) {
+        const p = s.parts[i];
+        p.px = p.x; p.py = p.y;
+        p.vx *= 1 - 1.2 * dt;
+        p.vy = p.vy * (1 - 1.2 * dt) + 120 * dt;
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        p.life -= p.decay * dt;
+        if (p.life <= 0) { s.parts.splice(i, 1); continue; }
+        ctx.strokeStyle = `hsla(${p.hue},100%,65%,${p.life})`;
+        ctx.beginPath(); ctx.moveTo(p.px, p.py); ctx.lineTo(p.x, p.y); ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    },
+  };
+
+  /* ---------- Disco ---------- */
+  defs.disco = {
+    label: "Disco",
+    icon: "🪩",
+    init(s) { s.spots = Array.from({ length: 6 }, (_, i) => ({ o: i * 1.3, hue: i * 60 })); },
+    frame(s, ctx, dt) {
+      ctx.clearRect(0, 0, s.w, s.h);
+      const ox = s.w / 2, oy = -10;
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = 0; i < 7; i++) {
+        const a = Math.PI / 2 + Math.sin(s.time * 0.9 + i * 1.1) * 0.9;
+        const spread = 0.09;
+        const len = s.h * 1.4;
+        const hue = (s.time * 60 + i * 50) % 360;
+        const x1 = ox + Math.cos(a - spread) * len, y1 = oy + Math.sin(a - spread) * len;
+        const x2 = ox + Math.cos(a + spread) * len, y2 = oy + Math.sin(a + spread) * len;
+        const g = ctx.createLinearGradient(ox, oy, ox + Math.cos(a) * len, oy + Math.sin(a) * len);
+        g.addColorStop(0, `hsla(${hue},100%,65%,0.4)`);
+        g.addColorStop(1, `hsla(${hue},100%,60%,0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); ctx.closePath(); ctx.fill();
+      }
+      for (const sp of s.spots) {
+        const x = s.w / 2 + Math.sin(s.time * 0.8 + sp.o) * s.w * 0.42;
+        const y = s.h - 30 + Math.sin(s.time * 1.7 + sp.o) * 14;
+        const hue = (s.time * 70 + sp.hue) % 360;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, 70);
+        g.addColorStop(0, `hsla(${hue},100%,60%,0.5)`);
+        g.addColorStop(1, `hsla(${hue},100%,60%,0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(x, y, 70, 0, TAU); ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      const bg = ctx.createRadialGradient(ox - 4, 8, 2, ox, 14, 15);
+      bg.addColorStop(0, "#ffffff"); bg.addColorStop(1, "#8a8fa3");
+      ctx.fillStyle = bg;
+      ctx.beginPath(); ctx.arc(ox, 14, 14, 0, TAU); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      for (let k = 0; k < 5; k++) {
+        const t = s.time * 3 + k * 1.7;
+        ctx.fillRect(ox + Math.cos(t) * 9 - 1, 14 + Math.sin(t * 1.3) * 9 - 1, 2, 2);
+      }
+    },
+  };
+
+  /* ---------- Storm ---------- */
+  defs.storm = {
+    label: "Storm",
+    icon: "⛈️",
+    init(s) {
+      s.d = Array.from({ length: count(s, 2500, 40, 220) }, () => ({
+        x: R(0, s.w), y: R(0, s.h), l: R(10, 22), v: R(700, 1100),
+      }));
+      s.flash = 0; s.next = R(1.5, 3.5); s.bolt = null;
+    },
+    frame(s, ctx, dt) {
+      ctx.clearRect(0, 0, s.w, s.h);
+      ctx.fillStyle = "rgba(5,10,30,0.32)";
+      ctx.fillRect(0, 0, s.w, s.h);
+      ctx.strokeStyle = "rgba(180,200,255,0.5)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (const d of s.d) {
+        d.y += d.v * dt; d.x -= d.v * 0.2 * dt;
+        if (d.y > s.h) { d.y = -20; d.x = R(0, s.w * 1.2); }
+        ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + d.l * 0.2, d.y - d.l);
+      }
+      ctx.stroke();
+      s.next -= dt;
+      if (s.next <= 0) {
+        s.flash = 1; s.next = R(2, 6);
+        const pts = [[R(0.2, 0.8) * s.w, 0]];
+        const endY = R(0.5, 0.8) * s.h;
+        while (pts[pts.length - 1][1] < endY) {
+          const [lx, ly] = pts[pts.length - 1];
+          pts.push([lx + R(-28, 28), ly + R(18, 40)]);
+        }
+        s.bolt = pts;
+      }
+      if (s.flash > 0) {
+        ctx.fillStyle = `rgba(220,230,255,${s.flash * 0.4 * (0.6 + Math.random() * 0.4)})`;
+        ctx.fillRect(0, 0, s.w, s.h);
+        if (s.bolt) {
+          ctx.save();
+          ctx.strokeStyle = `rgba(255,255,255,${s.flash})`;
+          ctx.lineWidth = 2.5; ctx.shadowBlur = 14; ctx.shadowColor = "#9bf";
+          ctx.beginPath();
+          s.bolt.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+          ctx.stroke();
+          ctx.restore();
+        }
+        s.flash -= dt * 2.5;
+        if (s.flash <= 0) { s.flash = 0; s.bolt = null; }
+      }
+    },
+  };
+
+  /* ---------- Embers ---------- */
+  defs.embers = {
+    label: "Embers",
+    icon: "🔥",
+    init(s) { s.p = []; s.acc = 0; },
+    frame(s, ctx, dt) {
+      ctx.clearRect(0, 0, s.w, s.h);
+      const glow = ctx.createLinearGradient(0, s.h, 0, s.h * 0.7);
+      glow.addColorStop(0, "rgba(255,80,0,0.28)");
+      glow.addColorStop(1, "rgba(255,80,0,0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, s.h * 0.7, s.w, s.h * 0.3);
+      s.acc += dt * Math.min(80, (s.w * s.h) / 5000);
+      while (s.acc >= 1 && s.p.length < 220) {
+        s.acc -= 1;
+        s.p.push({
+          x: R(0, s.w), y: s.h + 5, vx: R(-15, 15), vy: -R(40, 130),
+          r: R(1, 3.2), life: 1, decay: R(0.12, 0.3), ph: R(0, TAU),
+        });
+      }
+      s.acc = Math.min(s.acc, 1);
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = s.p.length - 1; i >= 0; i--) {
+        const p = s.p[i];
+        p.ph += dt * 5;
+        p.x += (p.vx + Math.sin(p.ph) * 20) * dt;
+        p.y += p.vy * dt;
+        p.life -= p.decay * dt;
+        if (p.life <= 0 || p.y < -10) { s.p.splice(i, 1); continue; }
+        const rad = p.r * 5;
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
+        g.addColorStop(0, `rgba(255,${(120 + p.life * 100) | 0},40,${p.life})`);
+        g.addColorStop(1, "rgba(255,80,0,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, TAU); ctx.fill();
+        ctx.fillStyle = `rgba(255,225,130,${p.life})`;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 0.7, 0, TAU); ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    },
+  };
+
+  /* ---------- Runner ---------- */
+  LS.EFFECT_NAMES = Object.keys(defs);
+  LS.effectInfo = (name) => defs[name] || { label: "None", icon: "🚫" };
+
+  LS.startEffect = function (canvas, name) {
+    const ctx = canvas.getContext("2d");
+    let cur = null, s = { w: 0, h: 0, time: 0 }, raf = 0, last = 0, stopped = false;
+
+    function size() {
+      const r = canvas.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      s = { w: Math.max(1, r.width), h: Math.max(1, r.height), time: 0 };
+      canvas.width = Math.round(s.w * dpr);
+      canvas.height = Math.round(s.h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (cur) cur.init(s);
+    }
+
+    function loop(t) {
+      if (stopped) return;
+      const dt = Math.min(0.05, (t - last) / 1000 || 0.016);
+      last = t;
+      s.time += dt;
+      if (cur) cur.frame(s, ctx, dt);
+      raf = requestAnimationFrame(loop);
+    }
+
+    function set(n) {
+      const off = localStorage.getItem("ls.fx") === "0";
+      cur = off ? null : defs[n] || null;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      size();
+    }
+
+    const ro = new ResizeObserver(() => size());
+    ro.observe(canvas);
+    set(name);
+    raf = requestAnimationFrame(loop);
+
+    return {
+      set,
+      stop() { stopped = true; cancelAnimationFrame(raf); ro.disconnect(); },
+    };
+  };
+})();
+
+</script>
+  <script>
+/* The 7 screens. Each screen(view, ...params) renders into `view`
+   and may return a cleanup function. */
+(function () {
+  const LS = window.LS;
+  const { $, $$, esc, fmt, avatar, pick } = LS;
+  const S = (LS.screens = {});
+
+  const effectChips = (selected, withNone) =>
+    (withNone ? ["none"] : [])
+      .concat(LS.EFFECT_NAMES)
+      .map((n) => {
+        const i = LS.effectInfo(n);
+        return `<button class="chip ${n === selected ? "on" : ""}" data-fx="${n}">${i.icon} ${i.label}</button>`;
+      })
+      .join("");
+
+  const card = (c) => `
+    <a class="card" href="#/live/${c.id}" style="--h:${c.hue}">
+      <div class="thumb">
+        <span class="badge live">● LIVE</span>
+        <span class="views">👁 ${fmt(c.viewers)}</span>
+        ${avatar(c.name, c.hue, 64)}
+        <span class="fxtag">${LS.effectInfo(c.effect).icon}</span>
+      </div>
+      <div class="meta"><b>${esc(c.title)}</b><small>${esc(c.name)}</small></div>
+    </a>`;
+
+  /* ---------------- Home ---------------- */
+  S.home = function (view) {
+    view.innerHTML = `
+      <header class="topbar">
+        <div class="logo">Live<span>Stream</span> Studio</div>
+        <a class="icon-btn" href="#/discover" aria-label="Search">🔍</a>
+      </header>
+      <section class="hero">
+        <div class="hero-bg"></div>
+        <canvas class="fx"></canvas>
+        <div class="hero-body">
+          <span class="badge live">● LIVE</span>
+          <h2 id="heroTitle"></h2>
+          <p id="heroSub"></p>
+          <a class="btn" id="heroBtn" href="#/live">Watch now</a>
+        </div>
+        <div class="fx-name" id="fxName"></div>
+      </section>
+      <h3 class="sec">Live now <a href="#/live">See all</a></h3>
+      <div class="rail">
+        ${LS.CREATORS.map((c) => `<a class="story" href="#/live/${c.id}" style="--h:${c.hue}"><span class="ring">${avatar(c.name, c.hue, 56)}</span><small>${esc(c.name.split(" ")[0])}</small></a>`).join("")}
+      </div>
+      <h3 class="sec">Trending</h3>
+      <div class="grid">${LS.CREATORS.slice(0, 6).map(card).join("")}</div>
+      <div class="spacer"></div>`;
+
+    const fx = LS.startEffect($(".hero .fx", view), LS.CREATORS[0].effect);
+    let idx = 0;
+    function show() {
+      const c = LS.CREATORS[idx % LS.CREATORS.length];
+      fx.set(c.effect);
+      $("#heroTitle", view).textContent = c.title;
+      $("#heroSub", view).textContent = `${c.name} · ${fmt(c.viewers)} watching`;
+      $("#heroBtn", view).href = "#/live/" + c.id;
+      const i = LS.effectInfo(c.effect);
+      $("#fxName", view).textContent = `${i.icon} ${i.label}`;
+      $(".hero-bg", view).style.setProperty("--h", c.hue);
+    }
+    show();
+    const timer = setInterval(() => { idx++; show(); }, 6000);
+    return () => { clearInterval(timer); fx.stop(); };
+  };
+
+  /* ---------------- Discover ---------------- */
+  S.discover = function (view) {
+    let q = "", cat = "All";
+    view.innerHTML = `
+      <header class="topbar"><div class="logo">Discover</div></header>
+      <div class="searchbar"><span>🔍</span><input id="q" type="search" placeholder="Search streamers, topics…" autocomplete="off"></div>
+      <div class="chips scroll" id="cats">
+        ${["All"].concat(LS.CATEGORIES).map((c) => `<button class="chip ${c === "All" ? "on" : ""}" data-cat="${c}">${c}</button>`).join("")}
+      </div>
+      <div class="grid" id="results"></div>
+      <h3 class="sec">Effects gallery</h3>
+      <p class="hint">Tap an effect to use it on your next stream.</p>
+      <div class="fx-gallery" id="gallery">
+        ${LS.EFFECT_NAMES.map((n) => `<a class="fx-tile" href="#/golive" data-fx="${n}"><canvas class="fx"></canvas><span>${LS.effectInfo(n).icon} ${LS.effectInfo(n).label}</span></a>`).join("")}
+      </div>
+      <div class="spacer"></div>`;
+
+    function renderResults() {
+      const list = LS.CREATORS.filter(
+        (c) =>
+          (cat === "All" || c.cat === cat) &&
+          (!q || (c.name + c.title + c.cat + c.handle).toLowerCase().includes(q))
+      );
+      $("#results", view).innerHTML = list.length
+        ? list.map(card).join("")
+        : `<p class="empty">No streams match “${esc(q)}”.</p>`;
+    }
+    renderResults();
+
+    $("#q", view).addEventListener("input", (e) => { q = e.target.value.trim().toLowerCase(); renderResults(); });
+    $("#cats", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-cat]");
+      if (!b) return;
+      cat = b.dataset.cat;
+      $$("#cats .chip", view).forEach((x) => x.classList.toggle("on", x === b));
+      renderResults();
+    });
+
+    const runners = $$(".fx-tile", view).map((t) => LS.startEffect($(".fx", t), t.dataset.fx));
+    $("#gallery", view).addEventListener("click", (e) => {
+      const t = e.target.closest("[data-fx]");
+      if (t) LS.store.set("effect", t.dataset.fx);
+    });
+    return () => runners.forEach((r) => r.stop());
+  };
+
+  /* ---------------- Live list ---------------- */
+  S.liveList = function (view) {
+    let sort = "viewers";
+    view.innerHTML = `
+      <header class="topbar"><div class="logo">Live</div>
+        <div class="seg" id="sort"><button class="on" data-s="viewers">Top</button><button data-s="new">New</button></div>
+      </header>
+      <div class="list" id="list"></div>
+      <div class="spacer"></div>`;
+    function render() {
+      const arr = LS.CREATORS.slice();
+      if (sort === "new") arr.reverse();
+      $("#list", view).innerHTML = arr
+        .map(
+          (c) => `<a class="row-item" href="#/live/${c.id}">
+            <span class="ring sm" style="--h:${c.hue}">${avatar(c.name, c.hue, 52)}</span>
+            <div class="grow"><b>${esc(c.title)}</b><small>${esc(c.name)} · ${esc(c.cat)}</small></div>
+            <div class="right"><span class="badge live">LIVE</span><small>👁 ${fmt(c.viewers)}</small></div>
+          </a>`
+        )
+        .join("");
+    }
+    render();
+    $("#sort", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-s]");
+      if (!b) return;
+      sort = b.dataset.s;
+      $$("#sort button", view).forEach((x) => x.classList.toggle("on", x === b));
+      render();
+    });
+  };
+
+  /* ---------------- Live room ---------------- */
+  S.room = function (view, id) {
+    const c = LS.byId(id) || LS.CREATORS[0];
+    let viewers = c.viewers;
+    let following = false;
+    view.innerHTML = `
+      <div class="room" style="--h:${c.hue}">
+        <div class="stage">
+          <div class="stage-bg"></div>
+          <canvas class="fx"></canvas>
+          <div class="stage-avatar">${avatar(c.name, c.hue, 128)}</div>
+        </div>
+        <div class="room-top">
+          <a class="icon-btn glass" href="#/live" aria-label="Back">←</a>
+          <div class="host glass">
+            ${avatar(c.name, c.hue, 34)}
+            <div><b>${esc(c.name)}</b><small>${esc(c.title)}</small></div>
+            <button class="follow" id="follow">Follow</button>
+          </div>
+          <span class="pill glass" id="viewers">👁 ${fmt(viewers)}</span>
+        </div>
+        <div class="fxbar chips scroll" id="fxbar">${effectChips(c.effect, true)}</div>
+        <div class="chat" id="chat"></div>
+        <div class="hearts" id="hearts"></div>
+        <div class="room-bottom">
+          <input id="msg" placeholder="Say something…" maxlength="120" autocomplete="off">
+          <button class="icon-btn glass" id="giftBtn" aria-label="Gifts">🎁</button>
+          <button class="icon-btn glass" id="heartBtn" aria-label="Like">❤️</button>
+        </div>
+        <div class="gift-sheet hidden" id="gifts">
+          ${LS.GIFTS.map((g, i) => `<button data-g="${i}"><span>${g.icon}</span><small>${g.name}</small></button>`).join("")}
+        </div>
+      </div>`;
+
+    const fx = LS.startEffect($(".stage .fx", view), c.effect);
+    const chat = $("#chat", view);
+
+    function addChat(name, text, cls) {
+      const el = document.createElement("div");
+      el.className = "msg " + (cls || "");
+      el.innerHTML = `<b>${esc(name)}</b> ${esc(text)}`;
+      chat.appendChild(el);
+      while (chat.children.length > 30) chat.removeChild(chat.firstChild);
+      chat.scrollTop = chat.scrollHeight;
+    }
+    addChat("system", `Welcome to ${c.name}'s stream! Be kind in chat.`, "sys");
+
+    let chatTimer;
+    (function tick() {
+      addChat(pick(LS.CHAT_NAMES), pick(LS.CHAT_LINES));
+      chatTimer = setTimeout(tick, 900 + Math.random() * 1800);
+    })();
+    const viewTimer = setInterval(() => {
+      viewers = Math.max(1, viewers + Math.round((Math.random() - 0.45) * 40));
+      $("#viewers", view).textContent = "👁 " + fmt(viewers);
+    }, 2500);
+
+    function heart(emoji) {
+      const h = document.createElement("span");
+      h.className = "heart";
+      h.textContent = emoji || pick(["❤️", "💖", "💜", "🧡", "💙"]);
+      h.style.right = 18 + Math.random() * 40 + "px";
+      h.style.setProperty("--dx", (Math.random() * 60 - 30).toFixed(0) + "px");
+      $("#hearts", view).appendChild(h);
+      setTimeout(() => h.remove(), 2200);
+    }
+
+    $("#heartBtn", view).addEventListener("click", () => { for (let i = 0; i < 3; i++) setTimeout(heart, i * 90); });
+    $(".stage", view).addEventListener("dblclick", () => { for (let i = 0; i < 5; i++) setTimeout(heart, i * 80); });
+    $("#giftBtn", view).addEventListener("click", () => $("#gifts", view).classList.toggle("hidden"));
+    $("#gifts", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-g]");
+      if (!b) return;
+      const g = LS.GIFTS[+b.dataset.g];
+      addChat("You", `sent a ${g.name} ${g.icon}`, "gift");
+      for (let i = 0; i < 6; i++) setTimeout(() => heart(g.icon), i * 100);
+      $("#gifts", view).classList.add("hidden");
+    });
+    $("#follow", view).addEventListener("click", (e) => {
+      following = !following;
+      e.target.textContent = following ? "Following" : "Follow";
+      e.target.classList.toggle("on", following);
+    });
+    $("#msg", view).addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      const v = e.target.value.trim();
+      if (v) { addChat("You", v, "me"); e.target.value = ""; }
+    });
+    $("#fxbar", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-fx]");
+      if (!b) return;
+      fx.set(b.dataset.fx);
+      $$("#fxbar .chip", view).forEach((x) => x.classList.toggle("on", x === b));
+    });
+
+    return () => { clearTimeout(chatTimer); clearInterval(viewTimer); fx.stop(); };
+  };
+
+  /* ---------------- Go Live ---------------- */
+  S.goLive = function (view) {
+    let stream = null, live = false, secs = 0, timer = null, vtimer = null, viewers = 0;
+    const saved = LS.store.get("effect", "fireworks");
+    view.innerHTML = `
+      <header class="topbar"><a class="icon-btn" href="#/" aria-label="Back">←</a><div class="logo">Go Live</div><span></span></header>
+      <div class="preview">
+        <video id="vid" autoplay muted playsinline></video>
+        <div class="preview-empty" id="empty">📷<br><small>Camera is off</small></div>
+        <canvas class="fx"></canvas>
+        <span class="badge live hidden" id="badge">● PREVIEW LIVE · <span id="clock">00:00</span></span>
+        <span class="pill glass hidden" id="pv">👁 0</span>
+      </div>
+      <div class="pad">
+        <div class="row">
+          <button class="btn ghost" id="cam">Turn on camera</button>
+        </div>
+        <label class="field">Stream title
+          <input id="title" maxlength="60" placeholder="What are you streaming?" value="${esc(LS.store.get("title", ""))}">
+        </label>
+        <label class="field">Category
+          <select id="cat">${LS.CATEGORIES.map((x) => `<option ${x === LS.store.get("cat", "Music") ? "selected" : ""}>${x}</option>`).join("")}</select>
+        </label>
+        <h4 class="sec2">Background effect</h4>
+        <div class="chips wrap" id="fxpick">${effectChips(saved, true)}</div>
+        <button class="btn big" id="go">Start preview</button>
+        <p class="note">Preview only — nothing is broadcast yet. Real streaming needs a video service (for example LiveKit or Mux), which we add in a later step.</p>
+      </div>
+      <div class="spacer"></div>`;
+
+    const fx = LS.startEffect($(".preview .fx", view), saved);
+    const vid = $("#vid", view);
+
+    async function camOn() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+        vid.srcObject = stream;
+        $("#empty", view).classList.add("hidden");
+        $("#cam", view).textContent = "Turn off camera";
+      } catch (e) {
+        $("#empty", view).innerHTML = "📷<br><small>Camera unavailable.<br>Allow camera access, and open the app via https or localhost.</small>";
+      }
+    }
+    function camOff() {
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      stream = null; vid.srcObject = null;
+      $("#empty", view).classList.remove("hidden");
+      $("#empty", view).innerHTML = "📷<br><small>Camera is off</small>";
+      $("#cam", view).textContent = "Turn on camera";
+    }
+    $("#cam", view).addEventListener("click", () => (stream ? camOff() : camOn()));
+
+    $("#fxpick", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-fx]");
+      if (!b) return;
+      LS.store.set("effect", b.dataset.fx);
+      fx.set(b.dataset.fx);
+      $$("#fxpick .chip", view).forEach((x) => x.classList.toggle("on", x === b));
+    });
+    $("#title", view).addEventListener("input", (e) => LS.store.set("title", e.target.value));
+    $("#cat", view).addEventListener("change", (e) => LS.store.set("cat", e.target.value));
+
+    $("#go", view).addEventListener("click", (e) => {
+      live = !live;
+      $("#badge", view).classList.toggle("hidden", !live);
+      $("#pv", view).classList.toggle("hidden", !live);
+      e.target.textContent = live ? "End preview" : "Start preview";
+      e.target.classList.toggle("danger", live);
+      clearInterval(timer); clearInterval(vtimer);
+      if (live) {
+        secs = 0; viewers = 0;
+        timer = setInterval(() => {
+          secs++;
+          $("#clock", view).textContent = String(Math.floor(secs / 60)).padStart(2, "0") + ":" + String(secs % 60).padStart(2, "0");
+        }, 1000);
+        vtimer = setInterval(() => {
+          viewers += Math.round(Math.random() * 6);
+          $("#pv", view).textContent = "👁 " + viewers;
+        }, 1500);
+      }
+    });
+
+    return () => { clearInterval(timer); clearInterval(vtimer); if (stream) stream.getTracks().forEach((t) => t.stop()); fx.stop(); };
+  };
+
+  /* ---------------- Inbox ---------------- */
+  S.inbox = function (view) {
+    let tab = "messages";
+    view.innerHTML = `
+      <header class="topbar"><div class="logo">Inbox</div></header>
+      <div class="seg wide" id="tabs"><button class="on" data-t="messages">Messages</button><button data-t="activity">Activity</button></div>
+      <div class="list" id="list"></div>
+      <div class="spacer"></div>`;
+    function render() {
+      $("#list", view).innerHTML =
+        tab === "messages"
+          ? LS.THREADS.map((t) => {
+              const c = LS.byId(t.id);
+              return `<a class="row-item" href="#/inbox/${t.id}">
+                ${avatar(c.name, c.hue, 50)}
+                <div class="grow"><b>${esc(c.name)}</b><small>${esc(t.last)}</small></div>
+                <div class="right"><small>${t.time}</small>${t.unread ? `<span class="dot">${t.unread}</span>` : ""}</div>
+              </a>`;
+            }).join("")
+          : LS.ACTIVITY.map((a) => `<div class="row-item"><span class="act">${a.icon}</span><div class="grow"><b>${esc(a.text)}</b></div><small>${a.time}</small></div>`).join("");
+    }
+    render();
+    $("#tabs", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-t]");
+      if (!b) return;
+      tab = b.dataset.t;
+      $$("#tabs button", view).forEach((x) => x.classList.toggle("on", x === b));
+      render();
+    });
+  };
+
+  S.thread = function (view, id) {
+    const c = LS.byId(id) || LS.CREATORS[0];
+    const t = LS.THREADS.find((x) => x.id === c.id);
+    if (t) t.unread = 0;
+    view.innerHTML = `
+      <div class="thread">
+        <header class="topbar"><a class="icon-btn" href="#/inbox" aria-label="Back">←</a>
+          <div class="host-line">${avatar(c.name, c.hue, 34)}<b>${esc(c.name)}</b></div><span></span></header>
+        <div class="bubbles" id="bubbles"></div>
+        <div class="composer"><input id="m" placeholder="Message…" autocomplete="off"><button class="btn" id="send">Send</button></div>
+      </div>`;
+    const box = $("#bubbles", view);
+    function add(text, me) {
+      const b = document.createElement("div");
+      b.className = "bubble " + (me ? "me" : "them");
+      b.textContent = text;
+      box.appendChild(b);
+      box.scrollTop = box.scrollHeight;
+    }
+    add(t ? t.last : "Hey! 👋", false);
+    let replyTimer;
+    function send() {
+      const inp = $("#m", view);
+      const v = inp.value.trim();
+      if (!v) return;
+      add(v, true);
+      inp.value = "";
+      clearTimeout(replyTimer);
+      replyTimer = setTimeout(() => add(pick(["Haha nice! 😄", "Love that 🔥", "Let's do it!", "Thanks for the support ❤️", "See you on stream!"]), false), 1100);
+    }
+    $("#send", view).addEventListener("click", send);
+    $("#m", view).addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    return () => clearTimeout(replyTimer);
+  };
+
+  /* ---------------- Profile ---------------- */
+  S.profile = function (view) {
+    const p = LS.store.get("profile", { name: "Alexis", handle: "@alexis", bio: "Football fan. Streamer in the making. ⚽" });
+    const defFx = LS.store.get("effect", "fireworks");
+    const fxOn = localStorage.getItem("ls.fx") !== "0";
+    view.innerHTML = `
+      <header class="topbar"><div class="logo">Profile</div></header>
+      <section class="profile-head" style="--h:260">
+        <span class="ring lg" style="--h:260">${avatar(p.name, 260, 92)}</span>
+        <h2 id="pname">${esc(p.name)}</h2>
+        <small id="phandle">${esc(p.handle)}</small>
+        <p id="pbio">${esc(p.bio)}</p>
+        <div class="stats">
+          <div><b>128</b><small>Following</small></div>
+          <div><b>3.4K</b><small>Followers</small></div>
+          <div><b>21K</b><small>Likes</small></div>
+        </div>
+        <button class="btn ghost" id="edit">Edit profile</button>
+      </section>
+      <form class="pad hidden" id="form">
+        <label class="field">Name<input id="fn" maxlength="30" value="${esc(p.name)}"></label>
+        <label class="field">Handle<input id="fh" maxlength="30" value="${esc(p.handle)}"></label>
+        <label class="field">Bio<input id="fb" maxlength="100" value="${esc(p.bio)}"></label>
+        <button class="btn big" type="submit">Save</button>
+      </form>
+      <h3 class="sec">Settings</h3>
+      <div class="list">
+        <label class="row-item"><div class="grow"><b>Background effects</b><small>Turn off to save battery</small></div>
+          <input type="checkbox" class="switch" id="fxsw" ${fxOn ? "checked" : ""}></label>
+        <label class="row-item"><div class="grow"><b>Default effect</b><small>Used when you go live</small></div>
+          <select id="fxsel">${["none"].concat(LS.EFFECT_NAMES).map((n) => `<option value="${n}" ${n === defFx ? "selected" : ""}>${LS.effectInfo(n).label}</option>`).join("")}</select></label>
+      </div>
+      <h3 class="sec">Past streams</h3>
+      <div class="grid">
+        ${[0, 1, 2, 3].map((i) => `<div class="card" style="--h:${(i * 70 + 200) % 360}"><div class="thumb">${LS.effectInfo(LS.EFFECT_NAMES[i * 2]).icon}<span class="views">▶ ${fmt(900 + i * 650)}</span></div><div class="meta"><b>Stream #${4 - i}</b><small>${i + 1} day${i ? "s" : ""} ago</small></div></div>`).join("")}
+      </div>
+      <div class="spacer"></div>`;
+
+    $("#edit", view).addEventListener("click", () => $("#form", view).classList.toggle("hidden"));
+    $("#form", view).addEventListener("submit", (e) => {
+      e.preventDefault();
+      const np = { name: $("#fn", view).value.trim() || "Alexis", handle: $("#fh", view).value.trim() || "@alexis", bio: $("#fb", view).value.trim() };
+      LS.store.set("profile", np);
+      $("#pname", view).textContent = np.name;
+      $("#phandle", view).textContent = np.handle;
+      $("#pbio", view).textContent = np.bio;
+      $("#form", view).classList.add("hidden");
+    });
+    $("#fxsw", view).addEventListener("change", (e) => localStorage.setItem("ls.fx", e.target.checked ? "1" : "0"));
+    $("#fxsel", view).addEventListener("change", (e) => LS.store.set("effect", e.target.value));
+  };
+})();
+
+</script>
+  <script>
+/* Tiny hash router. */
+(function () {
+  const LS = window.LS;
+  const S = LS.screens;
+  const view = document.getElementById("view");
+
+  const routes = [
+    [/^\/$/, S.home, "home"],
+    [/^\/discover$/, S.discover, "discover"],
+    [/^\/live$/, S.liveList, "home"],
+    [/^\/live\/([\w-]+)$/, S.room, "room"],
+    [/^\/golive$/, S.goLive, "golive"],
+    [/^\/inbox$/, S.inbox, "inbox"],
+    [/^\/inbox\/([\w-]+)$/, S.thread, "thread"],
+    [/^\/profile$/, S.profile, "profile"],
+  ];
+
+  let cleanup = null;
+
+  function render() {
+    if (cleanup) { try { cleanup(); } catch (e) { /* ignore */ } cleanup = null; }
+    const path = location.hash.slice(1) || "/";
+    for (const [re, fn, tab] of routes) {
+      const m = path.match(re);
+      if (!m) continue;
+      view.innerHTML = "";
+      document.body.classList.toggle("immersive", tab === "room" || tab === "thread" || tab === "golive");
+      LS.$$("#tabbar a").forEach((a) => a.classList.toggle("on", a.dataset.tab === tab));
+      view.scrollTop = 0;
+      cleanup = fn(view, ...m.slice(1)) || null;
+      return;
+    }
+    location.hash = "#/";
+  }
+
+  window.addEventListener("hashchange", render);
+  render();
+})();
+
+</script>
+</body>
+</html>
