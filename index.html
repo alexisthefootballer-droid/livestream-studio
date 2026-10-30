@@ -146,6 +146,9 @@ body.immersive #tabbar { display: none; }
 .gfx-tint { position: absolute; inset: 0; }
 .gfx-ring { position: absolute; width: 120px; height: 120px; border-radius: 50%; border: 6px solid #fff; }
 .gfx-banner { position: absolute; top: 24%; left: 50%; transform: translate(-50%, 0); padding: 8px 18px; border-radius: 999px; font-weight: 700; font-size: 15px; white-space: nowrap; background: linear-gradient(90deg, #ff3d71, #7c5cff); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); z-index: 2; }
+.gfx-rays { position: absolute; border-radius: 50%; -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 62%); mask-image: radial-gradient(circle, #000 0%, transparent 62%); mix-blend-mode: screen; }
+.gfx-combo { position: absolute; left: 14px; top: 34%; z-index: 5; display: flex; align-items: center; gap: 6px; pointer-events: none; font-weight: 900; font-size: 46px; font-style: italic; color: #fff; text-shadow: 0 3px 0 #b3003a, 0 0 18px #ff3d71; transform-origin: left center; }
+.gfx-combo span { font-size: 36px; font-style: normal; }
 .gfx-text { position: absolute; left: 50%; transform: translate(-50%, -50%); font-weight: 900; font-size: 54px; letter-spacing: 2px; color: #fff; text-shadow: 0 4px 0 #b36b00, 0 0 24px #ffb300; white-space: nowrap; }
 .gift-sheet { position: absolute; left: 12px; right: 12px; bottom: 70px; z-index: 6; display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 12px; border-radius: 18px; background: rgba(20, 20, 34, 0.96); max-height: 58%; }
 .gift-tabs { display: flex; gap: 6px; overflow-x: auto; flex: none; padding-bottom: 2px; scrollbar-width: none; }
@@ -292,21 +295,180 @@ body.immersive #tabbar { display: none; }
   LS.GIFTS = [];
   LS.GIFT_GROUPS.forEach((grp) => grp.gifts.forEach(([icon, name]) => LS.GIFTS.push({ icon, name, big: !!grp.big, group: grp.name })));
 
+
+  /* Sound effects made in the browser (no audio files). */
+  LS.audio = { ctx: null, on: true, nb: null };
+  LS.sfx = function (kind, vol, n) {
+    const A = LS.audio;
+    if (!A.on) return;
+    try {
+      if (!A.ctx) {
+        const C = window.AudioContext || window.webkitAudioContext;
+        if (!C) return;
+        A.ctx = new C();
+      }
+      const c = A.ctx;
+      if (c.state === "suspended") c.resume();
+      const t0 = c.currentTime + 0.02;
+      const out = c.createGain();
+      out.gain.value = 0.32 * (vol == null ? 1 : vol);
+      out.connect(c.destination);
+      if (!A.nb) {
+        const len = c.sampleRate * 2, b = c.createBuffer(1, len, c.sampleRate), d = b.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        A.nb = b;
+      }
+      const env = (g, at, dur, peak) => {
+        g.gain.setValueAtTime(0.0001, t0 + at);
+        g.gain.exponentialRampToValueAtTime(peak, t0 + at + Math.min(0.05, dur * 0.3));
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur);
+      };
+      const tone = (type, f0, f1, dur, peak, at = 0, filt) => {
+        const o = c.createOscillator(), g = c.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(f0, t0 + at);
+        o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + at + dur);
+        env(g, at, dur, peak);
+        let node = o;
+        if (filt) {
+          const f = c.createBiquadFilter();
+          f.type = "lowpass";
+          f.frequency.setValueAtTime(filt[0], t0 + at);
+          f.frequency.exponentialRampToValueAtTime(Math.max(40, filt[1]), t0 + at + dur);
+          o.connect(f);
+          node = f;
+        }
+        node.connect(g);
+        g.connect(out);
+        o.start(t0 + at);
+        o.stop(t0 + at + dur + 0.05);
+      };
+      const noise = (type, f0, f1, dur, peak, at = 0, q = 1) => {
+        const sN = c.createBufferSource();
+        sN.buffer = A.nb;
+        sN.loop = true;
+        const f = c.createBiquadFilter();
+        f.type = type;
+        f.Q.value = q;
+        f.frequency.setValueAtTime(f0, t0 + at);
+        f.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + at + dur);
+        const g = c.createGain();
+        env(g, at, dur, peak);
+        sN.connect(f);
+        f.connect(g);
+        g.connect(out);
+        sN.start(t0 + at);
+        sN.stop(t0 + at + dur + 0.05);
+      };
+      const chime = (notes, step, peak, at0 = 0) =>
+        notes.forEach((f, i) => {
+          tone("sine", f, f, 0.5, peak, at0 + i * step);
+          tone("triangle", f * 2, f * 2, 0.3, peak * 0.3, at0 + i * step);
+        });
+      switch (kind) {
+        case "roar":
+          tone("sawtooth", 110, 50, 1.5, 0.9, 0, [1800, 200]);
+          tone("square", 165, 70, 1.3, 0.35, 0.05, [1200, 150]);
+          tone("sine", 60, 35, 1, 0.8, 0.1);
+          noise("bandpass", 700, 150, 1.5, 0.7, 0, 1.2);
+          break;
+        case "dragon":
+          tone("sawtooth", 160, 70, 1.2, 0.8, 0, [2200, 250]);
+          noise("bandpass", 900, 200, 1.2, 0.6, 0, 1);
+          noise("highpass", 3000, 6000, 1.4, 0.5, 2.0, 0.7);
+          tone("sine", 70, 40, 0.8, 0.7, 2.0);
+          break;
+        case "launch":
+          noise("lowpass", 400, 120, 2.6, 0.9, 0, 0.7);
+          tone("sawtooth", 55, 180, 2.4, 0.5, 0, [300, 1200]);
+          noise("bandpass", 500, 2500, 2.2, 0.4, 0.3, 1);
+          [2.7, 3.3, 3.9, 4.5].forEach((at) => {
+            noise("highpass", 2000, 800, 0.25, 0.8, at, 0.7);
+            chime([1047, 1319, 1568], 0.06, 0.2, at);
+          });
+          break;
+        case "swirl":
+          chime([392, 523, 659, 784, 988, 1319, 1568], 0.16, 0.3);
+          tone("triangle", 196, 294, 3.5, 0.25, 0, [600, 2400]);
+          break;
+        case "fly":
+        case "jets":
+        case "run":
+          noise("bandpass", 250, 2200, 1.2, 0.7, 0, 0.8);
+          noise("bandpass", 2200, 300, 1.4, 0.6, 1.1, 0.8);
+          break;
+        case "rise":
+          tone("sawtooth", 100, 400, 1.6, 0.4, 0, [300, 3000]);
+          chime([523, 784, 1047], 0.2, 0.3, 1.2);
+          break;
+        case "drop":
+          tone("sine", 160, 38, 0.6, 1, 0.45);
+          noise("lowpass", 800, 100, 0.5, 0.8, 0.45, 0.7);
+          chime([784, 988, 1319, 1568], 0.09, 0.3, 0.6);
+          break;
+        case "rain":
+          for (let i = 0; i < 14; i++) noise("bandpass", 1500 + Math.random() * 2500, 600, 0.14, 0.35, i * 0.18, 2);
+          break;
+        case "burst":
+          noise("highpass", 2000, 800, 0.25, 0.8, 0, 0.7);
+          chime([1047, 1319, 1568], 0.06, 0.2);
+          break;
+        case "combo": {
+          const f = 520 * Math.pow(1.06, Math.min(n || 2, 14));
+          tone("square", f, f * 1.5, 0.12, 0.25);
+          tone("sine", f * 2, f * 2, 0.15, 0.2, 0.04);
+          break;
+        }
+        case "tick":
+          tone("sine", 1200, 900, 0.06, 0.2);
+          break;
+        default:
+          chime([880, 1175, 1568], 0.07, 0.3);
+      }
+    } catch (e) {}
+  };
+
+  /* Combo counter: tapping the same gift again within 4 seconds counts up (x2, x3 ...). */
+  LS.combo = function (root, g) {
+    const now = Date.now();
+    let c = root._combo;
+    if (c && c.name === g.name && now - c.t < 4000) c.n++;
+    else root._combo = c = { name: g.name, n: 1, to: 0 };
+    c.t = now;
+    if (c.n < 2) return;
+    let el = root.querySelector(":scope > .gfx-combo");
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "gfx-combo";
+      root.appendChild(el);
+    }
+    el.innerHTML = `<span>${g.icon}</span>x${c.n}`;
+    el.getAnimations().forEach((a) => a.cancel());
+    el.animate([{ transform: "scale(2.2) rotate(-6deg)", opacity: 0.2 }, { transform: "scale(1) rotate(-3deg)", opacity: 1 }], { duration: 260, easing: "cubic-bezier(.2,1.6,.4,1)", fill: "forwards" });
+    LS.sfx("combo", 0.8, c.n);
+    clearTimeout(c.to);
+    const mine = c;
+    c.to = setTimeout(() => {
+      el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 350, fill: "forwards" }).onfinish = () => el.remove();
+      if (root._combo === mine) root._combo = null;
+    }, 2800);
+  };
+
   /* Big-gift reactions: full-screen animations built from emoji (original, no TikTok artwork).
      Gifts not listed here and not in the Basic group get a small "pop". Basic gifts keep floating icons. */
   LS.GIFT_FX = {
-    "Lion": { k: "roar", icon: "🦁", tint: "#ffb300", text: "ROAR!", extra: ["✨", "🔥", "⭐"] },
-    "Dragon": { k: "fly", icon: "🐉", tint: "#ff3d00", trail: "🔥", wave: true },
+    "Lion": { k: "lion", sfx: "roar", icon: "🦁", tint: "#ffb300", extra: ["✨", "🔥", "⭐"] },
+    "Dragon": { k: "dragon", sfx: "dragon", icon: "🐉", tint: "#ff3d00" },
     "Phoenix": { k: "rise", icon: "🔥", tint: "#ff6d00", trail: "✨" },
     "Falcon": { k: "fly", icon: "🦅", tint: "#4fc3f7", trail: "💨", diag: true },
     "Swan": { k: "fly", icon: "🦢", tint: "#80deea", trail: "💧", slow: true },
     "Corgi": { k: "run", icon: "🐕", tint: "#ffcc80", trail: "💕" },
-    "Galaxy": { k: "swirl", icon: "🌌", tint: "#7c4dff", orbit: ["✨", "⭐", "💫"] },
+    "Galaxy": { k: "galaxyx", sfx: "swirl", icon: "🌌", tint: "#7c4dff" },
     "Future City": { k: "rise", icon: "🏙️", tint: "#00e5ff", trail: "✨", still: true },
     "Whale Diving": { k: "fly", icon: "🐋", tint: "#0288d1", trail: "🫧", slow: true, wave: true },
     "Flying Jets": { k: "jets", icon: "✈️", tint: "#90caf9", trail: "💨" },
     "Meteor Shower": { k: "rain", icon: "☄️", tint: "#ff7043", count: 14, glyphs: ["☄️", "🔥", "☄️"] },
-    "Rocket": { k: "launch", icon: "🚀", tint: "#ff9100", trail: "🔥" },
+    "Rocket": { k: "rocketx", sfx: "launch", icon: "🚀", tint: "#ff9100" },
     "Crown": { k: "drop", icon: "👑", tint: "#ffd600", extra: ["✨", "🎊", "⭐"] },
     "Trending Figure": { k: "pop", icon: "🏆", tint: "#ffd600", extra: ["🌟", "✨"] },
     "TikTok": { k: "pop", icon: "🎵", tint: "#ff2d75", extra: ["🎶", "🎵", "💖"] },
@@ -324,7 +486,11 @@ body.immersive #tabbar { display: none; }
 
   LS.giftFx = function (root, g, who) {
     const cfg = LS.GIFT_FX[g.name] || (g.group === "Basic" ? null : { k: "pop", small: true, extra: ["✨"] });
-    if (!cfg || !root) return false;
+    if (root && who === "You") LS.combo(root, g);
+    if (!cfg || !root) {
+      if (who === "You") LS.sfx("tick", 0.8);
+      return false;
+    }
     const W = root.clientWidth, H = root.clientHeight;
     if (!W || !H) return false;
     const old = root.querySelectorAll(":scope > .gfx");
@@ -379,8 +545,9 @@ body.immersive #tabbar { display: none; }
       r.animate([{ transform: "scale(.3)", opacity: 0.9 }, { transform: "scale(5)", opacity: 0 }], { duration: 1000, easing: "ease-out", fill: "forwards" });
       setTimeout(() => r.remove(), 1100);
     };
-    const DUR = { pop: 3200, roar: 3400, fly: cfg.slow ? 5200 : 3800, rise: 3400, drop: 3400, launch: 2600, swirl: 4200, rain: 3800, jets: 3600, run: 3800 };
+    const DUR = { pop: 3200, roar: 3400, fly: cfg.slow ? 5200 : 3800, rise: 3400, drop: 3400, launch: 2600, swirl: 4200, rain: 3800, jets: 3600, run: 3800, lion: 5400, dragon: 6000, rocketx: 5200, galaxyx: 5800 };
     const dur = small ? 2400 : DUR[cfg.k] || 3200;
+    LS.sfx(cfg.sfx || (small ? "pop" : cfg.k), who === "You" ? 1 : 0.4);
     const trailer = (emoji, posAt, every, life, sz, delay = 0) => {
       const t0 = performance.now() + delay;
       const iv = setInterval(() => {
@@ -417,6 +584,198 @@ body.immersive #tabbar { display: none; }
 
     const cx = W / 2;
     switch (cfg.k) {
+      case "lion": {
+        const cy = H * 0.42, sz = W * 0.72;
+        const vg = document.createElement("div");
+        vg.className = "gfx-tint";
+        vg.style.background = "radial-gradient(circle at 50% 45%, transparent 0%, rgba(0,0,0,.72) 100%)";
+        layer.appendChild(vg);
+        vg.animate([{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1, offset: 0.85 }, { opacity: 0 }], { duration: dur, fill: "forwards" });
+        const rays = document.createElement("div");
+        rays.className = "gfx-rays";
+        const rs = Math.max(W, H) * 1.7;
+        rays.style.cssText = `width:${rs}px;height:${rs}px;left:${cx}px;top:${cy}px;background:repeating-conic-gradient(rgba(255,190,40,.6) 0 7deg, transparent 7deg 18deg);`;
+        layer.appendChild(rays);
+        rays.animate(
+          [{ transform: "translate(-50%,-50%) rotate(0deg)", opacity: 0 }, { opacity: 0.8, offset: 0.15 }, { opacity: 0.8, offset: 0.8 }, { transform: "translate(-50%,-50%) rotate(160deg)", opacity: 0 }],
+          { duration: dur, fill: "forwards" }
+        );
+        const t0e = performance.now();
+        const ev = setInterval(() => {
+          if (!layer.isConnected || performance.now() - t0e > dur * 0.9) return clearInterval(ev);
+          const esz = rnd(16, 36), x = rnd(0, W), el = sprite(pickOf(["🔥", "✨", "⭐"]), esz);
+          el.animate(
+            [{ transform: tf(x, H + 20, 1, 0, esz), opacity: 0 }, { opacity: 1, offset: 0.15 }, { transform: tf(x + rnd(-60, 60), H * rnd(0.25, 0.7), 0.6, rnd(-60, 60), esz), opacity: 0 }],
+            { duration: rnd(1500, 2600), fill: "forwards" }
+          );
+          setTimeout(() => el.remove(), 2700);
+        }, 60);
+        sprite(icon, sz).animate(
+          frames((p) => {
+            let sc = p < 0.16 ? 0.15 + (p / 0.16) * 1.05 : p < 0.22 ? 1.2 - ((p - 0.16) / 0.06) * 0.1 : 1.1 + Math.sin(p * 22) * 0.025;
+            const jit = (p > 0.15 && p < 0.3) || (p > 0.52 && p < 0.62);
+            return [cx + (jit ? rnd(-7, 7) : 0), cy + (jit ? rnd(-5, 5) : 0), sc, 0, p > 0.88 ? 1 - (p - 0.88) / 0.12 : 1];
+          }, 90, sz),
+          { duration: dur, fill: "forwards" }
+        );
+        const roarText = (txt) => {
+          const t = document.createElement("div");
+          t.className = "gfx-text";
+          t.textContent = txt;
+          t.style.top = cy + sz * 0.6 + "px";
+          layer.appendChild(t);
+          t.animate(
+            [{ transform: "translate(-50%,-50%) scale(0)", opacity: 0 }, { transform: "translate(-50%,-50%) scale(1.35)", opacity: 1, offset: 0.2 }, { transform: "translate(-50%,-50%) scale(1)", opacity: 1, offset: 0.35 }, { transform: "translate(-50%,-50%) scale(1)", opacity: 1, offset: 0.8 }, { transform: "translate(-50%,-50%) scale(1.3)", opacity: 0 }],
+            { duration: 1500, fill: "forwards" }
+          );
+        };
+        setTimeout(() => {
+          roarText("ROAR!");
+          ring(cx, cy, cfg.tint);
+          setTimeout(() => ring(cx, cy, "#fff"), 160);
+          setTimeout(() => ring(cx, cy, cfg.tint), 320);
+          burst(cx, cy, cfg.extra, 30, W * 0.6, 38);
+          shake(800);
+        }, dur * 0.15);
+        setTimeout(() => {
+          LS.sfx("roar", who === "You" ? 0.7 : 0.3);
+          roarText("ROARRR!");
+          ring(cx, cy, "#fff");
+          burst(cx, cy, cfg.extra, 20, W * 0.5, 34);
+          shake(600);
+        }, dur * 0.52);
+        break;
+      }
+      case "dragon": {
+        const sz = W * 0.62;
+        const wash = document.createElement("div");
+        wash.className = "gfx-tint";
+        wash.style.background = "linear-gradient(to top, rgba(255,80,0,.6), transparent 60%)";
+        layer.appendChild(wash);
+        wash.animate([{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 0.6, offset: 0.4 }, { opacity: 1, offset: 0.55 }, { opacity: 0 }], { duration: dur, fill: "forwards" });
+        const pos = (p) => {
+          if (p < 0.34) {
+            const q = p / 0.34, e = 1 - Math.pow(1 - q, 2);
+            return [-sz * 0.5 + (cx + sz * 0.5) * e, H * 0.3 + Math.sin(q * Math.PI * 2) * H * 0.05 + H * 0.08 * e, 1 + 0.15 * e];
+          }
+          if (p < 0.62) {
+            const q = (p - 0.34) / 0.28;
+            return [cx + Math.sin(q * Math.PI * 3) * 8, H * 0.38 + Math.sin(q * Math.PI * 6) * 5, 1.15 + 0.1 * Math.sin(q * Math.PI)];
+          }
+          const q = (p - 0.62) / 0.38, e = q * q;
+          return [cx + (W / 2 + sz) * e, H * 0.38 - H * 0.16 * e + Math.sin(q * Math.PI * 3) * H * 0.04, 1.1 - 0.15 * q];
+        };
+        sprite(icon, sz).animate(frames((p) => { const [x, y, sc] = pos(p); return [x, y, sc, Math.sin(p * 30) * 5, 1]; }, 100, sz), { duration: dur, fill: "forwards" });
+        trailer("🔥", pos, 90, 800, 34);
+        setTimeout(() => {
+          shake(dur * 0.28);
+          const iv = setInterval(() => {
+            if (!layer.isConnected) return clearInterval(iv);
+            const fsz = rnd(40, 70), el = sprite("🔥", fsz);
+            const x0 = cx + sz * 0.1, y0 = H * 0.4 + sz * 0.1;
+            el.animate(
+              [{ transform: tf(x0, y0, 0.4, 0, fsz), opacity: 1 }, { transform: tf(rnd(W * 0.05, W * 0.95), rnd(H * 0.55, H * 0.95), 2.4, rnd(-90, 90), fsz), opacity: 0 }],
+              { duration: rnd(700, 1000), easing: "ease-in", fill: "forwards" }
+            );
+            setTimeout(() => el.remove(), 1100);
+          }, 45);
+          setTimeout(() => clearInterval(iv), dur * 0.28);
+        }, dur * 0.34);
+        break;
+      }
+      case "rocketx": {
+        const sz = W * 0.34;
+        for (let i = 0; i < 10; i++) {
+          const ssz = rnd(W * 0.25, W * 0.4), side = i % 2 ? 1 : -1, x0 = cx + side * rnd(0, W * 0.12), el = sprite("💨", ssz);
+          el.animate(
+            [{ transform: tf(x0, H * 0.92, 0.5, 0, ssz), opacity: 0.9 }, { transform: tf(x0 + side * rnd(W * 0.25, W * 0.45), H * 0.8, 1.8, rnd(-30, 30), ssz), opacity: 0 }],
+            { duration: 2200, delay: rnd(0, 900), fill: "both" }
+          );
+        }
+        const yAt = (p) => { const q = Math.min(1, p / 0.55); return H * 0.9 - H * 1.2 * Math.pow(q, 2.2); };
+        sprite(icon, sz).animate(frames((p) => [cx + Math.sin(p * 80) * (p < 0.15 ? 6 : 2), yAt(p), 1, -45, 1], 80, sz), { duration: dur, fill: "forwards" });
+        trailer("🔥", (p) => [cx, yAt(p) + sz * 0.55], 45, 600, 42);
+        trailer("💨", (p) => [cx, yAt(p) + sz * 0.8], 80, 900, 34);
+        trailer("✨", (p) => [cx, yAt(p) + sz * 0.7], 120, 800, 24);
+        shake(dur * 0.45);
+        const palettes = [["#ff3d71", "#ffd600", "#fff"], ["#00e5ff", "#7c4dff", "#fff"], ["#76ff03", "#ffea00", "#fff"], ["#ff9100", "#ff1744", "#fff"], ["#e040fb", "#40c4ff", "#fff"]];
+        [0.52, 0.6, 0.68, 0.76, 0.84].forEach((fr, i) => {
+          setTimeout(() => {
+            if (!layer.isConnected) return;
+            const x = rnd(W * 0.15, W * 0.85), y = rnd(H * 0.15, H * 0.45), pal = palettes[i % palettes.length];
+            LS.sfx("burst", who === "You" ? 0.8 : 0.3);
+            ring(x, y, pal[0]);
+            for (let k = 0; k < 24; k++) {
+              const d = document.createElement("div"), ds = rnd(5, 9), col = pickOf(pal), a = (k / 24) * Math.PI * 2, dist = rnd(W * 0.18, W * 0.34);
+              d.style.cssText = `position:absolute;left:0;top:0;width:${ds}px;height:${ds}px;border-radius:50%;background:${col};box-shadow:0 0 10px ${col};`;
+              layer.appendChild(d);
+              d.animate(
+                [{ transform: `translate(${x}px,${y}px)`, opacity: 1 }, { transform: `translate(${x + Math.cos(a) * dist}px,${y + Math.sin(a) * dist + 40}px)`, opacity: 0 }],
+                { duration: rnd(900, 1400), easing: "cubic-bezier(.1,.7,.3,1)", fill: "forwards" }
+              );
+              setTimeout(() => d.remove(), 1500);
+            }
+            burst(x, y, ["✨", "🎆"], 4, W * 0.25, 26);
+          }, dur * fr);
+        });
+        break;
+      }
+      case "galaxyx": {
+        const cy = H * 0.42, sz = W * 0.5;
+        const dark = document.createElement("div");
+        dark.className = "gfx-tint";
+        dark.style.background = "radial-gradient(circle at 50% 45%, rgba(90,40,200,.55), rgba(5,0,25,.85))";
+        layer.appendChild(dark);
+        dark.animate([{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1, offset: 0.85 }, { opacity: 0 }], { duration: dur, fill: "forwards" });
+        const sky = document.createElement("div");
+        sky.className = "gfx-tint";
+        layer.appendChild(sky);
+        sky.animate([{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1, offset: 0.85 }, { opacity: 0 }], { duration: dur, fill: "forwards" });
+        for (let i = 0; i < 32; i++) {
+          const st = document.createElement("span");
+          st.className = "gfx-sp";
+          st.textContent = pickOf(["✨", "⭐", "✦"]);
+          const stz = rnd(12, 28);
+          st.style.fontSize = stz + "px";
+          st.style.transform = `translate(${rnd(0, W)}px, ${rnd(0, H * 0.85)}px)`;
+          sky.appendChild(st);
+          st.animate([{ opacity: 0.1 }, { opacity: 1 }], { duration: rnd(700, 1500), delay: rnd(0, 800), iterations: Infinity, direction: "alternate" });
+        }
+        const ringOf = (R, n, osz, items, rot) => {
+          const orb = document.createElement("div");
+          orb.style.cssText = `position:absolute;left:${cx}px;top:${cy}px;width:0;height:0;`;
+          layer.appendChild(orb);
+          for (let i = 0; i < n; i++) {
+            const a = (i / n) * Math.PI * 2, el = document.createElement("span");
+            el.className = "gfx-sp";
+            el.textContent = items[i % items.length];
+            el.style.fontSize = osz + "px";
+            el.style.transform = `translate(${Math.cos(a) * R - osz * 0.55}px, ${Math.sin(a) * R - osz * 0.55}px)`;
+            orb.appendChild(el);
+          }
+          orb.animate(
+            [{ transform: "rotate(0deg) scale(.2)", opacity: 0 }, { transform: `rotate(${rot * 0.2}deg) scale(1)`, opacity: 1, offset: 0.2 }, { transform: `rotate(${rot * 0.85}deg) scale(1)`, opacity: 1, offset: 0.85 }, { transform: `rotate(${rot}deg) scale(1.3)`, opacity: 0 }],
+            { duration: dur, fill: "forwards" }
+          );
+        };
+        ringOf(W * 0.3, 8, 42, ["✨", "⭐", "💫"], 720);
+        ringOf(W * 0.46, 12, 28, ["🌟", "✨", "💜", "💫"], -540);
+        sprite(icon, sz).animate(
+          frames((p) => [cx, cy, (p < 0.15 ? p / 0.15 : 1) * (1 + Math.sin(p * 22) * 0.07), 0, p > 0.88 ? 1 - (p - 0.88) / 0.12 : 1], 90, sz),
+          { duration: dur, fill: "forwards" }
+        );
+        [0.12, 0.28, 0.44, 0.6].forEach((fr) => setTimeout(() => ring(cx, cy, "#b388ff"), dur * fr));
+        [0.2, 0.4, 0.58, 0.74].forEach((fr, i) =>
+          setTimeout(() => {
+            if (!layer.isConnected) return;
+            const sh = sprite("☄️", 54), y0 = rnd(0, H * 0.25), x0 = W * (0.5 + 0.5 * (i % 2));
+            sh.animate([{ transform: tf(x0 + 60, y0, 1, 0, 54), opacity: 1 }, { transform: tf(x0 - W * 0.8, y0 + H * 0.35, 1, 0, 54), opacity: 0 }], { duration: 900, fill: "forwards" });
+            setTimeout(() => sh.remove(), 1000);
+          }, dur * fr)
+        );
+        setTimeout(() => { burst(cx, cy, ["✨", "⭐", "💫", "🌟"], 30, W * 0.6, 36); ring(cx, cy, "#fff"); }, dur * 0.85);
+        break;
+      }
       case "fly": {
         const sz = W * (cfg.slow ? 0.5 : 0.38);
         const y0 = cfg.diag ? H * 0.2 : H * 0.36;
@@ -1330,6 +1689,7 @@ body.immersive #tabbar { display: none; }
         <div class="hearts" id="hearts"></div>
         <div class="room-bottom">
           <input id="msg" placeholder="Say something…" maxlength="120" autocomplete="off">
+          <button class="icon-btn glass" id="soundBtn" aria-label="Sound">${LS.audio.on ? "🔊" : "🔇"}</button>
           <button class="icon-btn glass" id="giftBtn" aria-label="Gifts">🎁</button>
           <button class="icon-btn glass" id="heartBtn" aria-label="Like">❤️</button>
         </div>
@@ -1381,6 +1741,11 @@ body.immersive #tabbar { display: none; }
     $("#heartBtn", view).addEventListener("click", () => { for (let i = 0; i < 3; i++) setTimeout(heart, i * 90); });
     $("#stage", view).addEventListener("dblclick", () => { for (let i = 0; i < 5; i++) setTimeout(heart, i * 80); });
     $("#giftBtn", view).addEventListener("click", () => $("#gifts", view).classList.toggle("hidden"));
+    $("#soundBtn", view).addEventListener("click", (e) => {
+      LS.audio.on = !LS.audio.on;
+      e.currentTarget.textContent = LS.audio.on ? "🔊" : "🔇";
+      if (LS.audio.on) LS.sfx("tick", 1);
+    });
     function showGiftGroup(t) {
       let offset = 0;
       for (let i = 0; i < t; i++) offset += LS.GIFT_GROUPS[i].gifts.length;
