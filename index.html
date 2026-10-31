@@ -170,6 +170,19 @@ body.immersive #tabbar { display: none; }
 .field textarea { min-height: 140px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--text); outline: none; resize: vertical; font: inherit; line-height: 1.45; }
 .field textarea:focus { border-color: var(--violet); }
 #pbio { white-space: pre-line; max-width: 100%; text-align: center; overflow-wrap: anywhere; line-height: 1.45; }
+.gift-bal { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; padding: 0 4px; flex: none; }
+.gift-bal a { color: var(--pink); font-weight: 700; }
+.gift-msg { font-size: 12px; color: #ffb3c1; min-height: 0; flex: none; padding: 0 4px; }
+.gift-msg:empty { display: none; }
+.gift-grid .gp { color: #ffd86b; font-size: 10px; font-weight: 700; }
+.rc-notice { margin: 4px 16px 12px; padding: 12px 14px; border-radius: 12px; background: var(--card); color: var(--muted); font-size: 13px; line-height: 1.45; }
+.rc-bal { padding: 8px 16px 12px; font-size: 16px; }
+.rc-bal b { font-size: 20px; }
+.rc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0 16px; }
+.rc-grid button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 6px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); }
+.rc-grid button.on { border-color: var(--pink); }
+.rc-grid b { font-size: 20px; }
+.rc-grid small { color: var(--muted); font-size: 12px; }
 .er-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
 .er-title { font-weight: 700; font-size: 17px; }
 .er-save { color: var(--pink); font-weight: 700; font-size: 16px; padding: 8px 4px; }
@@ -325,8 +338,9 @@ body.immersive #tabbar { display: none; }
       ["🎉","Party"],["👍","Mantap"],["🕶️","DJ Glasses"],["⚡","Lightning Look"],
       ["👁️","Eye for an Eye"],["😱","Overreact"],["🎵","TikTok"] ] },
   ];
+  LS.GIFT_PRICE = {"Rose": 1, "Finger Heart": 5, "Hearts": 10, "Coffee": 5, "Cap": 10, "GG": 1, "Bravo": 5, "Confetti": 20, "Ice Cream Cone": 1, "Welcome Dallah": 10, "Heart Me": 5, "Love You": 10, "Greeting Heart": 20, "Budding Heart": 30, "Blooming Heart": 50, "Devoted Heart": 99, "Crystal Heart": 199, "Fly Love": 299, "Infinite Heart": 999, "Heart My Earthling": 1500, "Corgi": 299, "Swan": 699, "Falcon": 999, "Lion": 2999, "Dragon": 5000, "Phoenix": 4999, "Sakura Flute": 50, "Floral Lute": 99, "Fuzzy Drum": 99, "Pearl Chime": 199, "Starry Sax": 299, "Healing Sape": 499, "Rhythm Crown": 699, "Glow Chant": 999, "Mirwas Beat": 1299, "G.O.A.T. Busker": 2999, "Club Cheers": 5, "Club Power": 10, "Club Victory": 20, "Guardian's Pride": 99, "Go Popular": 199, "Super Popular": 499, "Nora Bloom": 999, "Galaxy": 1000, "Future City": 4999, "Whale Diving": 2150, "Flying Jets": 4888, "Meteor Shower": 3000, "Rocket": 1999, "Crown": 299, "Trending Figure": 999, "Party": 20, "Mantap": 50, "DJ Glasses": 99, "Lightning Look": 199, "Eye for an Eye": 299, "Overreact": 499, "TikTok": 99};
   LS.GIFTS = [];
-  LS.GIFT_GROUPS.forEach((grp) => grp.gifts.forEach(([icon, name]) => LS.GIFTS.push({ icon, name, big: !!grp.big, group: grp.name })));
+  LS.GIFT_GROUPS.forEach((grp) => grp.gifts.forEach(([icon, name]) => LS.GIFTS.push({ icon, name, big: !!grp.big, group: grp.name, cost: LS.GIFT_PRICE[name] || 1 })));
 
 
   /* Sound effects made in the browser (no audio files). */
@@ -1761,6 +1775,8 @@ body.immersive #tabbar { display: none; }
           <button class="icon-btn glass" id="heartBtn" aria-label="Like">❤️</button>
         </div>
         <div class="gift-sheet hidden" id="gifts">
+          <div class="gift-bal" id="giftBal"></div>
+          <div class="gift-msg" id="giftMsg" role="status"></div>
           <div class="gift-tabs" id="giftTabs">
             ${LS.GIFT_GROUPS.map((grp, i) => `<button data-t="${i}" class="${i === 0 ? "on" : ""}">${grp.name}</button>`).join("")}
           </div>
@@ -1807,7 +1823,21 @@ body.immersive #tabbar { display: none; }
     }
     $("#heartBtn", view).addEventListener("click", () => { for (let i = 0; i < 3; i++) setTimeout(heart, i * 90); });
     $("#stage", view).addEventListener("dblclick", () => { for (let i = 0; i < 5; i++) setTimeout(heart, i * 80); });
-    $("#giftBtn", view).addEventListener("click", () => $("#gifts", view).classList.toggle("hidden"));
+    const showBal = () => {
+      const bal = $("#giftBal", view);
+      if (!bal) return;
+      if (!LS.user) bal.innerHTML = `<span>Log in to send gifts</span><a href="#/auth">Log in ›</a>`;
+      else bal.innerHTML = `<span>🪙 <b>${LS.coins == null ? "…" : LS.coins.toLocaleString()}</b> coins</span><a href="#/recharge">Recharge ›</a>`;
+    };
+    $("#giftBtn", view).addEventListener("click", () => {
+      const sheet = $("#gifts", view);
+      sheet.classList.toggle("hidden");
+      if (!sheet.classList.contains("hidden")) {
+        $("#giftMsg", view).textContent = "";
+        showBal();
+        if (LS.refreshBalance) LS.refreshBalance().then(showBal);
+      }
+    });
     $("#soundBtn", view).addEventListener("click", (e) => {
       LS.audio.on = !LS.audio.on;
       e.currentTarget.textContent = LS.audio.on ? "🔊" : "🔇";
@@ -1817,7 +1847,7 @@ body.immersive #tabbar { display: none; }
       let offset = 0;
       for (let i = 0; i < t; i++) offset += LS.GIFT_GROUPS[i].gifts.length;
       $("#giftGrid", view).innerHTML = LS.GIFT_GROUPS[t].gifts
-        .map((g, i) => `<button data-g="${offset + i}"><span>${g[0]}</span><small>${g[1]}</small></button>`)
+        .map((g, i) => `<button data-g="${offset + i}"><span>${g[0]}</span><small>${g[1]}</small><small class="gp">🪙 ${LS.GIFT_PRICE[g[1]] || 1}</small></button>`)
         .join("");
       $$("#giftTabs button", view).forEach((x) => x.classList.toggle("on", +x.dataset.t === t));
       $("#giftGrid", view).scrollTop = 0;
@@ -1829,11 +1859,21 @@ body.immersive #tabbar { display: none; }
       const b = e.target.closest("[data-g]");
       if (!b) return;
       const g = LS.GIFTS[+b.dataset.g];
-      addChat("You", `sent ${g.name} ${g.icon}`, "gift");
-      const played = LS.giftFx($(".room", view), g, "You");
-      const n = played ? 4 : 6;
-      for (let i = 0; i < n; i++) setTimeout(() => heart(g.icon), i * 100);
-      $("#gifts", view).classList.add("hidden");
+      const gm = $("#giftMsg", view);
+      if (!LS.user || !LS.spendGift) { gm.textContent = "Log in to send gifts."; return; }
+      gm.textContent = "";
+      LS.spendGift(g).then((res) => {
+        if (!res.ok) {
+          gm.textContent = res.reason === "not_enough_coins" ? `Not enough coins for ${g.name}. Tap Recharge to get more.` : "Could not send the gift. Check your internet and try again.";
+          return;
+        }
+        showBal();
+        addChat("You", `sent ${g.name} ${g.icon}`, "gift");
+        const played = LS.giftFx($(".room", view), g, "You");
+        const n = played ? 4 : 6;
+        for (let i = 0; i < n; i++) setTimeout(() => heart(g.icon), i * 100);
+        $("#gifts", view).classList.add("hidden");
+      });
     });
     $("#follow", view).addEventListener("click", (e) => {
       following = !following;
@@ -2116,6 +2156,7 @@ body.immersive #tabbar { display: none; }
       <div class="pad"><small style="color:var(--muted)">Signed in as ${esc(LS.user.email || "")}</small></div>
       <h3 class="sec">Settings</h3>
       <div class="list">
+        <a class="row-item" href="#/recharge"><div class="grow"><b>Wallet</b><small>Get coins to send gifts</small></div><span>🪙 <b id="pcoins">${LS.coins == null ? "…" : LS.coins.toLocaleString()}</b> ›</span></a>
         <label class="row-item"><div class="grow"><b>Background effects</b><small>Turn off to save battery</small></div>
           <input type="checkbox" class="switch" id="fxsw" ${fxOn ? "checked" : ""}></label>
         <label class="row-item"><div class="grow"><b>Default effect</b><small>Used when you go live</small></div>
@@ -2127,6 +2168,7 @@ body.immersive #tabbar { display: none; }
     $("#edit", view).addEventListener("click", () => { location.hash = "#/edit-profile"; });
     $("#fxsw", view).addEventListener("change", (e) => localStorage.setItem("ls.fx", e.target.checked ? "1" : "0"));
     $("#fxsel", view).addEventListener("change", (e) => LS.store.set("effect", e.target.value));
+    LS.refreshBalance().then((c) => { const el = $("#pcoins", view); if (el) el.textContent = c == null ? "…" : c.toLocaleString(); });
     $("#logout", view).addEventListener("click", async () => { await sb.auth.signOut(); location.hash = "#/auth"; });
   };
 
@@ -2161,6 +2203,71 @@ body.immersive #tabbar { display: none; }
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read that photo.")); };
     img.src = url;
   });
+
+
+  /* ---------- coins ---------- */
+  LS.coins = null;
+  LS.refreshBalance = async function () {
+    if (!sb || !LS.user) { LS.coins = null; return null; }
+    try {
+      const { data, error } = await withTimeout(sb.rpc("get_wallet"), 12000);
+      LS.coins = error ? null : data;
+    } catch (e) { LS.coins = null; }
+    return LS.coins;
+  };
+  LS.spendGift = async function (g) {
+    if (!sb || !LS.user) return { ok: false, reason: "not_signed_in" };
+    try {
+      const { data, error } = await withTimeout(sb.rpc("send_gift", { p_name: g.name }), 15000);
+      if (error) return { ok: false, reason: /not_enough_coins/.test(error.message || "") ? "not_enough_coins" : "error", message: error.message };
+      LS.coins = data;
+      return { ok: true, coins: data };
+    } catch (e) { return { ok: false, reason: "error", message: e.message }; }
+  };
+
+  const PACKS = [5, 10, 20, 30, 50, 139, 210, 420, 1000, 5000, 20000];
+  const aed = (c) => (c * 0.0563).toFixed(2);
+  S.recharge = function (view) {
+    if (!sb || !LS.user) { location.hash = "#/auth"; return; }
+    let pack = 139;
+    view.innerHTML = `
+      <header class="er-top">
+        <button class="icon-btn" id="rback" aria-label="Back">←</button>
+        <div class="er-title">Recharge</div>
+        <span style="width:40px"></span>
+      </header>
+      <div class="rc-bal">Balance: 🪙 <b id="rbal">${LS.coins == null ? "…" : LS.coins.toLocaleString()}</b></div>
+      <div class="rc-notice">Test mode: coins are free for now, so you can try gifts. Real payments will be added later.</div>
+      <div class="rc-grid" id="rpacks">${PACKS.map((c) => `<button data-c="${c}" class="${c === pack ? "on" : ""}"><b>🪙 ${c.toLocaleString()}</b><small>AED ${aed(c)}</small></button>`).join("")}</div>
+      <div class="pad"><div class="formmsg" id="rmsg" role="status"></div><button class="btn big" id="rgo" type="button">Get ${pack.toLocaleString()} test coins</button></div>
+      <div class="spacer"></div>`;
+    const msg = (t, ok) => { const m = $("#rmsg", view); m.textContent = t || ""; m.classList.toggle("ok", !!ok); };
+    $("#rback", view).addEventListener("click", () => { history.length > 1 ? history.back() : (location.hash = "#/profile"); });
+    $("#rpacks", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-c]");
+      if (!b) return;
+      pack = +b.dataset.c;
+      $$("#rpacks button", view).forEach((x) => x.classList.toggle("on", x === b));
+      $("#rgo", view).textContent = `Get ${pack.toLocaleString()} test coins`;
+      msg("");
+    });
+    LS.refreshBalance().then((c) => { const el = $("#rbal", view); if (el) el.textContent = c == null ? "…" : c.toLocaleString(); });
+    $("#rgo", view).addEventListener("click", async () => {
+      const btn = $("#rgo", view);
+      btn.disabled = true;
+      msg("Adding coins…", true);
+      try {
+        const { data, error } = await withTimeout(sb.rpc("add_test_coins", { p_coins: pack }), 15000);
+        if (error) { msg(/wallet_full/.test(error.message) ? "Your wallet is full." : "Could not add coins. Try again."); return; }
+        LS.coins = data;
+        $("#rbal", view).textContent = data.toLocaleString();
+        LS.sfx("burst", 0.6);
+        msg(`Added ${pack.toLocaleString()} coins.`, true);
+      } catch (e) {
+        msg("Could not add coins. Check your internet and try again.");
+      } finally { btn.disabled = false; }
+    });
+  };
 
   /* ---------- edit profile (TikTok-style) ---------- */
   S.editProfile = function (view) {
@@ -2278,6 +2385,7 @@ body.immersive #tabbar { display: none; }
     [/^\/profile$/, S.profile, "profile"],
     [/^\/auth$/, S.auth, "profile"],
     [/^\/edit-profile$/, S.editProfile, "thread"],
+    [/^\/recharge$/, S.recharge, "thread"],
     [/^\/u\/([\w]+)$/, S.userProfile, "profile"],
   ];
 
