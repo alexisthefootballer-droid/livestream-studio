@@ -182,6 +182,8 @@ body.immersive #tabbar { display: none; }
 .rc-grid button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 6px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); }
 .rc-grid button.on { border-color: var(--pink); }
 .rc-grid b { font-size: 20px; }
+.rc-custom input { width: 100%; padding: 14px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--card); color: inherit; font-size: 18px; }
+.rc-price { color: var(--muted); font-size: 13px; padding: 6px 2px 0; }
 .rc-grid small { color: var(--muted); font-size: 12px; }
 .er-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
 .er-title { font-weight: 700; font-size: 17px; }
@@ -2238,7 +2240,8 @@ body.immersive #tabbar { display: none; }
       </header>
       <div class="rc-bal">Balance: 🪙 <b id="rbal">${LS.coins == null ? "…" : LS.coins.toLocaleString()}</b></div>
       <div class="rc-notice">Test mode: coins are free for now, so you can try gifts. Real payments will be added later.</div>
-      <div class="rc-grid" id="rpacks">${PACKS.map((c) => `<button data-c="${c}" class="${c === pack ? "on" : ""}"><b>🪙 ${c.toLocaleString()}</b><small>AED ${aed(c)}</small></button>`).join("")}</div>
+      <div class="rc-grid" id="rpacks">${PACKS.map((c) => `<button data-c="${c}" class="${c === pack ? "on" : ""}"><b>🪙 ${c.toLocaleString()}</b><small>AED ${aed(c)}</small></button>`).join("")}<button data-c="custom" id="rcust"><b>Custom</b><small>Any amount</small></button></div>
+      <div class="pad rc-custom hidden" id="rcwrap"><input id="rcin" type="number" inputmode="numeric" min="1" max="100000" placeholder="Type number of coins"><div class="rc-price" id="rcprice"></div></div>
       <div class="pad"><div class="formmsg" id="rmsg" role="status"></div><button class="btn big" id="rgo" type="button">Get ${pack.toLocaleString()} test coins</button></div>
       <div class="spacer"></div>`;
     const msg = (t, ok) => { const m = $("#rmsg", view); m.textContent = t || ""; m.classList.toggle("ok", !!ok); };
@@ -2246,14 +2249,24 @@ body.immersive #tabbar { display: none; }
     $("#rpacks", view).addEventListener("click", (e) => {
       const b = e.target.closest("[data-c]");
       if (!b) return;
-      pack = +b.dataset.c;
+      const isCustom = b.dataset.c === "custom";
+      $("#rcwrap", view).classList.toggle("hidden", !isCustom);
       $$("#rpacks button", view).forEach((x) => x.classList.toggle("on", x === b));
-      $("#rgo", view).textContent = `Get ${pack.toLocaleString()} test coins`;
       msg("");
+      if (isCustom) { pack = 0; $("#rgo", view).textContent = "Type an amount"; $("#rcin", view).focus(); return; }
+      pack = +b.dataset.c;
+      $("#rgo", view).textContent = `Get ${pack.toLocaleString()} test coins`;
+    });
+    $("#rcin", view).addEventListener("input", (e) => {
+      const n = Math.max(0, Math.min(100000, Math.floor(+e.target.value || 0)));
+      pack = n;
+      $("#rcprice", view).textContent = n ? `Price: AED ${aed(n)}` : "";
+      $("#rgo", view).textContent = n ? `Get ${n.toLocaleString()} test coins` : "Type an amount";
     });
     LS.refreshBalance().then((c) => { const el = $("#rbal", view); if (el) el.textContent = c == null ? "…" : c.toLocaleString(); });
     $("#rgo", view).addEventListener("click", async () => {
       const btn = $("#rgo", view);
+      if (!pack) { msg("Type how many coins you want."); return; }
       btn.disabled = true;
       msg("Adding coins…", true);
       try {
