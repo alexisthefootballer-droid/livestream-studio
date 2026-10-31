@@ -1964,15 +1964,16 @@ body.immersive #tabbar { display: none; }
       await loadProfile();
       refreshIfOnAccountScreen();
     });
-    sb.auth.onAuthStateChange(async (event, session) => {
+    sb.auth.onAuthStateChange((event, session) => {
       const uid = session ? session.user.id : null;
       if (uid === (LS.user && LS.user.id)) return;
       LS.user = session ? session.user : null;
-      await loadProfile();
-      refreshIfOnAccountScreen();
+      setTimeout(async () => { await loadProfile(); refreshIfOnAccountScreen(); }, 0);
     });
   }
 
+  const withTimeout = (promise, ms) =>
+    Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error("Saving took too long. Check your internet and tap Save again.")), ms))]);
   const nice = (m) => {
     m = String(m || "");
     if (/invalid login/i.test(m)) return "Wrong email or password.";
@@ -2187,13 +2188,13 @@ body.immersive #tabbar { display: none; }
         if (file) {
           const blob = await shrink(file);
           const path = LS.user.id + "/avatar.jpg";
-          const up = await sb.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+          const up = await withTimeout(sb.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" }), 25000);
           if (up.error) { msg("Photo upload failed: " + up.error.message); return; }
           upd.avatar_url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl + "?v=" + Date.now();
         }
-        const { error } = await sb.from("profiles").upsert({ id: LS.user.id, ...upd });
-        if (error) { msg(error.code === "23505" ? "That username is taken. Try another one." : nice(error.message)); return; }
-        await loadProfile();
+        const { error } = await withTimeout(sb.from("profiles").update(upd).eq("id", LS.user.id), 20000);
+        if (error) { msg(error.code === "23505" ? "That username is taken. Try another one." : "Could not save: " + nice(error.message)); return; }
+        await withTimeout(loadProfile(), 15000);
         location.hash = "#/profile";
       } catch (err) {
         msg(nice(err && err.message));
