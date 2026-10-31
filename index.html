@@ -2228,7 +2228,7 @@ body.immersive #tabbar { display: none; }
   };
 
   const PACKS = [5, 10, 20, 30, 50, 139, 210, 420, 1000, 5000, 20000];
-  const aed = (c) => (c * 0.0563).toFixed(2);
+  const aed = (c) => (c * 0.0155).toFixed(2); // price in US dollars
   S.recharge = function (view) {
     if (!sb || !LS.user) { location.hash = "#/auth"; return; }
     let pack = 139;
@@ -2239,10 +2239,12 @@ body.immersive #tabbar { display: none; }
         <span style="width:40px"></span>
       </header>
       <div class="rc-bal">Balance: 🪙 <b id="rbal">${LS.coins == null ? "…" : LS.coins.toLocaleString()}</b></div>
-      <div class="rc-notice">Test mode: coins are free for now, so you can try gifts. Real payments will be added later.</div>
-      <div class="rc-grid" id="rpacks">${PACKS.map((c) => `<button data-c="${c}" class="${c === pack ? "on" : ""}"><b>🪙 ${c.toLocaleString()}</b><small>AED ${aed(c)}</small></button>`).join("")}<button data-c="custom" id="rcust"><b>Custom</b><small>Any amount</small></button></div>
+      <div class="rc-notice">PayPal is in test mode: no real money is charged. The free test coins button is temporary.</div>
+      <div class="rc-grid" id="rpacks">${PACKS.map((c) => `<button data-c="${c}" class="${c === pack ? "on" : ""}"><b>🪙 ${c.toLocaleString()}</b><small>$${aed(c)}</small></button>`).join("")}<button data-c="custom" id="rcust"><b>Custom</b><small>Any amount</small></button></div>
       <div class="pad rc-custom hidden" id="rcwrap"><input id="rcin" type="number" inputmode="numeric" min="1" max="100000" placeholder="Type number of coins"><div class="rc-price" id="rcprice"></div></div>
-      <div class="pad"><div class="formmsg" id="rmsg" role="status"></div><button class="btn big" id="rgo" type="button">Get ${pack.toLocaleString()} test coins</button></div>
+      <div class="pad"><div class="formmsg" id="rmsg" role="status"></div>
+        <div id="ppbox" style="min-height:48px;margin-bottom:12px"></div>
+        <button class="btn big" id="rgo" type="button">Get ${pack.toLocaleString()} test coins</button></div>
       <div class="spacer"></div>`;
     const msg = (t, ok) => { const m = $("#rmsg", view); m.textContent = t || ""; m.classList.toggle("ok", !!ok); };
     $("#rback", view).addEventListener("click", () => { history.length > 1 ? history.back() : (location.hash = "#/profile"); });
@@ -2253,16 +2255,53 @@ body.immersive #tabbar { display: none; }
       $("#rcwrap", view).classList.toggle("hidden", !isCustom);
       $$("#rpacks button", view).forEach((x) => x.classList.toggle("on", x === b));
       msg("");
-      if (isCustom) { pack = 0; $("#rgo", view).textContent = "Type an amount"; $("#rcin", view).focus(); return; }
+      if (isCustom) { pack = 0; $("#rgo", view).textContent = "Type an amount"; $("#rcin", view).focus(); renderPP(); return; }
       pack = +b.dataset.c;
       $("#rgo", view).textContent = `Get ${pack.toLocaleString()} test coins`;
+      renderPP();
     });
     $("#rcin", view).addEventListener("input", (e) => {
       const n = Math.max(0, Math.min(100000, Math.floor(+e.target.value || 0)));
       pack = n;
-      $("#rcprice", view).textContent = n ? `Price: AED ${aed(n)}` : "";
+      $("#rcprice", view).textContent = n ? `Price: $${aed(n)}` : "";
       $("#rgo", view).textContent = n ? `Get ${n.toLocaleString()} test coins` : "Type an amount";
+      clearTimeout(renderPP.t); renderPP.t = setTimeout(renderPP, 500);
     });
+    /* PayPal checkout */
+    const ppSdk = () => new Promise((ok, no) => {
+      if (window.paypal) return ok();
+      const sc = document.createElement("script");
+      sc.src = "https://www.paypal.com/sdk/js?client-id=BAAitkjYE4gk9dYb9DDKYOov1ljCiUKjwrlMTBwgK-Rdk_BlnFeii_FyDA8QBobh0-CzFtv36HBMnm5mIA&currency=USD&intent=capture&components=buttons";
+      sc.onload = ok; sc.onerror = () => no(new Error("sdk"));
+      document.head.appendChild(sc);
+    });
+    const renderPP = () => {
+      const box = $("#ppbox", view);
+      if (!box || !window.paypal) return;
+      box.innerHTML = "";
+      if (!pack || +aed(pack) < 0.5) { box.innerHTML = `<div class="rc-price">Choose at least $0.50 (33 coins) to pay with PayPal.</div>`; return; }
+      window.paypal.Buttons({
+        style: { layout: "vertical", color: "gold", shape: "pill", label: "paypal" },
+        createOrder: async () => {
+          msg("");
+          const { data, error } = await sb.functions.invoke("paypal-coins", { body: { action: "create", coins: pack } });
+          if (error || !data || !data.id) { msg("Could not start PayPal. Try again."); throw new Error("create"); }
+          return data.id;
+        },
+        onApprove: async (d) => {
+          msg("Confirming your payment…", true);
+          const { data, error } = await sb.functions.invoke("paypal-coins", { body: { action: "capture", orderId: d.orderID } });
+          if (error || !data || data.coins == null) { msg("Payment could not be confirmed. If you were charged, contact support."); return; }
+          LS.coins = data.coins;
+          $("#rbal", view).textContent = data.coins.toLocaleString();
+          LS.sfx("burst", 0.6);
+          msg("Payment received. Coins added!", true);
+        },
+        onCancel: () => msg("Payment cancelled."),
+        onError: () => msg("PayPal had a problem. Try again."),
+      }).render(box);
+    };
+    ppSdk().then(renderPP).catch(() => { const b = $("#ppbox", view); if (b) b.innerHTML = `<div class="rc-price">PayPal could not load. Check your internet.</div>`; });
     LS.refreshBalance().then((c) => { const el = $("#rbal", view); if (el) el.textContent = c == null ? "…" : c.toLocaleString(); });
     $("#rgo", view).addEventListener("click", async () => {
       const btn = $("#rgo", view);
