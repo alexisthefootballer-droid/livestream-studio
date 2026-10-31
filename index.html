@@ -243,6 +243,9 @@ body.immersive #tabbar { display: none; }
 .sx.layout-side .cam-empty .av { width: 84px; height: 84px; }
 .sx.layout-pip .vid { position: absolute; inset: 0; }
 .sx.layout-pip .cam { position: absolute; z-index: 2; width: 34%; aspect-ratio: 3 / 4; right: 12px; top: 112px; border-radius: 14px; border: 2px solid rgba(255, 255, 255, 0.8); }
+.cam-grip { display: none; }
+.sx.layout-pip .cam { touch-action: none; cursor: grab; }
+.sx.layout-pip .cam-grip { display: block; position: absolute; right: 0; bottom: 0; width: 30px; height: 30px; z-index: 3; touch-action: none; cursor: nwse-resize; background: linear-gradient(135deg, transparent 55%, rgba(255, 255, 255, 0.9) 55% 62%, transparent 62% 72%, rgba(255, 255, 255, 0.9) 72% 79%, transparent 79%); border-bottom-right-radius: 12px; }
 .sx.layout-pip .cam-empty .av { width: 56px; height: 56px; }
 .sx.layout-cam .vid { display: none; }
 .preview.p-room { }
@@ -1643,6 +1646,7 @@ body.immersive #tabbar { display: none; }
       <div class="pane cam">
         <video class="camvid hidden" autoplay muted playsinline></video>
         <div class="cam-empty">${o.creator ? avatar(o.creator.name, o.creator.hue, 120) : "📷<small>Camera is off</small>"}</div>
+        <span class="cam-grip" aria-hidden="true"></span>
       </div>
       <div class="pane vid">
         <video class="loopvid" autoplay muted loop playsinline></video>
@@ -1653,10 +1657,43 @@ body.immersive #tabbar { display: none; }
 
     function play() { const p = loopVid.play(); if (p && p.catch) p.catch(() => {}); }
 
+    const camBox = $(".cam", el);
     function setLayout(id) {
       o.layout = id;
       el.className = "sx layout-" + id;
+      if (id !== "pip") camBox.removeAttribute("style");
     }
+
+    /* Picture in picture: drag the small camera anywhere, drag its corner to resize. */
+    let drag = null;
+    camBox.addEventListener("pointerdown", (e) => {
+      if (o.layout !== "pip") return;
+      const r = el.getBoundingClientRect(), c = camBox.getBoundingClientRect();
+      drag = { size: e.target.classList.contains("cam-grip"), x: e.clientX, y: e.clientY, left: c.left - r.left, top: c.top - r.top, w: c.width, h: c.height };
+      try { camBox.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      camBox.style.cursor = "grabbing";
+      e.preventDefault();
+    });
+    camBox.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const r = el.getBoundingClientRect(), dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      let w = drag.w, h = drag.h;
+      if (drag.size) {
+        w = Math.max(80, Math.min(r.width * 0.9, drag.w + dx));
+        h = (w * 4) / 3;
+        if (h > r.height * 0.9) { h = r.height * 0.9; w = (h * 3) / 4; }
+        camBox.style.width = w + "px";
+      }
+      const left = Math.max(0, Math.min(r.width - w, drag.size ? drag.left : drag.left + dx));
+      const top = Math.max(0, Math.min(r.height - h, drag.size ? drag.top : drag.top + dy));
+      camBox.style.left = left + "px";
+      camBox.style.top = top + "px";
+      camBox.style.right = "auto";
+      camBox.style.bottom = "auto";
+    });
+    const endDrag = () => { drag = null; camBox.style.cursor = ""; };
+    camBox.addEventListener("pointerup", endDrag);
+    camBox.addEventListener("pointercancel", endDrag);
     function setLoop(id) {
       const l = LS.LOOPS.find((x) => x.id === id) || LS.LOOPS[0];
       o.loopId = l.id;
