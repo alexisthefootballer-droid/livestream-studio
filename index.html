@@ -181,6 +181,8 @@ body.immersive #tabbar { display: none; }
 .er-row + .er-row { border-top: 1px solid var(--line); }
 .er-row label { width: 84px; flex: none; color: var(--muted); }
 .er-row input, .er-row textarea { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text); font: inherit; font-weight: 600; padding: 0; resize: none; line-height: 1.4; }
+.er-bio { flex-direction: column; gap: 10px; }
+.er-bio textarea { width: 100%; min-height: 240px; font-size: 16px; font-weight: 500; }
 .er-link { align-items: center; font-size: 14px; }
 .er-link span { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
 .er-link button { font-size: 18px; color: var(--muted); }
@@ -2144,7 +2146,7 @@ body.immersive #tabbar { display: none; }
       </div>
       <h4 class="er-sec">Basic info</h4>
       <div class="er-card">
-        <div class="er-row"><label for="eb">Bio</label><textarea id="eb" maxlength="500" rows="6" placeholder="Tell people about yourself. You can use new lines.">${esc(pr.bio || "")}</textarea></div>
+        <div class="er-row er-bio"><label for="eb">Bio</label><textarea id="eb" maxlength="500" rows="10" placeholder="Tell people about yourself. Press Enter for a new line.">${esc(pr.bio || "")}</textarea></div>
         <div class="er-row"><label for="el">Links</label><input id="el" maxlength="200" inputmode="url" autocapitalize="none" placeholder="Add a link" value="${esc(pr.links || "")}"></div>
       </div>
       <div class="er-count" id="ecnt"></div>
@@ -2153,7 +2155,9 @@ body.immersive #tabbar { display: none; }
     const msg = (t, ok) => { const m = $("#em", view); m.textContent = t || ""; m.classList.toggle("ok", !!ok); };
     const count = () => { $("#ecnt", view).textContent = $("#eb", view).value.length + "/500"; };
     count();
-    $("#eb", view).addEventListener("input", count);
+    const grow = () => { const t = $("#eb", view); t.style.height = "auto"; t.style.height = Math.max(240, t.scrollHeight) + "px"; };
+    grow();
+    $("#eb", view).addEventListener("input", () => { count(); grow(); });
     $("#eu", view).addEventListener("input", () => { $("#eurl", view).textContent = profileUrl(cleanName($("#eu", view).value) || "username"); });
     $("#eback", view).addEventListener("click", () => { location.hash = "#/profile"; });
     const pick = () => $("#efile", view).click();
