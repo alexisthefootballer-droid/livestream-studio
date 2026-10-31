@@ -167,6 +167,13 @@ body.immersive #tabbar { display: none; }
 .preview-empty small { font-size: 13px; }
 .preview .badge { position: absolute; top: 12px; left: 12px; }
 .preview .pill { position: absolute; top: 10px; right: 12px; }
+.authcard { margin: 8px 16px 0; padding: 16px; border-radius: 16px; background: var(--card); display: flex; flex-direction: column; gap: 10px; }
+.authcard h3 { font-size: 17px; }
+.authcard small { color: var(--muted); line-height: 1.4; }
+.formmsg { font-size: 13px; min-height: 18px; color: #ffb3c1; line-height: 1.4; }
+.formmsg.ok { color: #9be7b0; }
+.av-img { width: 92px; height: 92px; border-radius: 50%; object-fit: cover; display: block; }
+.btn.link { background: none; color: var(--muted); text-decoration: underline; }
 .field { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; font-size: 13px; color: var(--muted); }
 .field input, .field select, #fxsel { height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--text); outline: none; }
 .field input:focus, .field select:focus { border-color: var(--violet); }
@@ -235,6 +242,7 @@ body.immersive #tabbar { display: none; }
       <a href="#/profile" data-tab="profile"><span>👤</span><small>Profile</small></a>
     </nav>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
   <script>
 /* Demo data + small helpers. Swap for Supabase tables later. */
 (function () {
@@ -1903,6 +1911,218 @@ body.immersive #tabbar { display: none; }
 
 </script>
   <script>
+/* Accounts: Supabase sign-up / log-in, and the real profile. */
+(function () {
+  const LS = window.LS;
+  const S = LS.screens;
+  const { $, $$, esc, avatar } = LS;
+  const SB_URL = "https://clxedhgoyjkeovbeioyj.supabase.co";
+  const SB_KEY = "sb_publishable_tZlW4N46fRDHyafQpzy2TA_aCniI3kd";
+  const sb = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+  LS.sb = sb;
+  LS.user = null;
+  LS.myProfile = null;
+
+  async function loadProfile() {
+    if (!sb || !LS.user) { LS.myProfile = null; return; }
+    try {
+      const { data } = await sb.from("profiles").select("*").eq("id", LS.user.id).maybeSingle();
+      LS.myProfile = data || null;
+    } catch (e) { LS.myProfile = null; }
+  }
+
+  function refreshIfOnAccountScreen() {
+    const h = location.hash;
+    if (h === "#/profile" || h === "#/auth") window.dispatchEvent(new HashChangeEvent("hashchange"));
+  }
+
+  if (sb) {
+    sb.auth.getSession().then(async ({ data }) => {
+      LS.user = data.session ? data.session.user : null;
+      await loadProfile();
+      refreshIfOnAccountScreen();
+    });
+    sb.auth.onAuthStateChange(async (event, session) => {
+      const uid = session ? session.user.id : null;
+      if (uid === (LS.user && LS.user.id)) return;
+      LS.user = session ? session.user : null;
+      await loadProfile();
+      refreshIfOnAccountScreen();
+    });
+  }
+
+  const nice = (m) => {
+    m = String(m || "");
+    if (/invalid login/i.test(m)) return "Wrong email or password.";
+    if (/already registered|already been registered/i.test(m)) return "That email already has an account. Log in instead.";
+    if (/rate limit/i.test(m)) return "Too many tries. Wait a few minutes and try again.";
+    if (/password/i.test(m) && /6/.test(m)) return "Use a password with at least 6 characters.";
+    if (/database error/i.test(m)) return "That username is taken. Try another one.";
+    if (/email not confirmed/i.test(m)) return "Confirm your email first. Check your inbox for the link.";
+    return m || "Something went wrong. Try again.";
+  };
+  const cleanName = (v) => String(v || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+  const photo = (pr, size) =>
+    pr && pr.avatar_url
+      ? `<img class="av-img" style="width:${size}px;height:${size}px" src="${esc(pr.avatar_url)}" alt="">`
+      : avatar((pr && (pr.display_name || pr.username)) || "You", 260, size);
+
+  /* ---------- sign up / log in ---------- */
+  S.auth = function (view) {
+    if (!sb) {
+      view.innerHTML = `<header class="topbar"><div class="logo">Account</div></header><div class="authcard"><h3>Accounts are not available</h3><small>The sign-in library did not load. Check your internet connection and reload.</small></div>`;
+      return;
+    }
+    if (LS.user) { location.hash = "#/profile"; return; }
+    let mode = "signup";
+    view.innerHTML = `
+      <header class="topbar"><div class="logo">LiveStream <span>Studio</span></div></header>
+      <div class="seg wide" id="mode"><button data-m="signup" class="on">Sign up</button><button data-m="login">Log in</button></div>
+      <form class="pad" id="af" autocomplete="on">
+        <label class="field" id="unwrap">Username<input id="au" maxlength="20" autocapitalize="none" autocomplete="username" placeholder="letters, numbers, _"></label>
+        <label class="field">Email<input id="ae" type="email" autocomplete="email" placeholder="you@example.com" required></label>
+        <label class="field">Password<input id="ap" type="password" autocomplete="current-password" minlength="6" placeholder="at least 6 characters" required></label>
+        <div class="formmsg" id="am" role="status"></div>
+        <button class="btn big" type="submit" id="asub">Create account</button>
+      </form>
+      <div class="spacer"></div>`;
+    const msg = (t, ok) => { const m = $("#am", view); m.textContent = t || ""; m.classList.toggle("ok", !!ok); };
+    $("#mode", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-m]");
+      if (!b) return;
+      mode = b.dataset.m;
+      $$("#mode button", view).forEach((x) => x.classList.toggle("on", x === b));
+      $("#unwrap", view).classList.toggle("hidden", mode === "login");
+      $("#asub", view).textContent = mode === "signup" ? "Create account" : "Log in";
+      $("#ap", view).autocomplete = mode === "signup" ? "new-password" : "current-password";
+      msg("");
+    });
+    $("#af", view).addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = $("#ae", view).value.trim(), password = $("#ap", view).value;
+      const btn = $("#asub", view);
+      btn.disabled = true;
+      msg("");
+      try {
+        if (mode === "signup") {
+          const username = cleanName($("#au", view).value);
+          if (username.length < 3) { msg("Pick a username with at least 3 letters or numbers."); return; }
+          const { data: taken } = await sb.from("profiles").select("id").eq("username", username).maybeSingle();
+          if (taken) { msg("That username is taken. Try another one."); return; }
+          const { data, error } = await sb.auth.signUp({ email, password, options: { data: { username } } });
+          if (error) { msg(nice(error.message)); return; }
+          if (!data.session) { msg("Account created. Check your email for a confirmation link, then come back and log in.", true); return; }
+          location.hash = "#/profile";
+        } else {
+          const { error } = await sb.auth.signInWithPassword({ email, password });
+          if (error) { msg(nice(error.message)); return; }
+          location.hash = "#/profile";
+        }
+      } catch (err) {
+        msg(nice(err && err.message));
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  };
+
+  /* ---------- profile ---------- */
+  const oldProfile = S.profile;
+  S.profile = function (view) {
+    if (!LS.user) {
+      const c = oldProfile(view);
+      view.insertAdjacentHTML("afterbegin", `<div class="authcard"><h3>Make it yours</h3><small>Create an account to save your name, photo and bio, and to stream and chat with your own profile.</small><a class="btn big" href="#/auth" style="text-align:center">Sign up or log in</a></div>`);
+      return c;
+    }
+    const pr = LS.myProfile || { username: (LS.user.email || "you").split("@")[0] };
+    const shown = pr.display_name || pr.username;
+    const defFx = LS.store.get("effect", "fireworks");
+    const fxOn = localStorage.getItem("ls.fx") !== "0";
+    view.innerHTML = `
+      <header class="topbar"><div class="logo">Profile</div></header>
+      <section class="profile-head">
+        <span class="ring lg" style="--h:260" id="pav">${photo(pr, 92)}</span>
+        <h2 id="pname">${esc(shown)}</h2>
+        <small id="phandle">@${esc(pr.username)}</small>
+        <p id="pbio">${esc(pr.bio || "No bio yet. Tap Edit profile to add one.")}</p>
+        <div class="stats">
+          <div><b>0</b><small>Following</small></div>
+          <div><b>0</b><small>Followers</small></div>
+          <div><b>0</b><small>Likes</small></div>
+        </div>
+        <button class="btn ghost" id="edit">Edit profile</button>
+      </section>
+      <form class="pad hidden" id="form">
+        <label class="field">Photo<input id="fphoto" type="file" accept="image/*"></label>
+        <label class="field">Name<input id="fn" maxlength="30" value="${esc(pr.display_name || "")}" placeholder="${esc(pr.username)}"></label>
+        <label class="field">Username<input id="fh" maxlength="20" autocapitalize="none" value="${esc(pr.username)}"></label>
+        <label class="field">Bio<input id="fb" maxlength="100" value="${esc(pr.bio || "")}"></label>
+        <div class="formmsg" id="pm" role="status"></div>
+        <button class="btn big" type="submit" id="psave">Save</button>
+      </form>
+      <div class="pad"><small style="color:var(--muted)">Signed in as ${esc(LS.user.email || "")}</small></div>
+      <h3 class="sec">Settings</h3>
+      <div class="list">
+        <label class="row-item"><div class="grow"><b>Background effects</b><small>Turn off to save battery</small></div>
+          <input type="checkbox" class="switch" id="fxsw" ${fxOn ? "checked" : ""}></label>
+        <label class="row-item"><div class="grow"><b>Default effect</b><small>Used when you go live</small></div>
+          <select id="fxsel">${["none"].concat(LS.EFFECT_NAMES).map((n) => `<option value="${n}" ${n === defFx ? "selected" : ""}>${LS.effectInfo(n).label}</option>`).join("")}</select></label>
+      </div>
+      <div class="pad"><button class="btn ghost big" id="logout">Log out</button></div>
+      <div class="spacer"></div>`;
+    const msg = (t, ok) => { const m = $("#pm", view); m.textContent = t || ""; m.classList.toggle("ok", !!ok); };
+    $("#edit", view).addEventListener("click", () => $("#form", view).classList.toggle("hidden"));
+    $("#fxsw", view).addEventListener("change", (e) => localStorage.setItem("ls.fx", e.target.checked ? "1" : "0"));
+    $("#fxsel", view).addEventListener("change", (e) => LS.store.set("effect", e.target.value));
+    $("#logout", view).addEventListener("click", async () => { await sb.auth.signOut(); location.hash = "#/auth"; });
+
+    // shrink the chosen photo to a 256px square before uploading
+    const shrink = (file) => new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const n = 256, c = document.createElement("canvas");
+        c.width = c.height = n;
+        const side = Math.min(img.width, img.height);
+        c.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, n, n);
+        URL.revokeObjectURL(url);
+        c.toBlob((b) => (b ? resolve(b) : reject(new Error("Could not read that photo."))), "image/jpeg", 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read that photo.")); };
+      img.src = url;
+    });
+
+    $("#form", view).addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = $("#psave", view);
+      btn.disabled = true;
+      msg("Saving…", true);
+      try {
+        const username = cleanName($("#fh", view).value);
+        if (username.length < 3) { msg("Username needs at least 3 letters or numbers."); return; }
+        const upd = { display_name: $("#fn", view).value.trim() || null, username, bio: $("#fb", view).value.trim() || null };
+        const file = $("#fphoto", view).files[0];
+        if (file) {
+          const blob = await shrink(file);
+          const path = LS.user.id + "/avatar.jpg";
+          const up = await sb.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+          if (up.error) { msg("Photo upload failed: " + up.error.message); return; }
+          upd.avatar_url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl + "?v=" + Date.now();
+        }
+        const { error } = await sb.from("profiles").upsert({ id: LS.user.id, ...upd });
+        if (error) { msg(error.code === "23505" ? "That username is taken. Try another one." : nice(error.message)); return; }
+        await loadProfile();
+        S.profile(view);
+      } catch (err) {
+        msg(nice(err && err.message));
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  };
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
@@ -1918,6 +2138,7 @@ body.immersive #tabbar { display: none; }
     [/^\/inbox$/, S.inbox, "inbox"],
     [/^\/inbox\/([\w-]+)$/, S.thread, "thread"],
     [/^\/profile$/, S.profile, "profile"],
+    [/^\/auth$/, S.auth, "profile"],
   ];
 
   let cleanup = null;
