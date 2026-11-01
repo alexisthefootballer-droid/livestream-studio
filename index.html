@@ -1880,7 +1880,7 @@ body.immersive #tabbar { display: none; }
       const gm = $("#giftMsg", view);
       if (!LS.user || !LS.spendGift) { gm.textContent = "Log in to send gifts."; return; }
       gm.textContent = "";
-      LS.spendGift(g).then((res) => {
+      LS.spendGift(g, c.userId || null).then((res) => {
         if (!res.ok) {
           gm.textContent = res.reason === "not_enough_coins" ? `Not enough coins for ${g.name}. Tap Recharge to get more.` : "Could not send the gift. Check your internet and try again.";
           return;
@@ -2182,6 +2182,7 @@ body.immersive #tabbar { display: none; }
       <div class="pad"><small style="color:var(--muted)">Signed in as ${esc(LS.user.email || "")}</small></div>
       <h3 class="sec">Settings</h3>
       <div class="list">
+        <a class="row-item" href="#/earnings"><div class="grow"><b>Earnings &amp; withdraw</b><small>For streamers: cash out your gift earnings</small></div><span>›</span></a>
         <a class="row-item" href="#/recharge"><div class="grow"><b>Wallet</b><small>Get coins to send gifts</small></div><span><i class="coin"></i> <b id="pcoins">${LS.coins == null ? "…" : LS.coins.toLocaleString()}</b> ›</span></a>
         <label class="row-item"><div class="grow"><b>Background effects</b><small>Turn off to save battery</small></div>
           <input type="checkbox" class="switch" id="fxsw" ${fxOn ? "checked" : ""}></label>
@@ -2252,10 +2253,10 @@ body.immersive #tabbar { display: none; }
     } catch (e) { LS.coins = null; }
     return LS.coins;
   };
-  LS.spendGift = async function (g) {
+  LS.spendGift = async function (g, hostId) {
     if (!sb || !LS.user) return { ok: false, reason: "not_signed_in" };
     try {
-      const { data, error } = await withTimeout(sb.rpc("send_gift", { p_name: g.name }), 15000);
+      const { data, error } = await withTimeout(sb.rpc("send_gift", hostId ? { p_name: g.name, p_host: hostId } : { p_name: g.name }), 15000);
       if (error) return { ok: false, reason: /not_enough_coins/.test(error.message || "") ? "not_enough_coins" : "error", message: error.message };
       LS.coins = data;
       return { ok: true, coins: data };
@@ -2348,6 +2349,110 @@ body.immersive #tabbar { display: none; }
     }).catch(() => {});
     ppSdk().then(renderPP).catch(() => { const b = $("#ppbox", view); if (b) b.innerHTML = `<div class="rc-price">PayPal could not load. Check your internet.</div>`; });
     LS.refreshBalance().then((c) => { const el = $("#rbal", view); if (el) el.textContent = c == null ? "…" : c.toLocaleString(); });
+  };
+
+  /* ---------- streamer earnings + withdrawals ---------- */
+  S.earnings = function (view) {
+    if (!sb || !LS.user) { location.hash = "#/auth"; return; }
+    const MIN = 10;
+    const usd = (m) => "$" + (Number(m || 0) / 1e6).toFixed(2);
+    const when = (t) => new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    const stat = { pending: "Waiting for payment", paid: "Paid", rejected: "Rejected (returned to balance)" };
+    view.innerHTML = `
+      <header class="er-top">
+        <button class="icon-btn" id="eback" aria-label="Back">←</button>
+        <div class="er-title">Earnings</div>
+        <span style="width:40px"></span>
+      </header>
+      <div class="rc-bal">Available: <b id="ebal">…</b></div>
+      <div class="rc-notice">Streamers earn 40% of the value of gifts sent to them. Minimum withdrawal is $${MIN}. Payments are sent to your PayPal by hand, usually within a few days.<div id="eextra" style="margin-top:6px"></div></div>
+      <div class="pad">
+        <input id="epp" type="email" inputmode="email" autocomplete="email" placeholder="Your PayPal email" style="width:100%;padding:14px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:inherit;font-size:16px">
+        <div class="formmsg" id="emsg" role="status"></div>
+        <button class="btn big" id="ego" type="button">Withdraw</button>
+      </div>
+      <h3 class="sec">Your withdrawals</h3>
+      <div class="list" id="ehist"><div class="pad" style="color:var(--muted)">Loading…</div></div>
+      <div id="eadmin"></div>
+      <div class="spacer"></div>`;
+    const msg = (t, ok) => { const m = $("#emsg", view); m.textContent = t || ""; m.classList.toggle("ok", !!ok); };
+    let avail = 0, refreshAdmin = null;
+    $("#eback", view).addEventListener("click", () => { history.length > 1 ? history.back() : (location.hash = "#/profile"); });
+    const load = async () => {
+      try {
+        const { data } = await withTimeout(sb.rpc("get_earnings"), 12000);
+        if (data) {
+          avail = data.balance_micro;
+          $("#ebal", view).textContent = usd(data.balance_micro);
+          $("#eextra", view).textContent = `Total earned: ${usd(data.lifetime_micro)}` + (data.pending_micro ? ` · Waiting for payment: ${usd(data.pending_micro)}` : "");
+          $("#ego", view).disabled = data.balance_micro < MIN * 1e6;
+          $("#ego", view).style.opacity = data.balance_micro < MIN * 1e6 ? ".5" : "1";
+        }
+      } catch (e) { $("#ebal", view).textContent = "—"; }
+      try {
+        const { data } = await withTimeout(sb.from("withdrawals").select("id,amount_micro,status,note,created_at,paypal_email").order("created_at", { ascending: false }).limit(20), 12000);
+        const box = $("#ehist", view);
+        box.innerHTML = (data && data.length)
+          ? data.map((w) => `<div class="row-item"><div class="grow"><b>${usd(w.amount_micro)}</b><small>${esc(w.paypal_email)} · ${when(w.created_at)}${w.note ? " · " + esc(w.note) : ""}</small></div><span>${stat[w.status] || esc(w.status)}</span></div>`).join("")
+          : `<div class="pad" style="color:var(--muted)">No withdrawals yet.</div>`;
+      } catch (e) { $("#ehist", view).innerHTML = `<div class="pad" style="color:var(--muted)">Could not load.</div>`; }
+      if (refreshAdmin) refreshAdmin();
+    };
+    load();
+    const savedPP = (() => { try { return localStorage.getItem("ls.pp") || ""; } catch (e) { return ""; } })();
+    $("#epp", view).value = savedPP;
+    $("#ego", view).addEventListener("click", async () => {
+      const email = $("#epp", view).value.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg("Type your PayPal email."); return; }
+      if (avail < MIN * 1e6) { msg(`You need at least $${MIN} to withdraw.`); return; }
+      if (!confirm(`Withdraw ${usd(avail)} to ${email}? Check the email is correct. Money sent to a wrong email cannot be recovered.`)) return;
+      const btn = $("#ego", view);
+      btn.disabled = true; msg("Sending request…", true);
+      try {
+        const { error } = await withTimeout(sb.rpc("request_withdrawal", { p_email: email }), 15000);
+        if (error) {
+          const m = error.message || "";
+          msg(/already_pending/.test(m) ? "You already have a withdrawal waiting. Wait until it is paid." : /below_minimum/.test(m) ? `You need at least $${MIN}.` : /bad_email/.test(m) ? "That email does not look right." : "Could not send the request. Try again.");
+        } else {
+          try { localStorage.setItem("ls.pp", email); } catch (e) {}
+          msg("Request sent. You will be paid to your PayPal soon.", true);
+        }
+      } catch (e) { msg("Check your internet and try again."); }
+      await load();
+    });
+    sb.rpc("is_admin").then(({ data }) => {
+      if (data !== true) return;
+      const box = $("#eadmin", view);
+      box.innerHTML = `<h3 class="sec">Admin: withdrawal requests</h3><div class="list" id="alist"><div class="pad" style="color:var(--muted)">Loading…</div></div>
+        <div class="pad"><div class="formmsg" id="amsg" role="status"></div><small style="color:var(--muted)">Test the screens: add fake earnings to your own account.</small>
+        <div style="display:flex;gap:8px;margin-top:8px"><input id="atest" type="number" inputmode="numeric" min="1" max="1000" placeholder="Dollars (1-1000)" style="flex:1;padding:12px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:inherit;font-size:16px"><button class="btn" id="atestgo" type="button">Add</button></div></div>`;
+      const render = async () => {
+        const { data: rows, error } = await sb.rpc("admin_list_withdrawals");
+        const l = $("#alist", view);
+        if (error || !rows) { l.innerHTML = `<div class="pad">Could not load.</div>`; return; }
+        l.innerHTML = rows.length ? rows.map((w) => `<div class="row-item" style="align-items:flex-start;flex-wrap:wrap"><div class="grow"><b>${usd(w.amount_micro)} · @${esc(w.username || "?")}</b><small>PayPal: ${esc(w.paypal_email)}<br>${when(w.created_at)} · ${stat[w.status] || esc(w.status)}${w.note ? " · " + esc(w.note) : ""}</small></div>${w.status === "pending" ? `<div style="display:flex;gap:6px"><button class="btn" data-paid="${w.id}">Paid</button><button class="btn" data-rej="${w.id}">Reject</button></div>` : ""}</div>`).join("") : `<div class="pad" style="color:var(--muted)">No requests yet.</div>`;
+      };
+      refreshAdmin = render;
+      render();
+      box.addEventListener("click", async (e) => {
+        const paid = e.target.closest("[data-paid]"), rej = e.target.closest("[data-rej]");
+        if (!paid && !rej) return;
+        const id = +(paid || rej).dataset[paid ? "paid" : "rej"];
+        if (paid && !confirm("Only tap Paid after you have sent the money in PayPal. Continue?")) return;
+        const note = rej ? prompt("Reason (the streamer will see it):", "") : null;
+        if (rej && note === null) return;
+        const { error } = await sb.rpc("admin_mark_withdrawal", { p_id: id, p_status: paid ? "paid" : "rejected", p_note: note });
+        $("#amsg", view).textContent = error ? "Could not update." : "Updated.";
+        render();
+      });
+      $("#atestgo", view).addEventListener("click", async () => {
+        const n = Math.floor(+$("#atest", view).value || 0);
+        if (n < 1) return;
+        const { error } = await sb.rpc("admin_add_test_earnings", { p_dollars: n });
+        $("#amsg", view).textContent = error ? "Could not add." : `Added $${n} test earnings.`;
+        load();
+      });
+    }).catch(() => {});
   };
 
   /* ---------- edit profile (TikTok-style) ---------- */
@@ -2467,6 +2572,7 @@ body.immersive #tabbar { display: none; }
     [/^\/auth$/, S.auth, "profile"],
     [/^\/edit-profile$/, S.editProfile, "thread"],
     [/^\/recharge$/, S.recharge, "thread"],
+    [/^\/earnings$/, S.earnings, "thread"],
     [/^\/u\/([\w]+)$/, S.userProfile, "profile"],
   ];
 
