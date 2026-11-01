@@ -2248,12 +2248,11 @@ body.immersive #tabbar { display: none; }
         <span style="width:40px"></span>
       </header>
       <div class="rc-bal">Balance: <i class="coin"></i> <b id="rbal">${LS.coins == null ? "…" : LS.coins.toLocaleString()}</b></div>
-      <div class="rc-notice">PayPal is in test mode: no real money is charged. The free test coins button is temporary.</div>
+      <div class="rc-notice">Pay securely with PayPal or a card. Coins are added to your balance right after payment.</div>
       <div class="rc-grid" id="rpacks">${PACKS.map((c) => `<button data-c="${c}" class="${c === pack ? "on" : ""}"><b><i class="coin"></i> ${c.toLocaleString()}</b><small>$${aed(c)}</small></button>`).join("")}<button data-c="custom" id="rcust"><b>Custom</b><small>Any amount</small></button></div>
       <div class="pad rc-custom hidden" id="rcwrap"><input id="rcin" type="number" inputmode="numeric" min="1" max="100000" placeholder="Type number of coins"><div class="rc-price" id="rcprice"></div></div>
       <div class="pad"><div class="formmsg" id="rmsg" role="status"></div>
-        <div id="ppbox" style="min-height:48px;margin-bottom:12px"></div>
-        <button class="btn big" id="rgo" type="button">Get ${pack.toLocaleString()} test coins</button></div>
+        <div id="ppbox" style="min-height:48px;margin-bottom:12px"></div></div>
       <div class="spacer"></div>`;
     const msg = (t, ok) => { const m = $("#rmsg", view); m.textContent = t || ""; m.classList.toggle("ok", !!ok); };
     $("#rback", view).addEventListener("click", () => { history.length > 1 ? history.back() : (location.hash = "#/profile"); });
@@ -2264,23 +2263,21 @@ body.immersive #tabbar { display: none; }
       $("#rcwrap", view).classList.toggle("hidden", !isCustom);
       $$("#rpacks button", view).forEach((x) => x.classList.toggle("on", x === b));
       msg("");
-      if (isCustom) { pack = 0; $("#rgo", view).textContent = "Type an amount"; $("#rcin", view).focus(); renderPP(); return; }
+      if (isCustom) { pack = 0; $("#rcin", view).focus(); renderPP(); return; }
       pack = +b.dataset.c;
-      $("#rgo", view).textContent = `Get ${pack.toLocaleString()} test coins`;
       renderPP();
     });
     $("#rcin", view).addEventListener("input", (e) => {
       const n = Math.max(0, Math.min(100000, Math.floor(+e.target.value || 0)));
       pack = n;
       $("#rcprice", view).textContent = n ? `Price: $${aed(n)}` : "";
-      $("#rgo", view).textContent = n ? `Get ${n.toLocaleString()} test coins` : "Type an amount";
       clearTimeout(renderPP.t); renderPP.t = setTimeout(renderPP, 500);
     });
     /* PayPal checkout */
     const ppSdk = () => new Promise((ok, no) => {
       if (window.paypal) return ok();
       const sc = document.createElement("script");
-      sc.src = "https://www.paypal.com/sdk/js?client-id=BAAitkjYE4gk9dYb9DDKYOov1ljCiUKjwrlMTBwgK-Rdk_BlnFeii_FyDA8QBobh0-CzFtv36HBMnm5mIA&currency=USD&intent=capture&components=buttons";
+      sc.src = "https://www.paypal.com/sdk/js?client-id=BAALQ1Txntk_AgEtScdsITe4I1WiCFhJiJ6CtPfZrO0QRiov34kR1P_cHQ9bTIAxA5-A63jistBliCNyr4&currency=USD&intent=capture&components=buttons";
       sc.onload = ok; sc.onerror = () => no(new Error("sdk"));
       document.head.appendChild(sc);
     });
@@ -2312,22 +2309,6 @@ body.immersive #tabbar { display: none; }
     };
     ppSdk().then(renderPP).catch(() => { const b = $("#ppbox", view); if (b) b.innerHTML = `<div class="rc-price">PayPal could not load. Check your internet.</div>`; });
     LS.refreshBalance().then((c) => { const el = $("#rbal", view); if (el) el.textContent = c == null ? "…" : c.toLocaleString(); });
-    $("#rgo", view).addEventListener("click", async () => {
-      const btn = $("#rgo", view);
-      if (!pack) { msg("Type how many coins you want."); return; }
-      btn.disabled = true;
-      msg("Adding coins…", true);
-      try {
-        const { data, error } = await withTimeout(sb.rpc("add_test_coins", { p_coins: pack }), 15000);
-        if (error) { msg(/wallet_full/.test(error.message) ? "Your wallet is full." : "Could not add coins. Try again."); return; }
-        LS.coins = data;
-        $("#rbal", view).textContent = data.toLocaleString();
-        LS.sfx("burst", 0.6);
-        msg(`Added ${pack.toLocaleString()} coins.`, true);
-      } catch (e) {
-        msg("Could not add coins. Check your internet and try again.");
-      } finally { btn.disabled = false; }
-    });
   };
 
   /* ---------- edit profile (TikTok-style) ---------- */
