@@ -2249,6 +2249,7 @@ body.immersive #tabbar { display: none; }
       </header>
       <div class="rc-bal">Balance: <i class="coin"></i> <b id="rbal">${LS.coins == null ? "…" : LS.coins.toLocaleString()}</b></div>
       <div class="rc-notice">Pay securely with PayPal or a card. Coins are added to your balance right after payment.</div>
+      <div id="radmin"></div>
       <div class="rc-grid" id="rpacks">${PACKS.map((c) => `<button data-c="${c}" class="${c === pack ? "on" : ""}"><b><i class="coin"></i> ${c.toLocaleString()}</b><small>$${aed(c)}</small></button>`).join("")}<button data-c="custom" id="rcust"><b>Custom</b><small>Any amount</small></button></div>
       <div class="pad rc-custom hidden" id="rcwrap"><input id="rcin" type="number" inputmode="numeric" min="1" max="100000" placeholder="Type number of coins"><div class="rc-price" id="rcprice"></div></div>
       <div class="pad"><div class="formmsg" id="rmsg" role="status"></div>
@@ -2307,6 +2308,18 @@ body.immersive #tabbar { display: none; }
         onError: () => msg("PayPal had a problem. Try again."),
       }).render(box);
     };
+    sb.rpc("is_admin").then(({ data }) => {
+      const box = $("#radmin", view);
+      if (data !== true || !box) return;
+      box.innerHTML = `<div class="rc-notice" style="margin-top:0"><b>Admin</b><br>Add any amount of coins to your own wallet, free.<div style="display:flex;gap:8px;margin-top:10px"><input id="radm" type="number" inputmode="numeric" min="1" placeholder="Coins to add" style="flex:1;padding:12px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:inherit;font-size:16px"><button class="btn" id="radmgo" type="button">Add</button></div><div class="formmsg" id="radmmsg" role="status"></div></div>`;
+      $("#radmgo", view).addEventListener("click", async () => {
+        const n = Math.floor(+$("#radm", view).value || 0), m = $("#radmmsg", view);
+        if (n < 1) { m.textContent = "Type how many coins."; return; }
+        const { data: bal, error } = await sb.rpc("admin_add_coins", { p_coins: n });
+        if (error) { m.textContent = "Could not add coins."; return; }
+        LS.coins = bal; $("#rbal", view).textContent = bal.toLocaleString(); m.textContent = `Added ${n.toLocaleString()} coins.`; m.classList.add("ok");
+      });
+    }).catch(() => {});
     ppSdk().then(renderPP).catch(() => { const b = $("#ppbox", view); if (b) b.innerHTML = `<div class="rc-price">PayPal could not load. Check your internet.</div>`; });
     LS.refreshBalance().then((c) => { const el = $("#rbal", view); if (el) el.textContent = c == null ? "…" : c.toLocaleString(); });
   };
