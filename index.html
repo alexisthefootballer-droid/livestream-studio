@@ -137,6 +137,7 @@ body.immersive #tabbar { display: none; }
 .msg.me b { color: #b9f3c5; }
 .msg.gift { background: rgba(255, 61, 113, 0.45); }
 .room-bottom { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; gap: 8px; align-items: center; padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, #000a); }
+.send-btn { background: linear-gradient(135deg, var(--pink), #7c5cff) !important; color: #fff; font-size: 18px; }
 .room-bottom input { flex: 1; height: 42px; padding: 0 16px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.45); outline: none; }
 .hearts { position: absolute; right: 0; bottom: 70px; width: 100px; height: 60%; pointer-events: none; z-index: 5; }
 .heart { position: absolute; bottom: 0; font-size: 26px; animation: floatup 2.1s ease-out forwards; }
@@ -1785,7 +1786,8 @@ body.immersive #tabbar { display: none; }
         <div class="chat" id="chat"></div>
         <div class="hearts" id="hearts"></div>
         <div class="room-bottom">
-          <input id="msg" placeholder="Say something…" maxlength="120" autocomplete="off">
+          <input id="msg" placeholder="Say something…" maxlength="120" autocomplete="off" enterkeyhint="send">
+          <button class="icon-btn glass send-btn" id="sendMsg" aria-label="Send message" type="button">➤</button>
           <button class="icon-btn glass" id="soundBtn" aria-label="Sound">${LS.audio.on ? "🔊" : "🔇"}</button>
           <button class="icon-btn glass" id="giftBtn" aria-label="Gifts">🎁</button>
           <button class="icon-btn glass" id="heartBtn" aria-label="Like">❤️</button>
@@ -1896,18 +1898,19 @@ body.immersive #tabbar { display: none; }
       e.target.textContent = following ? "Following" : "Follow";
       e.target.classList.toggle("on", following);
     });
-    $("#msg", view).addEventListener("keydown", (e) => {
-      if (e.key !== "Enter") return;
-      const v = e.target.value.trim();
-      if (!v || e.target.dataset.busy) return;
-      e.target.dataset.busy = "1";
-      const inp = e.target;
+    const sendChat = () => {
+      const inp = $("#msg", view);
+      const v = inp.value.trim();
+      if (!v || inp.dataset.busy) return;
+      inp.dataset.busy = "1";
       LS.moderate(v, "room").then((r) => {
         delete inp.dataset.busy;
         if (r.allowed === false) { addChat("system", "Message not sent. " + (r.message || "It breaks the chat rules."), "sys"); return; }
         addChat("You", v, "me"); inp.value = "";
       });
-    });
+    };
+    $("#msg", view).addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
+    $("#sendMsg", view).addEventListener("click", sendChat);
     $("#fxbar", view).addEventListener("click", (e) => {
       const b = e.target.closest("[data-layout],[data-loop]");
       if (!b) return;
