@@ -1582,11 +1582,16 @@ body.immersive #tabbar { display: none; }
     function send() {
       const inp = $("#m", view);
       const v = inp.value.trim();
-      if (!v) return;
-      add(v, true);
-      inp.value = "";
-      clearTimeout(replyTimer);
-      replyTimer = setTimeout(() => add(pick(["Haha nice! 😄", "Love that 🔥", "Let's do it!", "Thanks for the support ❤️", "See you on stream!"]), false), 1100);
+      if (!v || inp.dataset.busy) return;
+      inp.dataset.busy = "1";
+      LS.moderate(v, "dm").then((r) => {
+        delete inp.dataset.busy;
+        if (r.allowed === false) { add("Message not sent. " + (r.message || "It breaks the chat rules."), false); return; }
+        add(v, true);
+        inp.value = "";
+        clearTimeout(replyTimer);
+        replyTimer = setTimeout(() => add(pick(["Haha nice! 😄", "Love that 🔥", "Let's do it!", "Thanks for the support ❤️", "See you on stream!"]), false), 1100);
+      });
     }
     $("#send", view).addEventListener("click", send);
     $("#m", view).addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
@@ -1894,7 +1899,14 @@ body.immersive #tabbar { display: none; }
     $("#msg", view).addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
       const v = e.target.value.trim();
-      if (v) { addChat("You", v, "me"); e.target.value = ""; }
+      if (!v || e.target.dataset.busy) return;
+      e.target.dataset.busy = "1";
+      const inp = e.target;
+      LS.moderate(v, "room").then((r) => {
+        delete inp.dataset.busy;
+        if (r.allowed === false) { addChat("system", "Message not sent. " + (r.message || "It breaks the chat rules."), "sys"); return; }
+        addChat("You", v, "me"); inp.value = "";
+      });
     });
     $("#fxbar", view).addEventListener("click", (e) => {
       const b = e.target.closest("[data-layout],[data-loop]");
@@ -2215,6 +2227,17 @@ body.immersive #tabbar { display: none; }
     img.src = url;
   });
 
+
+
+  /* ---------- AI chat moderation ---------- */
+  LS.moderate = async function (text, where) {
+    if (!sb) return { allowed: true };
+    try {
+      const { data, error } = await withTimeout(sb.functions.invoke("moderate-message", { body: { text, where } }), 9000);
+      if (error || !data) return { allowed: true };
+      return data;
+    } catch (e) { return { allowed: true }; }
+  };
 
   /* ---------- coins ---------- */
   LS.coins = null;
