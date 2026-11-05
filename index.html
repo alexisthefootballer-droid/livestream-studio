@@ -273,6 +273,38 @@ body.immersive #tabbar { display: none; }
 
 .hostfeed { display: flex; flex-direction: column; max-height: 190px; overflow-y: auto; margin: 12px 0; padding: 4px 8px 8px; border-radius: 12px; background: rgba(255,255,255,0.06); }
 .hostfeed.hidden { display: none; }
+.pf-top { display: flex; align-items: center; padding: 14px 16px 4px; }
+.pf-top .grow { flex: 1; }
+.pf-ic { background: none; border: 0; color: #fff; font-size: 24px; padding: 6px 8px; cursor: pointer; }
+.pf-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 4px 18px 0; }
+.pf-info { text-align: left; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pf-info h2 { font-size: 24px; line-height: 1.15; word-break: break-word; }
+.pf-info small { color: var(--muted); }
+.pf-stats { display: flex; gap: 22px; margin-top: 16px; }
+.pf-stats div { display: flex; flex-direction: column; }
+.pf-stats b { font-size: 20px; }
+.pf-stats small { font-size: 13px; }
+.pf-av { position: relative; flex: none; }
+.pf-plus { position: absolute; right: 2px; bottom: 2px; width: 30px; height: 30px; border-radius: 50%; background: #20b6d3; color: #fff; font-style: normal; font-size: 22px; font-weight: 700; display: grid; place-items: center; border: 2px solid var(--bg, #0b0b12); }
+.pf-bio { text-align: left; padding: 14px 18px 0; color: #e8e8f2; font-size: 15px; line-height: 1.4; white-space: pre-line; }
+.plink { display: inline-block; margin: 8px 18px 0; }
+.pf-btns { display: flex; gap: 8px; padding: 14px 18px; flex-wrap: wrap; }
+.pf-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.28); color: #fff; font-weight: 600; font-size: 15px; text-decoration: none; background: transparent; }
+.pf-tabs { display: flex; justify-content: space-around; border-bottom: 1px solid rgba(255,255,255,0.1); margin-top: 6px; }
+.pf-tabs button { flex: 1; background: none; border: 0; color: #8a8aa0; font-size: 22px; padding: 12px 0 10px; border-bottom: 2px solid transparent; cursor: pointer; }
+.pf-tabs button.on { color: #fff; border-bottom-color: #fff; }
+.pf-empty { padding: 48px 24px; text-align: center; color: var(--muted); }
+.drawer-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 40; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(86vw, 380px); background: #1f1f22; z-index: 41; padding: 28px 22px; overflow-y: auto; box-shadow: -8px 0 30px rgba(0,0,0,0.5); }
+.drawer.hidden, .drawer-bg.hidden { display: none; }
+.dr-sec { color: #9a9aa6; font-size: 15px; margin: 18px 0 6px; }
+.dr-sec:first-child { margin-top: 4px; }
+.dr-item { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 0; background: none; border: 0; color: #fff; font-size: 18px; text-decoration: none; text-align: left; cursor: pointer; }
+.dr-item b { flex: 1; font-weight: 600; }
+.dr-ic { width: 26px; text-align: center; font-size: 22px; }
+.dr-go { color: #9a9aa6; font-size: 24px; }
+.dr-line { height: 1px; background: rgba(255,255,255,0.12); margin: 10px 0; }
+.dr-toast { min-height: 22px; margin-top: 14px; color: #ffd6e8; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -2214,28 +2246,78 @@ body.immersive #tabbar { display: none; }
     }
     const pr = LS.myProfile || { username: (LS.user.email || "you").split("@")[0] };
     const shown = pr.display_name || pr.username;
+    const TABS = [["▦", "Your lives and videos will show here."], ["🔒", "Private posts will show here."], ["🔁", "Reposts will show here."], ["🔖", "Saved items will show here."], ["♡", "Liked items will show here."]];
+    view.innerHTML = `
+      <div class="pf-top">
+        <button class="pf-ic" id="edit" aria-label="Edit profile">✏️</button>
+        <span class="grow"></span>
+        <button class="pf-ic" id="menuBtn" aria-label="Menu">☰</button>
+      </div>
+      <section class="pf-head">
+        <div class="pf-info">
+          <h2 id="pname">${esc(shown)}</h2>
+          <small id="phandle">@${esc(pr.username)}</small>
+          <div class="pf-stats">
+            <div><b>0</b><small>Following</small></div>
+            <div><b>0</b><small>Followers</small></div>
+            <div><b>0</b><small>Likes</small></div>
+          </div>
+        </div>
+        <a class="pf-av" href="#/edit-profile" aria-label="Change photo"><span class="ring lg" style="--h:260" id="pav">${photo(pr, 92)}</span><i class="pf-plus">+</i></a>
+      </section>
+      <p class="pf-bio" id="pbio">${esc(pr.bio || "Tap the pencil to add a bio.")}</p>
+      ${linkHtml(pr.links)}
+      <div class="pf-btns">
+        <a class="pf-btn" href="#/recharge"><i class="coin"></i> Balance <b id="pcoins">${LS.coins == null ? "…" : LS.coins.toLocaleString()}</b></a>
+        <a class="pf-btn" href="#/earnings">💸 Earnings</a>
+        <a class="pf-btn" href="#/golive">🔴 Go Live</a>
+      </div>
+      <div class="pf-tabs" id="pftabs">${TABS.map((t, i) => `<button data-i="${i}" class="${i === 0 ? "on" : ""}" aria-label="tab ${i + 1}">${t[0]}</button>`).join("")}</div>
+      <div class="pf-empty" id="pfempty">${TABS[0][1]}</div>
+      <div class="drawer-bg hidden" id="dbg"></div>
+      <aside class="drawer hidden" id="drawer" aria-label="Menu">
+        <div class="dr-sec">Assets</div>
+        <a class="dr-item" href="#/recharge"><span class="dr-ic">👛</span><b>Balance</b><span class="dr-go">›</span></a>
+        <div class="dr-sec">Personal tools</div>
+        <a class="dr-item" href="#/inbox"><span class="dr-ic">🕒</span><b>Activity center</b><span class="dr-go">›</span></a>
+        <button class="dr-item" data-soon="Offline videos"><span class="dr-ic">⬇️</span><b>Offline videos</b><span class="dr-go">›</span></button>
+        <button class="dr-item" data-soon="Your QR code"><span class="dr-ic">▣</span><b>Your QR code</b><span class="dr-go">›</span></button>
+        <div class="dr-sec">Creation &amp; business tools</div>
+        <a class="dr-item" href="#/earnings"><span class="dr-ic">⭐</span><b>Live Studio</b><span class="dr-go">›</span></a>
+        <a class="dr-item" href="#/golive"><span class="dr-ic">🔴</span><b>Go Live</b><span class="dr-go">›</span></a>
+        <button class="dr-item" data-soon="Promote"><span class="dr-ic">🔥</span><b>Promote</b><span class="dr-go">›</span></button>
+        <div class="dr-line"></div>
+        <a class="dr-item" href="#/settings"><span class="dr-ic">⚙️</span><b>Settings and privacy</b><span class="dr-go">›</span></a>
+        <div class="dr-toast" id="drToast"></div>
+      </aside>`;
+    $("#edit", view).addEventListener("click", () => { location.hash = "#/edit-profile"; });
+    const openMenu = (on) => { $("#drawer", view).classList.toggle("hidden", !on); $("#dbg", view).classList.toggle("hidden", !on); };
+    $("#menuBtn", view).addEventListener("click", () => openMenu(true));
+    $("#dbg", view).addEventListener("click", () => openMenu(false));
+    $("#drawer", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-soon]");
+      if (b) { const t = $("#drToast", view); t.textContent = b.dataset.soon + " is coming soon."; setTimeout(() => { t.textContent = ""; }, 2500); }
+    });
+    $("#pftabs", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-i]");
+      if (!b) return;
+      $$("#pftabs button", view).forEach((x) => x.classList.toggle("on", x === b));
+      $("#pfempty", view).textContent = TABS[+b.dataset.i][1];
+    });
+    LS.refreshBalance().then((c) => { const el = $("#pcoins", view); if (el) el.textContent = c == null ? "…" : c.toLocaleString(); });
+  };
+
+  S.settings = function (view) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
     const defFx = LS.store.get("effect", "fireworks");
     const fxOn = localStorage.getItem("ls.fx") !== "0";
     view.innerHTML = `
-      <header class="topbar"><div class="logo">Profile</div></header>
-      <section class="profile-head">
-        <span class="ring lg" style="--h:260" id="pav">${photo(pr, 92)}</span>
-        <h2 id="pname">${esc(shown)}</h2>
-        <small id="phandle">@${esc(pr.username)}</small>
-        <p id="pbio">${esc(pr.bio || "No bio yet. Tap Edit profile to add one.")}</p>
-        ${linkHtml(pr.links)}
-        <div class="stats">
-          <div><b>0</b><small>Following</small></div>
-          <div><b>0</b><small>Followers</small></div>
-          <div><b>0</b><small>Likes</small></div>
-        </div>
-        <button class="btn ghost" id="edit">Edit profile</button>
-      </section>
+      <header class="er-top"><button class="icon-btn" id="sback" aria-label="Back">←</button><div class="er-title">Settings and privacy</div><span style="width:40px"></span></header>
       <div class="pad"><small style="color:var(--muted)">Signed in as ${esc(LS.user.email || "")}</small></div>
-      <h3 class="sec">Settings</h3>
       <div class="list">
+        <a class="row-item" href="#/edit-profile"><div class="grow"><b>Edit profile</b><small>Name, photo, bio and link</small></div><span>›</span></a>
         <a class="row-item" href="#/earnings"><div class="grow"><b>Earnings &amp; withdraw</b><small>For streamers: cash out your gift earnings</small></div><span>›</span></a>
-        <a class="row-item" href="#/recharge"><div class="grow"><b>Wallet</b><small>Get coins to send gifts</small></div><span><i class="coin"></i> <b id="pcoins">${LS.coins == null ? "…" : LS.coins.toLocaleString()}</b> ›</span></a>
+        <a class="row-item" href="#/recharge"><div class="grow"><b>Wallet</b><small>Get coins to send gifts</small></div><span>›</span></a>
         <label class="row-item"><div class="grow"><b>Background effects</b><small>Turn off to save battery</small></div>
           <input type="checkbox" class="switch" id="fxsw" ${fxOn ? "checked" : ""}></label>
         <label class="row-item"><div class="grow"><b>Default effect</b><small>Used when you go live</small></div>
@@ -2243,11 +2325,9 @@ body.immersive #tabbar { display: none; }
       </div>
       <div class="pad"><button class="btn ghost big" id="logout">Log out</button></div>
       <div class="spacer"></div>`;
-    const msg = (t, ok) => { const m = $("#pm", view); m.textContent = t || ""; m.classList.toggle("ok", !!ok); };
-    $("#edit", view).addEventListener("click", () => { location.hash = "#/edit-profile"; });
+    $("#sback", view).addEventListener("click", () => { location.hash = "#/profile"; });
     $("#fxsw", view).addEventListener("change", (e) => localStorage.setItem("ls.fx", e.target.checked ? "1" : "0"));
     $("#fxsel", view).addEventListener("change", (e) => LS.store.set("effect", e.target.value));
-    LS.refreshBalance().then((c) => { const el = $("#pcoins", view); if (el) el.textContent = c == null ? "…" : c.toLocaleString(); });
     $("#logout", view).addEventListener("click", async () => { await sb.auth.signOut(); location.hash = "#/auth"; });
   };
 
@@ -2953,6 +3033,7 @@ body.immersive #tabbar { display: none; }
     [/^\/inbox$/, S.inbox, "inbox"],
     [/^\/inbox\/([\w-]+)$/, S.thread, "thread"],
     [/^\/profile$/, S.profile, "profile"],
+    [/^\/settings$/, S.settings, "thread"],
     [/^\/auth$/, S.auth, "profile"],
     [/^\/edit-profile$/, S.editProfile, "thread"],
     [/^\/recharge$/, S.recharge, "thread"],
