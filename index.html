@@ -1934,7 +1934,7 @@ body.immersive #tabbar { display: none; }
 
   /* ---------------- Go Live ---------------- */
   S.goLive = function (view) {
-    let stream = null, live = false, secs = 0, timer = null, vtimer = null, viewers = 0, bc = null;
+    let stream = null, live = false, secs = 0, timer = null, vtimer = null, viewers = 0, bc = null, micOn = true;
     const layout = LS.store.get("layout", "split");
     const loop = LS.store.get("loop", "aurora");
     view.innerHTML = `
@@ -1948,6 +1948,7 @@ body.immersive #tabbar { display: none; }
         <div class="row">
           <button class="btn ghost" id="cam">Turn on camera</button>
           <button class="btn ghost" id="flip" title="Switch front/back camera">🔄</button>
+          <button class="btn ghost" id="mic" title="Microphone on/off">🎤 Mic on</button>
         </div>
         <label class="field">Stream title
           <input id="title" maxlength="60" placeholder="What are you streaming?" value="${esc(LS.store.get("title", ""))}">
@@ -1976,6 +1977,7 @@ body.immersive #tabbar { display: none; }
       try {
         if (stream) stream.getTracks().forEach((t) => t.stop());
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: true });
+        stream.getAudioTracks().forEach((t) => { t.enabled = micOn; });
         stage.setStream(stream);
         if (bc) bc.replaceStream(stream);
         $("#cam", view).textContent = "Turn off camera";
@@ -1991,6 +1993,11 @@ body.immersive #tabbar { display: none; }
       $("#cam", view).textContent = "Turn on camera";
     }
     $("#cam", view).addEventListener("click", () => { if (stream && bc) { $("#gonote", view).textContent = "End the live first to turn the camera off."; return; } stream ? camOff() : camOn(); });
+    $("#mic", view).addEventListener("click", () => {
+      micOn = !micOn;
+      if (stream) stream.getAudioTracks().forEach((t) => { t.enabled = micOn; });
+      $("#mic", view).textContent = micOn ? "🎤 Mic on" : "🔇 Mic off";
+    });
     $("#flip", view).addEventListener("click", () => { facing = facing === "user" ? "environment" : "user"; if (stream) camOn(); });
 
     $("#layouts", view).addEventListener("click", (e) => {
