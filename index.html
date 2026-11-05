@@ -1759,7 +1759,7 @@ body.immersive #tabbar { display: none; }
     }
     setLayout(o.layout);
     setLoop(o.loopId);
-    return { setLayout, setLoop, setFile, setStream, destroy, state: o, emptyEl: empty };
+    return { setLayout, setLoop, setFile, setStream, destroy, state: o, emptyEl: empty, loopVid };
   };
 
   const layoutChips = (sel) =>
@@ -1965,7 +1965,7 @@ body.immersive #tabbar { display: none; }
         <p class="note" id="fname"></p>
         <button class="btn big" id="go">Go LIVE</button>
         <div class="hostfeed hidden" id="hostfeed"></div>
-        <p class="note" id="gonote">Turn on your camera, then press Go LIVE. Viewers will see your camera and the video style you pick. A video you upload yourself is only visible on your phone for now.</p>
+        <p class="note" id="gonote">Turn on your camera, then press Go LIVE. Viewers will see your camera and the video style you pick. A video you upload yourself is only visible on your phone for now, but viewers can hear its sound.</p>
       </div>
       <div class="spacer"></div>`;
 
@@ -2063,6 +2063,7 @@ body.immersive #tabbar { display: none; }
           cat: $("#cat", view).value,
           fx: { layout: stage.state.layout, loop: stage.state.loopId },
           feedEl: $("#hostfeed", view),
+          loopVid: stage.loopVid,
           onViewers: (n) => { $("#pv", view).textContent = "👁 " + n; },
         });
         setLiveUi(true);
@@ -2689,13 +2690,33 @@ body.immersive #tabbar { display: none; }
     }).select().single();
     if (error || !row) throw new Error("Could not start the live (" + ((error && error.message) || "no row") + ").");
     const room = new LK.Room({ adaptiveStream: true, dynacast: true });
+    let actx = null, mixDest = null, micNode = null, loopNode = null, loopVol = null;
     const fail = async (e) => { try { await sb.from("streams").update({ is_live: false }).eq("id", row.id); } catch (x) { /* ignore */ } try { room.disconnect(); } catch (x) { /* ignore */ } throw e; };
     try {
       const token = await getToken(roomName, true);
       await wt(room.connect(LS.LK_URL, token), 20000);
+      // mix the microphone with the sound of the background video, so viewers hear both
+      let audioOut = null;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (o.loopVid && AC) {
+        try {
+          actx = new AC();
+          if (actx.resume) await actx.resume();
+          mixDest = actx.createMediaStreamDestination();
+          const mics = o.stream.getAudioTracks();
+          if (mics.length) { micNode = actx.createMediaStreamSource(new MediaStream(mics)); micNode.connect(mixDest); }
+          loopNode = actx.createMediaElementSource(o.loopVid);
+          loopVol = actx.createGain(); loopVol.gain.value = 0.8;
+          loopNode.connect(loopVol); loopVol.connect(mixDest);
+          o.loopVid.muted = false;
+          audioOut = mixDest.stream.getAudioTracks()[0] || null;
+        } catch (e) { audioOut = null; }
+      }
       for (const t of o.stream.getTracks()) {
+        if (t.kind === "audio" && audioOut) continue;
         await room.localParticipant.publishTrack(t, { source: t.kind === "video" ? LK.Track.Source.Camera : LK.Track.Source.Microphone });
       }
+      if (audioOut) await room.localParticipant.publishTrack(audioOut, { source: LK.Track.Source.Microphone });
     } catch (e) { await fail(new Error(/timeout/.test(e.message) ? "Connection timed out. Check your internet." : e.message || "Could not connect.")); }
 
     let fx = Object.assign({}, o.fx);
@@ -2736,7 +2757,13 @@ body.immersive #tabbar { display: none; }
       },
       async replaceStream(ns) {
         try {
+          if (mixDest) {
+            try { if (micNode) micNode.disconnect(); } catch (e) { /* ignore */ }
+            const mics = ns.getAudioTracks();
+            if (mics.length) { micNode = actx.createMediaStreamSource(new MediaStream(mics)); micNode.connect(mixDest); }
+          }
           for (const pub of room.localParticipant.trackPublications.values()) {
+            if (mixDest && pub.kind === "audio") continue;
             const nt = ns.getTracks().find((t) => t.kind === pub.kind);
             if (nt && pub.track) await pub.track.replaceTrack(nt);
           }
@@ -2747,6 +2774,7 @@ body.immersive #tabbar { display: none; }
         clearInterval(beat);
         if (stopFeed) stopFeed();
         try { room.disconnect(); } catch (e) { /* ignore */ }
+        try { if (loopNode) loopNode.disconnect(); if (o.loopVid) o.loopVid.muted = true; if (actx) actx.close(); } catch (e) { /* ignore */ }
         try { await sb.from("streams").update({ is_live: false }).eq("id", row.id); } catch (e) { /* ignore */ }
       },
     };
