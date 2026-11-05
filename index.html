@@ -305,6 +305,24 @@ body.immersive #tabbar { display: none; }
 .dr-go { color: #9a9aa6; font-size: 24px; }
 .dr-line { height: 1px; background: rgba(255,255,255,0.12); margin: 10px 0; }
 .dr-toast { min-height: 22px; margin-top: 14px; color: #ffd6e8; font-size: 14px; }
+.guests { position: absolute; left: 10px; top: 112px; display: flex; flex-direction: column; gap: 8px; z-index: 6; }
+.gtile { position: relative; width: 78px; height: 104px; border-radius: 12px; overflow: hidden; background: #000; border: 2px solid rgba(255,255,255,0.65); box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+.gtile video { width: 100%; height: 100%; object-fit: cover; }
+.gtile span { position: absolute; left: 4px; right: 4px; bottom: 3px; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.join-btn { position: absolute; right: 12px; top: 106px; z-index: 7; padding: 9px 14px; border: 0; border-radius: 22px; color: #fff; font-weight: 700; font-size: 14px; background: linear-gradient(90deg, #ff3d71, #7c5cff); box-shadow: 0 3px 12px rgba(0,0,0,0.45); cursor: pointer; }
+.join-btn.hidden { display: none; }
+.hostguests { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.seatbox { margin: 12px 0; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.06); }
+.seatbox.hidden { display: none; }
+.sp-row { display: flex; align-items: center; gap: 10px; }
+.sp-row b { flex: 1; }
+.sp-row select { padding: 8px; border-radius: 8px; background: #1a1a26; color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+.sp-h { margin: 12px 0 4px; font-weight: 700; font-size: 14px; }
+.sp-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+.sp-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.sp-item .btn { padding: 6px 12px; font-size: 13px; }
+.sp-none, .sp-msg { color: var(--muted); font-size: 13px; padding: 4px 0; }
+.sp-msg { color: #ffd6e8; }
 </style>
 </head>
 <body>
@@ -1998,6 +2016,8 @@ body.immersive #tabbar { display: none; }
         <p class="note" id="fname"></p>
         <button class="btn big" id="go">Go LIVE</button>
         <div class="hostfeed hidden" id="hostfeed"></div>
+        <div class="seatbox hidden" id="seatbox"></div>
+        <div class="hostguests" id="hostguests"></div>
         <p class="note" id="gonote">Turn on your camera, then press Go LIVE. Viewers will see your camera and the video style you pick. A video you upload yourself is only visible on your phone for now, but viewers can hear its sound.</p>
       </div>
       <div class="spacer"></div>`;
@@ -2102,6 +2122,8 @@ body.immersive #tabbar { display: none; }
           cat: $("#cat", view).value,
           fx: { layout: stage.state.layout, loop: stage.state.loopId },
           feedEl: $("#hostfeed", view),
+          seatsEl: $("#seatbox", view),
+          guestsEl: $("#hostguests", view),
           loopVid: stage.loopVid,
           onViewers: (n) => { $("#pv", view).textContent = "👁 " + n; },
         });
@@ -2763,6 +2785,100 @@ body.immersive #tabbar { display: none; }
   }
   LS.chatFeed = chatFeed;
 
+
+  /* ---------- guest tiles (small camera boxes) ---------- */
+  function guestTiles(box) {
+    const m = new Map();
+    return {
+      add(id, track, local) {
+        this.remove(id);
+        const d = document.createElement("div"); d.className = "gtile";
+        const v = document.createElement("video");
+        v.autoplay = true; v.muted = true; v.setAttribute("playsinline", "");
+        v.srcObject = new MediaStream([track.mediaStreamTrack || track]);
+        const l = document.createElement("span"); l.textContent = local ? "You" : (names[id] || "Guest");
+        d.appendChild(v); d.appendChild(l); box.appendChild(d); m.set(id, d);
+        if (!local) ensureNames([id]).then(() => { l.textContent = names[id] || "Guest"; });
+        const pr = v.play(); if (pr && pr.catch) pr.catch(() => {});
+      },
+      remove(id) { const d = m.get(id); if (d) { d.remove(); m.delete(id); } },
+      clear() { m.forEach((d) => d.remove()); m.clear(); },
+    };
+  }
+
+  /* ---------- host: seats panel (open seats, requests, guests) ---------- */
+  function seatsPanel(box, streamId, roomName) {
+    box.classList.remove("hidden");
+    box.innerHTML = `<div class="sp-row"><b>🎤 Seats</b><select id="spn">${[1, 2, 3, 4, 5, 6, 7, 8].map((n) => `<option value="${n}">${n}</option>`).join("")}</select><button class="btn" id="spgo">Open seats</button></div><div class="sp-msg" id="spmsg"></div><div id="spreq"></div><div id="spon"></div>`;
+    let open = 0, rows = [], stopped = false, ch = null, poll = null;
+    const say = (t) => { const e = $("#spmsg", box); if (e) e.textContent = t || ""; };
+    const kick = (uid) => sb.functions.invoke("livekit-token", { body: { roomName, action: "kick", identity: uid } }).catch(() => {});
+    function render() {
+      if (stopped) return;
+      const go = $("#spgo", box), sel = $("#spn", box);
+      if (!go) return;
+      go.textContent = open > 0 ? "Close seats" : "Open seats";
+      sel.disabled = open > 0;
+      if (open > 0) sel.value = String(open);
+      const pend = rows.filter((r) => r.status === "pending"), acc = rows.filter((r) => r.status === "accepted");
+      $("#spreq", box).innerHTML = open > 0
+        ? `<div class="sp-h">Requests (${pend.length})</div>` + (pend.length ? pend.map((r) => `<div class="sp-item"><span>${esc(names[r.user_id] || "user")}</span><button class="btn" data-act="acc" data-id="${r.id}">Accept</button><button class="btn ghost" data-act="dec" data-id="${r.id}">Decline</button></div>`).join("") : `<div class="sp-none">No requests yet.</div>`)
+        : "";
+      $("#spon", box).innerHTML = open > 0
+        ? `<div class="sp-h">On stage (${acc.length}/${open})</div>` + (acc.length ? acc.map((r) => `<div class="sp-item"><span>${esc(names[r.user_id] || "user")}</span><button class="btn ghost" data-act="rem" data-id="${r.id}" data-uid="${r.user_id}">Remove</button></div>`).join("") : `<div class="sp-none">Nobody yet.</div>`)
+        : "";
+    }
+    async function refresh() {
+      if (stopped) return;
+      try {
+        const { data: st } = await sb.from("streams").select("seat_count").eq("id", streamId).maybeSingle();
+        open = st ? st.seat_count || 0 : 0;
+        const { data } = await sb.from("seat_requests").select("id,user_id,status").eq("stream_id", streamId).in("status", ["pending", "accepted"]).order("id", { ascending: true });
+        rows = data || [];
+        await ensureNames(rows.map((r) => r.user_id));
+      } catch (e) { /* ignore */ }
+      render();
+    }
+    box.onclick = async (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      say("");
+      try {
+        if (b.id === "spgo") {
+          if (open > 0) {
+            const acc = rows.filter((r) => r.status === "accepted");
+            const { error } = await sb.rpc("host_set_seats", { p_stream: streamId, p_count: 0 });
+            if (error) throw error;
+            acc.forEach((r) => kick(r.user_id));
+          } else {
+            const { error } = await sb.rpc("host_set_seats", { p_stream: streamId, p_count: +$("#spn", box).value });
+            if (error) throw error;
+          }
+        } else if (b.dataset.act) {
+          const status = { acc: "accepted", dec: "declined", rem: "removed" }[b.dataset.act];
+          const { error } = await sb.rpc("host_seat_action", { p_id: +b.dataset.id, p_status: status });
+          if (error) throw error;
+          if (b.dataset.act === "rem") kick(b.dataset.uid);
+        }
+      } catch (err) {
+        say(/seats_full/.test((err && err.message) || "") ? "All seats are full. Remove someone first." : "Could not do that. Try again.");
+      }
+      refresh();
+    };
+    refresh();
+    try {
+      ch = sb.channel("seats-" + streamId + "-" + Math.random().toString(36).slice(2, 7))
+        .on("postgres_changes", { event: "*", schema: "public", table: "seat_requests", filter: "stream_id=eq." + streamId }, () => refresh())
+        .subscribe();
+    } catch (e) { /* polling still works */ }
+    poll = setInterval(refresh, 3500);
+    return () => {
+      stopped = true; clearInterval(poll); box.onclick = null;
+      try { if (ch) sb.removeChannel(ch); } catch (e) { /* ignore */ }
+      box.innerHTML = ""; box.classList.add("hidden");
+    };
+  }
+
   /* ---------- host: start a real broadcast ---------- */
   LS.startBroadcast = async function (o) {
     const LK = window.LivekitClient;
@@ -2812,8 +2928,19 @@ body.immersive #tabbar { display: none; }
     const sendFx = () => {
       try { room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ t: "fx", layout: fx.layout, loop: fx.loop })), { reliable: true }); } catch (e) { /* ignore */ }
     };
+    const gtiles = o.guestsEl ? guestTiles(o.guestsEl) : null;
+    const gaudio = document.createElement("div"); gaudio.style.display = "none"; document.body.appendChild(gaudio);
+    room.on(LK.RoomEvent.TrackSubscribed, (track, pub, p) => {
+      if (track.kind === "video") { if (gtiles) gtiles.add(p.identity, track); }
+      else if (track.kind === "audio") { const el = track.attach(); gaudio.appendChild(el); }
+    });
+    room.on(LK.RoomEvent.TrackUnsubscribed, (track, pub, p) => {
+      if (track.kind === "video") { if (gtiles) gtiles.remove(p.identity); }
+      else try { track.detach().forEach((e) => e.remove()); } catch (e) { /* ignore */ }
+    });
     room.on(LK.RoomEvent.ParticipantConnected, () => { upd(); setTimeout(sendFx, 800); });
-    room.on(LK.RoomEvent.ParticipantDisconnected, upd);
+    room.on(LK.RoomEvent.ParticipantDisconnected, (p) => { if (gtiles) gtiles.remove(p.identity); upd(); });
+    const stopSeats = o.seatsEl ? seatsPanel(o.seatsEl, row.id, roomName) : null;
     upd();
     const beat = setInterval(async () => {
       try { await sb.from("streams").update({ last_seen: new Date().toISOString(), viewer_count: count() }).eq("id", row.id); } catch (e) { /* ignore */ }
@@ -2860,6 +2987,10 @@ body.immersive #tabbar { display: none; }
         if (ended) return; ended = true;
         clearInterval(beat);
         if (stopFeed) stopFeed();
+        if (stopSeats) stopSeats();
+        if (gtiles) gtiles.clear();
+        gaudio.remove();
+        try { await sb.rpc("host_set_seats", { p_stream: row.id, p_count: 0 }); } catch (e) { /* ignore */ }
         try { room.disconnect(); } catch (e) { /* ignore */ }
         try { if (loopNode) loopNode.disconnect(); if (o.loopVid) o.loopVid.muted = true; if (actx) actx.close(); } catch (e) { /* ignore */ }
         try { await sb.from("streams").update({ is_live: false }).eq("id", row.id); } catch (e) { /* ignore */ }
@@ -2904,42 +3035,140 @@ body.immersive #tabbar { display: none; }
         creator, streamId: st.id, layout: fx0.layout || "split", loop: (fx0.loop && LS.LOOPS.some((l) => l.id === fx0.loop)) ? fx0.loop : LS.LOOPS[0].id,
         attach(ctx) {
           const { view: v, stage, addChat, heart, fxRoom } = ctx;
+          const myId = LS.user.id;
           const fxbar = $("#fxbar", v); if (fxbar) fxbar.style.display = "none";
           const vc = $("#viewers", v);
           const audioBox = document.createElement("div"); audioBox.style.display = "none"; v.appendChild(audioBox);
-          const roomEl = new (LK ? LK.Room : function () {})({ adaptiveStream: true, dynacast: true });
+          const roomEl = new LK.Room({ adaptiveStream: true, dynacast: true });
           const sys = (t) => addChat("system", t, "sys");
-          let audioBlocked = false;
+          let audioBlocked = false, busy = false;
+          const roomDiv = fxRoom();
+          const guestsBox = document.createElement("div"); guestsBox.className = "guests"; roomDiv.appendChild(guestsBox);
+          const tiles = guestTiles(guestsBox);
+          const joinBtn = document.createElement("button"); joinBtn.className = "join-btn hidden"; joinBtn.type = "button"; roomDiv.appendChild(joinBtn);
+          let mySeat = null, seatCount = st.seat_count || 0, onStage = false, localStream = null;
           const count = () => { const n = roomEl.remoteParticipants ? roomEl.remoteParticipants.size : 0; if (vc) vc.textContent = "👁 " + fmtN(n); };
-          const onTrack = (track) => {
-            if (track.kind === "video") stage.setStream(new MediaStream([track.mediaStreamTrack]));
-            else if (track.kind === "audio") {
+          const onTrack = (track, p) => {
+            const id = p && p.identity;
+            if (track.kind === "video") {
+              if (id === st.host_id) stage.setStream(new MediaStream([track.mediaStreamTrack]));
+              else if (id !== myId) tiles.add(id, track);
+            } else if (track.kind === "audio") {
               const el = track.attach(); el.setAttribute("playsinline", ""); audioBox.appendChild(el);
               const pr = el.play && el.play(); if (pr && pr.catch) pr.catch(() => { audioBlocked = true; sys("Tap anywhere on the screen to hear the sound."); });
             }
           };
-          roomEl.on(LK.RoomEvent.TrackSubscribed, (track) => onTrack(track));
-          roomEl.on(LK.RoomEvent.TrackUnsubscribed, (track) => { if (track.kind === "video") stage.setStream(null); else try { track.detach().forEach((e) => e.remove()); } catch (e) { /* ignore */ } });
+          roomEl.on(LK.RoomEvent.TrackSubscribed, (track, pub, p) => onTrack(track, p));
+          roomEl.on(LK.RoomEvent.TrackUnsubscribed, (track, pub, p) => {
+            if (track.kind === "video") { if (p && p.identity === st.host_id) stage.setStream(null); else if (p) tiles.remove(p.identity); }
+            else try { track.detach().forEach((e) => e.remove()); } catch (e) { /* ignore */ }
+          });
           roomEl.on(LK.RoomEvent.ParticipantConnected, count);
-          roomEl.on(LK.RoomEvent.ParticipantDisconnected, (p) => { count(); if (p.identity === st.host_id) sys(hostName + " left the live."); });
+          roomEl.on(LK.RoomEvent.ParticipantDisconnected, (p) => { tiles.remove(p.identity); count(); if (p.identity === st.host_id) sys(hostName + " left the live."); });
           roomEl.on(LK.RoomEvent.DataReceived, (payload, p) => {
             if (!p || p.identity !== st.host_id) return;
             try { const d = JSON.parse(new TextDecoder().decode(payload)); if (d.t === "fx") applyFx(stage, d); } catch (e) { /* ignore */ }
           });
-          roomEl.on(LK.RoomEvent.Disconnected, () => { if (!dead) sys("Disconnected from the live."); });
-          const unblock = () => { if (audioBlocked) { audioBlocked = false; try { roomEl.startAudio(); } catch (e) { /* ignore */ } $$("audio", audioBox).forEach((a) => a.play && a.play().catch(() => {})); } };
+          roomEl.on(LK.RoomEvent.Disconnected, () => {
+            if (dead || busy) return;
+            sys("Connection lost. Reconnecting…");
+            setTimeout(() => { if (!dead && !busy && String(roomEl.state) === "disconnected") connectRoom().catch(() => sys("Could not reconnect. Reopen the live.")); }, 1500);
+          });
+          const unblock = () => { if (audioBlocked) { audioBlocked = false; try { roomEl.startAudio(); } catch (e) { /* ignore */ } $$("audio", audioBox).forEach((a2) => a2.play && a2.play().catch(() => {})); } };
           v.addEventListener("click", unblock);
+
+          async function connectRoom() {
+            const token = await getToken(st.room_name, false);
+            await wt(roomEl.connect(LS.LK_URL, token), 20000);
+            roomEl.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub) => { if (pub.track) onTrack(pub.track, p); }));
+            count();
+          }
           (async () => {
             sys("Connecting to the live…");
             try {
-              const token = await getToken(st.room_name, false);
-              await wt(roomEl.connect(LS.LK_URL, token), 20000);
+              await connectRoom();
               if (dead) { roomEl.disconnect(); return; }
-              roomEl.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub) => { if (pub.track) onTrack(pub.track); }));
-              count();
               if (!roomEl.remoteParticipants.size) sys("Waiting for the host's video…");
             } catch (e) { sys("Could not connect to the live video. Check your internet and reopen the live."); }
           })();
+
+          /* ----- seats: request to join, appear on stage ----- */
+          function renderJoin() {
+            joinBtn.classList.toggle("hidden", !(seatCount > 0 || mySeat === "accepted") || st.host_id === myId);
+            if (mySeat === "accepted") { joinBtn.textContent = "Leave seat"; joinBtn.dataset.a = "leave"; }
+            else if (mySeat === "pending") { joinBtn.textContent = "Requested · tap to cancel"; joinBtn.dataset.a = "cancel"; }
+            else { joinBtn.textContent = "🎤 Request to join"; joinBtn.dataset.a = "request"; }
+          }
+          async function goOnStage() {
+            if (onStage || busy) return;
+            busy = true;
+            try {
+              sys("The host accepted you! Starting your camera…");
+              localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+              try { roomEl.disconnect(); } catch (e) { /* ignore */ }
+              await connectRoom();
+              for (const t of localStream.getTracks()) await roomEl.localParticipant.publishTrack(t, { source: t.kind === "video" ? LK.Track.Source.Camera : LK.Track.Source.Microphone });
+              tiles.add(myId, localStream.getVideoTracks()[0], true);
+              onStage = true;
+              sys("You are on stage. Everyone can see and hear you.");
+            } catch (e) {
+              sys("Could not start your camera and microphone. Allow them and request again.");
+              if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null; }
+              try { await sb.rpc("leave_seat", { p_stream: st.id }); } catch (x) { /* ignore */ }
+              mySeat = null;
+              try { if (String(roomEl.state) === "disconnected") await connectRoom(); } catch (x) { /* ignore */ }
+            }
+            busy = false; renderJoin();
+          }
+          async function leaveStage() {
+            if (!onStage) return;
+            busy = true; onStage = false;
+            tiles.remove(myId);
+            if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null; }
+            try { roomEl.disconnect(); } catch (e) { /* ignore */ }
+            try { await connectRoom(); } catch (e) { sys("Could not reconnect. Reopen the live."); }
+            busy = false; renderJoin();
+          }
+          async function checkSeat() {
+            try {
+              const [{ data: sr }, { data: me }] = await Promise.all([
+                sb.from("streams").select("is_live,last_seen,effect,seat_count").eq("id", st.id).maybeSingle(),
+                sb.from("seat_requests").select("status").eq("stream_id", st.id).eq("user_id", myId).maybeSingle(),
+              ]);
+              if (dead) return { sr };
+              if (sr) seatCount = sr.seat_count || 0;
+              const prev = mySeat;
+              const now = me ? me.status : null;
+              if (now === "accepted") { mySeat = "accepted"; if (!onStage && !busy) goOnStage(); }
+              else if (now === "pending") mySeat = "pending";
+              else {
+                mySeat = null;
+                if (prev === "pending" && now === "declined") sys("The host declined your request.");
+                if (prev === "accepted" && onStage) { sys("You left the seat."); leaveStage(); }
+                else if (prev === "pending" && now === "removed" && seatCount <= 0) sys("Seats were closed.");
+              }
+              renderJoin();
+              return { sr };
+            } catch (e) { return {}; }
+          }
+          joinBtn.addEventListener("click", async () => {
+            const a2 = joinBtn.dataset.a;
+            joinBtn.disabled = true;
+            try {
+              if (a2 === "request") {
+                const { error } = await sb.rpc("request_seat", { p_stream: st.id });
+                if (error) sys(/seats_closed/.test(error.message || "") ? "Seats are closed right now." : "Could not send your request. Try again.");
+                else { mySeat = "pending"; sys("Request sent. Waiting for the host…"); }
+              } else {
+                await sb.rpc("leave_seat", { p_stream: st.id });
+                mySeat = null;
+                if (onStage) await leaveStage();
+              }
+            } catch (e) { sys("Something went wrong. Try again."); }
+            joinBtn.disabled = false; renderJoin();
+          });
+          renderJoin();
+
           // chat and gifts from everyone
           stops.push(chatFeed(st.id, (m, live, who) => {
             if (m.kind === "gift") {
@@ -2950,24 +3179,28 @@ body.immersive #tabbar { display: none; }
               }
             } else addChat(who, m.body, who === "You" ? "me" : "");
           }));
-          // is the live still on? is the host's look changed?
+          // is the live still on? is the host's look changed? seats?
           const watch = setInterval(async () => {
+            const { sr } = await checkSeat();
             try {
-              const { data } = await sb.from("streams").select("is_live,last_seen,effect").eq("id", st.id).maybeSingle();
-              if (!data) return;
-              const stale = Date.now() - new Date(data.last_seen).getTime() > 90000;
-              if (!data.is_live || stale) {
+              if (!sr) return;
+              const stale = Date.now() - new Date(sr.last_seen).getTime() > 90000;
+              if (!sr.is_live || stale) {
                 clearInterval(watch);
                 sys("This live has ended.");
                 setTimeout(() => { if (!dead) location.hash = "#/live"; }, 3500);
                 return;
               }
-              try { applyFx(stage, JSON.parse(data.effect || "{}")); } catch (e) { /* ignore */ }
+              try { applyFx(stage, JSON.parse(sr.effect || "{}")); } catch (e) { /* ignore */ }
             } catch (e) { /* ignore */ }
-          }, 6000);
+          }, 3500);
+          checkSeat();
           stops.push(() => clearInterval(watch));
           return () => {
             stops.forEach((f) => { try { f(); } catch (e) { /* ignore */ } });
+            busy = true;
+            if (localStream) localStream.getTracks().forEach((t) => t.stop());
+            tiles.clear();
             try { roomEl.disconnect(); } catch (e) { /* ignore */ }
             v.removeEventListener("click", unblock);
           };
