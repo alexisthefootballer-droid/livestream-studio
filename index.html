@@ -271,6 +271,8 @@ body.immersive #tabbar { display: none; }
 
 .preview .sx.layout-pip .cam { top: 12px; bottom: auto; }
 
+.hostfeed { display: flex; flex-direction: column; max-height: 190px; overflow-y: auto; margin: 12px 0; padding: 4px 8px 8px; border-radius: 12px; background: rgba(255,255,255,0.06); }
+.hostfeed.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -285,6 +287,7 @@ body.immersive #tabbar { display: none; }
     </nav>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.5.7/dist/livekit-client.umd.js"></script>
   <script>
 /* Demo data + small helpers. Swap for Supabase tables later. */
 (function () {
@@ -1766,8 +1769,9 @@ body.immersive #tabbar { display: none; }
 
   /* ---------------- Live room ---------------- */
   S.room = function (view, id) {
-    const c = LS.byId(id) || LS.CREATORS[0];
-    const loopFor = LS.LOOPS[LS.CREATORS.indexOf(c) % LS.LOOPS.length].id;
+    const real = LS._real || null; LS._real = null;
+    const c = real ? real.creator : (LS.byId(id) || LS.CREATORS[0]);
+    const loopFor = real ? real.loop : LS.LOOPS[LS.CREATORS.indexOf(c) % LS.LOOPS.length].id;
     let viewers = c.viewers;
     let following = false;
     view.innerHTML = `
@@ -1802,7 +1806,7 @@ body.immersive #tabbar { display: none; }
         </div>
       </div>`;
 
-    const stage = LS.mountStage($("#stage", view), { layout: "split", loopId: loopFor, creator: c });
+    const stage = LS.mountStage($("#stage", view), { layout: real ? real.layout : "split", loopId: loopFor, creator: c });
     const chat = $("#chat", view);
 
     function addChat(name, text, cls) {
@@ -1816,7 +1820,7 @@ body.immersive #tabbar { display: none; }
     addChat("system", `Welcome to ${c.name}'s stream! Be kind in chat.`, "sys");
 
     let chatTimer;
-    (function tick() {
+    if (!real) (function tick() {
       addChat(pick(LS.CHAT_NAMES), pick(LS.CHAT_LINES));
       if (Math.random() < 0.07) {
         const who = pick(LS.CHAT_NAMES), g = pick(LS.GIFTS);
@@ -1825,10 +1829,12 @@ body.immersive #tabbar { display: none; }
       }
       chatTimer = setTimeout(tick, 900 + Math.random() * 1800);
     })();
-    const viewTimer = setInterval(() => {
+    const viewTimer = real ? 0 : setInterval(() => {
       viewers = Math.max(1, viewers + Math.round((Math.random() - 0.45) * 40));
       $("#viewers", view).textContent = "👁 " + fmt(viewers);
     }, 2500);
+    let realStop = null;
+    if (real) realStop = real.attach({ view, stage, addChat, heart, fxRoom: () => $(".room", view) });
 
     function heart(emoji) {
       const h = document.createElement("span");
@@ -1880,13 +1886,13 @@ body.immersive #tabbar { display: none; }
       const gm = $("#giftMsg", view);
       if (!LS.user || !LS.spendGift) { gm.textContent = "Log in to send gifts."; return; }
       gm.textContent = "";
-      LS.spendGift(g, c.userId || null).then((res) => {
+      LS.spendGift(g, c.userId || null, real ? real.streamId : null).then((res) => {
         if (!res.ok) {
-          gm.textContent = res.reason === "not_enough_coins" ? `Not enough coins for ${g.name}. Tap Recharge to get more.` : "Could not send the gift. Check your internet and try again.";
+          gm.textContent = res.reason === "ended" ? "This live has ended." : res.reason === "not_enough_coins" ? `Not enough coins for ${g.name}. Tap Recharge to get more.` : "Could not send the gift. Check your internet and try again.";
           return;
         }
         showBal();
-        addChat("You", `sent ${g.name} ${g.icon}`, "gift");
+        if (!real) addChat("You", `sent ${g.name} ${g.icon}`, "gift");
         const played = LS.giftFx($(".room", view), g, "You");
         const n = played ? 4 : 6;
         for (let i = 0; i < n; i++) setTimeout(() => heart(g.icon), i * 100);
@@ -1903,10 +1909,10 @@ body.immersive #tabbar { display: none; }
       const v = inp.value.trim();
       if (!v || inp.dataset.busy) return;
       inp.dataset.busy = "1";
-      LS.moderate(v, "room").then((r) => {
+      LS.moderate(v, "room", real ? real.streamId : null).then((r) => {
         delete inp.dataset.busy;
         if (r.allowed === false) { addChat("system", "Message not sent. " + (r.message || "It breaks the chat rules."), "sys"); return; }
-        addChat("You", v, "me"); inp.value = "";
+        if (!real) addChat("You", v, "me"); inp.value = "";
       });
     };
     $("#msg", view).addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
@@ -1923,19 +1929,19 @@ body.immersive #tabbar { display: none; }
       }
     });
 
-    return () => { clearTimeout(chatTimer); clearInterval(viewTimer); stage.destroy(); };
+    return () => { clearTimeout(chatTimer); clearInterval(viewTimer); if (realStop) realStop(); stage.destroy(); };
   };
 
   /* ---------------- Go Live ---------------- */
   S.goLive = function (view) {
-    let stream = null, live = false, secs = 0, timer = null, vtimer = null, viewers = 0;
+    let stream = null, live = false, secs = 0, timer = null, vtimer = null, viewers = 0, bc = null;
     const layout = LS.store.get("layout", "split");
     const loop = LS.store.get("loop", "aurora");
     view.innerHTML = `
       <header class="topbar"><a class="icon-btn" href="#/" aria-label="Back">←</a><div class="logo">Go Live</div><span></span></header>
       <div class="preview">
         <div class="stagebox" id="stage"></div>
-        <span class="badge live hidden" id="badge">● PREVIEW LIVE · <span id="clock">00:00</span></span>
+        <span class="badge live hidden" id="badge">● LIVE · <span id="clock">00:00</span></span>
         <span class="pill glass hidden" id="pv">👁 0</span>
       </div>
       <div class="pad">
@@ -1957,8 +1963,9 @@ body.immersive #tabbar { display: none; }
           <input type="file" id="file" accept="video/*" hidden>
         </label>
         <p class="note" id="fname"></p>
-        <button class="btn big" id="go">Start preview</button>
-        <p class="note">Preview only — nothing is broadcast yet. Real streaming needs a video service (for example LiveKit or Mux), which we add in a later step. Uploaded videos stay on this phone and are not saved after you close the page.</p>
+        <button class="btn big" id="go">Go LIVE</button>
+        <div class="hostfeed hidden" id="hostfeed"></div>
+        <p class="note" id="gonote">Turn on your camera, then press Go LIVE. Viewers will see your camera and the video style you pick. A video you upload yourself is only visible on your phone for now.</p>
       </div>
       <div class="spacer"></div>`;
 
@@ -1968,8 +1975,9 @@ body.immersive #tabbar { display: none; }
     async function camOn() {
       try {
         if (stream) stream.getTracks().forEach((t) => t.stop());
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: true });
         stage.setStream(stream);
+        if (bc) bc.replaceStream(stream);
         $("#cam", view).textContent = "Turn off camera";
       } catch (e) {
         stage.emptyEl.innerHTML = "📷<small>Camera unavailable.<br>Allow camera access and open the app over https.</small>";
@@ -1982,7 +1990,7 @@ body.immersive #tabbar { display: none; }
       stage.emptyEl.innerHTML = "📷<small>Camera is off</small>";
       $("#cam", view).textContent = "Turn on camera";
     }
-    $("#cam", view).addEventListener("click", () => (stream ? camOff() : camOn()));
+    $("#cam", view).addEventListener("click", () => { if (stream && bc) { $("#gonote", view).textContent = "End the live first to turn the camera off."; return; } stream ? camOff() : camOn(); });
     $("#flip", view).addEventListener("click", () => { facing = facing === "user" ? "environment" : "user"; if (stream) camOn(); });
 
     $("#layouts", view).addEventListener("click", (e) => {
@@ -1990,6 +1998,7 @@ body.immersive #tabbar { display: none; }
       if (!b) return;
       LS.store.set("layout", b.dataset.layout);
       stage.setLayout(b.dataset.layout);
+      if (bc) bc.setFx(b.dataset.layout, null);
       $$("#layouts .chip", view).forEach((x) => x.classList.toggle("on", x === b));
     });
     $("#loops", view).addEventListener("click", (e) => {
@@ -1997,6 +2006,7 @@ body.immersive #tabbar { display: none; }
       if (!b) return;
       LS.store.set("loop", b.dataset.loop);
       stage.setLoop(b.dataset.loop);
+      if (bc) bc.setFx(null, b.dataset.loop);
       $("#fname", view).textContent = "";
       $$("#loops .chip", view).forEach((x) => x.classList.toggle("on", x === b));
     });
@@ -2010,27 +2020,61 @@ body.immersive #tabbar { display: none; }
     $("#title", view).addEventListener("input", (e) => LS.store.set("title", e.target.value));
     $("#cat", view).addEventListener("change", (e) => LS.store.set("cat", e.target.value));
 
-    $("#go", view).addEventListener("click", (e) => {
-      live = !live;
-      $("#badge", view).classList.toggle("hidden", !live);
-      $("#pv", view).classList.toggle("hidden", !live);
-      e.target.textContent = live ? "End preview" : "Start preview";
-      e.target.classList.toggle("danger", live);
-      clearInterval(timer); clearInterval(vtimer);
-      if (live) {
-        secs = 0; viewers = 0;
+    const note = (t) => { $("#gonote", view).textContent = t; };
+    function setLiveUi(on) {
+      live = on;
+      $("#badge", view).classList.toggle("hidden", !on);
+      $("#pv", view).classList.toggle("hidden", !on);
+      $("#hostfeed", view).classList.toggle("hidden", !on);
+      const g = $("#go", view);
+      g.textContent = on ? "End live" : "Go LIVE";
+      g.classList.toggle("danger", on);
+      clearInterval(timer);
+      if (on) {
+        secs = 0;
+        $("#clock", view).textContent = "00:00";
         timer = setInterval(() => {
           secs++;
           $("#clock", view).textContent = String(Math.floor(secs / 60)).padStart(2, "0") + ":" + String(secs % 60).padStart(2, "0");
         }, 1000);
-        vtimer = setInterval(() => {
-          viewers += Math.round(Math.random() * 6);
-          $("#pv", view).textContent = "👁 " + viewers;
-        }, 1500);
       }
+    }
+    $("#go", view).addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      if (btn.dataset.busy) return;
+      if (bc) {
+        btn.dataset.busy = "1";
+        try { await bc.end(); } catch (err) { /* ignore */ }
+        bc = null; delete btn.dataset.busy;
+        setLiveUi(false);
+        note("Your live has ended. Thank you for streaming!");
+        return;
+      }
+      if (!LS.user) { location.hash = "#/auth"; return; }
+      if (!LS.startBroadcast || !window.LivekitClient) { note("The live video part did not load. Check your internet and reload the page."); return; }
+      btn.dataset.busy = "1";
+      note("Starting your live…");
+      if (!stream) await camOn();
+      if (!stream) { note("Turn on your camera first (allow camera and microphone)."); delete btn.dataset.busy; return; }
+      try {
+        bc = await LS.startBroadcast({
+          stream,
+          title: ($("#title", view).value || "").trim() || "Live now",
+          cat: $("#cat", view).value,
+          fx: { layout: stage.state.layout, loop: stage.state.loopId },
+          feedEl: $("#hostfeed", view),
+          onViewers: (n) => { $("#pv", view).textContent = "👁 " + n; },
+        });
+        setLiveUi(true);
+        note("You are LIVE. Viewers can watch, chat and send you gifts.");
+      } catch (err) {
+        bc = null;
+        note("Could not go live: " + ((err && err.message) || "unknown error"));
+      }
+      delete btn.dataset.busy;
     });
 
-    return () => { clearInterval(timer); clearInterval(vtimer); if (stream) stream.getTracks().forEach((t) => t.stop()); stage.destroy(); };
+    return () => { clearInterval(timer); clearInterval(vtimer); if (bc) { try { bc.end(); } catch (err) { /* ignore */ } } if (stream) stream.getTracks().forEach((t) => t.stop()); stage.destroy(); };
   };
 })();
 
@@ -2234,13 +2278,14 @@ body.immersive #tabbar { display: none; }
 
 
   /* ---------- AI chat moderation ---------- */
-  LS.moderate = async function (text, where) {
-    if (!sb) return { allowed: true };
+  LS.moderate = async function (text, where, streamId) {
+    const fail = streamId ? { allowed: false, message: "Could not send. Try again." } : { allowed: true };
+    if (!sb) return fail;
     try {
-      const { data, error } = await withTimeout(sb.functions.invoke("moderate-message", { body: { text, where } }), 9000);
-      if (error || !data) return { allowed: true };
+      const { data, error } = await withTimeout(sb.functions.invoke("moderate-message", { body: { text, where, streamId: streamId || undefined } }), 9000);
+      if (error || !data) return fail;
       return data;
-    } catch (e) { return { allowed: true }; }
+    } catch (e) { return fail; }
   };
 
   /* ---------- coins ---------- */
@@ -2253,11 +2298,14 @@ body.immersive #tabbar { display: none; }
     } catch (e) { LS.coins = null; }
     return LS.coins;
   };
-  LS.spendGift = async function (g, hostId) {
+  LS.spendGift = async function (g, hostId, streamId) {
     if (!sb || !LS.user) return { ok: false, reason: "not_signed_in" };
     try {
-      const { data, error } = await withTimeout(sb.rpc("send_gift", hostId ? { p_name: g.name, p_host: hostId } : { p_name: g.name }), 15000);
-      if (error) return { ok: false, reason: /not_enough_coins/.test(error.message || "") ? "not_enough_coins" : "error", message: error.message };
+      const args = { p_name: g.name };
+      if (hostId) args.p_host = hostId;
+      if (streamId) args.p_stream = streamId;
+      const { data, error } = await withTimeout(sb.rpc("send_gift", args), 15000);
+      if (error) return { ok: false, reason: /not_enough_coins/.test(error.message || "") ? "not_enough_coins" : /stream_not_live/.test(error.message || "") ? "ended" : "error", message: error.message };
       LS.coins = data;
       return { ok: true, coins: data };
     } catch (e) { return { ok: false, reason: "error", message: e.message }; }
@@ -2550,6 +2598,307 @@ body.immersive #tabbar { display: none; }
         <p id="pbio">${esc(data.bio || "")}</p>
         ${linkHtml(data.links)}`;
     });
+  };
+})();
+</script>
+  <script>
+/* Real live streaming: go live, watch, real-time chat and gifts (LiveKit + Supabase). */
+(function () {
+  const LS = window.LS;
+  const S = LS.screens;
+  const { $, $$, esc, avatar } = LS;
+  const sb = LS.sb;
+  LS.LK_URL = "wss://livestream-studio-ddp10a2c.livekit.cloud";
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const fmtN = (n) => (n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "K" : String(n));
+  const hueOf = (str) => { let h = 0; for (const ch of String(str)) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; };
+  const wt = (p, ms) => Promise.race([p, new Promise((_, rj) => setTimeout(() => rj(new Error("timeout")), ms))]);
+
+  /* ---------- names ---------- */
+  const names = {};
+  async function ensureNames(ids) {
+    const need = ids.filter((i) => i && !names[i]);
+    if (!need.length || !sb) return;
+    try {
+      const { data } = await sb.from("profiles").select("id,username,display_name").in("id", need);
+      (data || []).forEach((p) => { names[p.id] = p.display_name || p.username || "user"; });
+    } catch (e) { /* ignore */ }
+    need.forEach((i) => { if (!names[i]) names[i] = "user"; });
+  }
+
+  async function getToken(roomName, asHost) {
+    const { data, error } = await wt(sb.functions.invoke("livekit-token", { body: { roomName, asHost: !!asHost } }), 15000);
+    if (error || !data || !data.token) throw new Error("Could not get a live pass. Are you logged in?");
+    return data.token;
+  }
+
+  /* ---------- real-time chat + gifts feed (realtime + polling backup) ---------- */
+  function chatFeed(streamId, onMsg) {
+    const seen = new Set();
+    let lastId = 0, ready = false, stopped = false, ch = null, poll = null;
+    async function deliver(rows, live) {
+      const fresh = rows.filter((m) => !seen.has(m.id));
+      if (!fresh.length) return;
+      await ensureNames(fresh.map((m) => m.user_id));
+      fresh.forEach((m) => {
+        if (seen.has(m.id) || stopped) return;
+        seen.add(m.id);
+        if (m.id > lastId) lastId = m.id;
+        onMsg(m, live, m.user_id === (LS.user && LS.user.id) ? "You" : names[m.user_id] || "user");
+      });
+    }
+    async function load() {
+      try {
+        const { data } = await sb.from("messages").select("id,user_id,body,kind,gift,created_at").eq("stream_id", streamId).order("id", { ascending: false }).limit(25);
+        await deliver((data || []).reverse(), false);
+      } catch (e) { /* ignore */ }
+      ready = true;
+    }
+    async function pollNow() {
+      if (!ready || stopped) return;
+      try {
+        const { data } = await sb.from("messages").select("id,user_id,body,kind,gift,created_at").eq("stream_id", streamId).gt("id", lastId).order("id", { ascending: true }).limit(50);
+        await deliver(data || [], true);
+      } catch (e) { /* ignore */ }
+    }
+    load();
+    try {
+      ch = sb.channel("room-" + streamId + "-" + Math.random().toString(36).slice(2, 7))
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: "stream_id=eq." + streamId }, (p) => { if (ready && p && p.new) deliver([p.new], true); })
+        .subscribe();
+    } catch (e) { /* polling still works */ }
+    poll = setInterval(pollNow, 3500);
+    return () => {
+      stopped = true; clearInterval(poll);
+      try { if (ch) sb.removeChannel(ch); } catch (e) { /* ignore */ }
+    };
+  }
+  LS.chatFeed = chatFeed;
+
+  /* ---------- host: start a real broadcast ---------- */
+  LS.startBroadcast = async function (o) {
+    const LK = window.LivekitClient;
+    if (!LK) throw new Error("Live video library did not load.");
+    if (!sb || !LS.user) throw new Error("Please log in first.");
+    const me = LS.user;
+    await sb.from("streams").update({ is_live: false }).eq("host_id", me.id).eq("is_live", true);
+    const roomName = "ls-" + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2));
+    const { data: row, error } = await sb.from("streams").insert({
+      host_id: me.id, title: o.title, category: o.cat, room_name: roomName, is_live: true,
+      effect: JSON.stringify(o.fx || {}), viewer_count: 0, last_seen: new Date().toISOString(),
+    }).select().single();
+    if (error || !row) throw new Error("Could not start the live (" + ((error && error.message) || "no row") + ").");
+    const room = new LK.Room({ adaptiveStream: true, dynacast: true });
+    const fail = async (e) => { try { await sb.from("streams").update({ is_live: false }).eq("id", row.id); } catch (x) { /* ignore */ } try { room.disconnect(); } catch (x) { /* ignore */ } throw e; };
+    try {
+      const token = await getToken(roomName, true);
+      await wt(room.connect(LS.LK_URL, token), 20000);
+      for (const t of o.stream.getTracks()) {
+        await room.localParticipant.publishTrack(t, { source: t.kind === "video" ? LK.Track.Source.Camera : LK.Track.Source.Microphone });
+      }
+    } catch (e) { await fail(new Error(/timeout/.test(e.message) ? "Connection timed out. Check your internet." : e.message || "Could not connect.")); }
+
+    let fx = Object.assign({}, o.fx);
+    const count = () => room.remoteParticipants.size;
+    const upd = () => { try { o.onViewers && o.onViewers(count()); } catch (e) { /* ignore */ } };
+    const sendFx = () => {
+      try { room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ t: "fx", layout: fx.layout, loop: fx.loop })), { reliable: true }); } catch (e) { /* ignore */ }
+    };
+    room.on(LK.RoomEvent.ParticipantConnected, () => { upd(); setTimeout(sendFx, 800); });
+    room.on(LK.RoomEvent.ParticipantDisconnected, upd);
+    upd();
+    const beat = setInterval(async () => {
+      try { await sb.from("streams").update({ last_seen: new Date().toISOString(), viewer_count: count() }).eq("id", row.id); } catch (e) { /* ignore */ }
+    }, 15000);
+
+    // chat and gifts panel for the host
+    let stopFeed = null;
+    if (o.feedEl) {
+      const box = o.feedEl; box.innerHTML = "";
+      stopFeed = chatFeed(row.id, (m, live, who) => {
+        const el = document.createElement("div");
+        el.className = "msg " + (m.kind === "gift" ? "gift" : "");
+        el.innerHTML = m.kind === "gift" ? `<b>${esc(who)}</b> sent you ${esc(m.gift || m.body)} 🎁` : `<b>${esc(who)}</b> ${esc(m.body)}`;
+        box.appendChild(el);
+        while (box.children.length > 40) box.removeChild(box.firstChild);
+        box.scrollTop = box.scrollHeight;
+      });
+    }
+
+    let ended = false;
+    return {
+      streamId: row.id,
+      setFx(layout, loop) {
+        if (layout) fx.layout = layout;
+        if (loop && loop !== "custom") fx.loop = loop;
+        sendFx();
+        sb.from("streams").update({ effect: JSON.stringify(fx) }).eq("id", row.id).then(() => {}, () => {});
+      },
+      async replaceStream(ns) {
+        try {
+          for (const pub of room.localParticipant.trackPublications.values()) {
+            const nt = ns.getTracks().find((t) => t.kind === pub.kind);
+            if (nt && pub.track) await pub.track.replaceTrack(nt);
+          }
+        } catch (e) { /* ignore */ }
+      },
+      async end() {
+        if (ended) return; ended = true;
+        clearInterval(beat);
+        if (stopFeed) stopFeed();
+        try { room.disconnect(); } catch (e) { /* ignore */ }
+        try { await sb.from("streams").update({ is_live: false }).eq("id", row.id); } catch (e) { /* ignore */ }
+      },
+    };
+  };
+
+  /* ---------- viewer: watch a real live ---------- */
+  function applyFx(stage, fx) {
+    if (!fx) return;
+    try {
+      if (fx.layout && fx.layout !== stage.state.layout) stage.setLayout(fx.layout);
+      if (fx.loop && fx.loop !== "custom" && fx.loop !== stage.state.loopId) stage.setLoop(fx.loop);
+    } catch (e) { /* ignore */ }
+  }
+  const realRoom = (orig) => function (view, id) {
+    if (!UUID.test(id)) return orig(view, id);
+    if (!sb) { view.innerHTML = `<div class="pad"><p>Live is not available right now.</p><a class="btn" href="#/live">Back</a></div>`; return; }
+    if (!LS.user) { view.innerHTML = `<div class="pad" style="padding-top:80px;text-align:center"><p>Log in to watch lives, chat and send gifts.</p><a class="btn big" href="#/auth">Log in</a><p><a href="#/live">← Back</a></p></div>`; return; }
+    let dead = false, stops = [];
+    view.innerHTML = `<div class="pad" style="padding-top:80px;text-align:center"><p>Joining the live…</p></div>`;
+    let inner = null;
+    (async () => {
+      let st = null;
+      try {
+        const { data } = await wt(sb.from("streams").select("*").eq("id", id).maybeSingle(), 10000);
+        st = data;
+      } catch (e) { /* ignore */ }
+      if (dead) return;
+      if (!st || !st.is_live) {
+        view.innerHTML = `<div class="pad" style="padding-top:80px;text-align:center"><p>This live has ended.</p><a class="btn big" href="#/live">See other lives</a></div>`;
+        return;
+      }
+      await ensureNames([st.host_id]);
+      if (dead) return;
+      let fx0 = {};
+      try { fx0 = JSON.parse(st.effect || "{}"); } catch (e) { /* ignore */ }
+      const hostName = names[st.host_id] || "Host";
+      const creator = { id: st.id, userId: st.host_id, name: hostName, title: st.title || "Live now", cat: st.category || "", hue: hueOf(st.host_id), viewers: st.viewer_count || 0 };
+      const LK = window.LivekitClient;
+      const real = {
+        creator, streamId: st.id, layout: fx0.layout || "split", loop: (fx0.loop && LS.LOOPS.some((l) => l.id === fx0.loop)) ? fx0.loop : LS.LOOPS[0].id,
+        attach(ctx) {
+          const { view: v, stage, addChat, heart, fxRoom } = ctx;
+          const fxbar = $("#fxbar", v); if (fxbar) fxbar.style.display = "none";
+          const vc = $("#viewers", v);
+          const audioBox = document.createElement("div"); audioBox.style.display = "none"; v.appendChild(audioBox);
+          const roomEl = new (LK ? LK.Room : function () {})({ adaptiveStream: true, dynacast: true });
+          const sys = (t) => addChat("system", t, "sys");
+          let audioBlocked = false;
+          const count = () => { const n = roomEl.remoteParticipants ? roomEl.remoteParticipants.size : 0; if (vc) vc.textContent = "👁 " + fmtN(n); };
+          const onTrack = (track) => {
+            if (track.kind === "video") stage.setStream(new MediaStream([track.mediaStreamTrack]));
+            else if (track.kind === "audio") {
+              const el = track.attach(); el.setAttribute("playsinline", ""); audioBox.appendChild(el);
+              const pr = el.play && el.play(); if (pr && pr.catch) pr.catch(() => { audioBlocked = true; sys("Tap anywhere on the screen to hear the sound."); });
+            }
+          };
+          roomEl.on(LK.RoomEvent.TrackSubscribed, (track) => onTrack(track));
+          roomEl.on(LK.RoomEvent.TrackUnsubscribed, (track) => { if (track.kind === "video") stage.setStream(null); else try { track.detach().forEach((e) => e.remove()); } catch (e) { /* ignore */ } });
+          roomEl.on(LK.RoomEvent.ParticipantConnected, count);
+          roomEl.on(LK.RoomEvent.ParticipantDisconnected, (p) => { count(); if (p.identity === st.host_id) sys(hostName + " left the live."); });
+          roomEl.on(LK.RoomEvent.DataReceived, (payload, p) => {
+            if (!p || p.identity !== st.host_id) return;
+            try { const d = JSON.parse(new TextDecoder().decode(payload)); if (d.t === "fx") applyFx(stage, d); } catch (e) { /* ignore */ }
+          });
+          roomEl.on(LK.RoomEvent.Disconnected, () => { if (!dead) sys("Disconnected from the live."); });
+          const unblock = () => { if (audioBlocked) { audioBlocked = false; try { roomEl.startAudio(); } catch (e) { /* ignore */ } $$("audio", audioBox).forEach((a) => a.play && a.play().catch(() => {})); } };
+          v.addEventListener("click", unblock);
+          (async () => {
+            sys("Connecting to the live…");
+            try {
+              const token = await getToken(st.room_name, false);
+              await wt(roomEl.connect(LS.LK_URL, token), 20000);
+              if (dead) { roomEl.disconnect(); return; }
+              roomEl.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub) => { if (pub.track) onTrack(pub.track); }));
+              count();
+              if (!roomEl.remoteParticipants.size) sys("Waiting for the host's video…");
+            } catch (e) { sys("Could not connect to the live video. Check your internet and reopen the live."); }
+          })();
+          // chat and gifts from everyone
+          stops.push(chatFeed(st.id, (m, live, who) => {
+            if (m.kind === "gift") {
+              addChat(who, `sent ${m.gift || m.body} 🎁`, "gift");
+              if (live && who !== "You") {
+                const g = LS.GIFTS.find((x) => x.name === (m.gift || m.body));
+                if (g) { if (!LS.giftFx(fxRoom(), g, who)) for (let i = 0; i < 4; i++) setTimeout(() => heart(g.icon), i * 100); }
+              }
+            } else addChat(who, m.body, who === "You" ? "me" : "");
+          }));
+          // is the live still on? is the host's look changed?
+          const watch = setInterval(async () => {
+            try {
+              const { data } = await sb.from("streams").select("is_live,last_seen,effect").eq("id", st.id).maybeSingle();
+              if (!data) return;
+              const stale = Date.now() - new Date(data.last_seen).getTime() > 90000;
+              if (!data.is_live || stale) {
+                clearInterval(watch);
+                sys("This live has ended.");
+                setTimeout(() => { if (!dead) location.hash = "#/live"; }, 3500);
+                return;
+              }
+              try { applyFx(stage, JSON.parse(data.effect || "{}")); } catch (e) { /* ignore */ }
+            } catch (e) { /* ignore */ }
+          }, 6000);
+          stops.push(() => clearInterval(watch));
+          return () => {
+            stops.forEach((f) => { try { f(); } catch (e) { /* ignore */ } });
+            try { roomEl.disconnect(); } catch (e) { /* ignore */ }
+            v.removeEventListener("click", unblock);
+          };
+        },
+      };
+      LS._real = real;
+      inner = orig(view, id);
+    })();
+    return () => { dead = true; if (inner) { try { inner(); } catch (e) { /* ignore */ } } else stops.forEach((f) => { try { f(); } catch (e) { /* ignore */ } }); };
+  };
+  S.room = realRoom(S.room);
+
+  /* ---------- Live list: real lives on top ---------- */
+  const origList = S.liveList;
+  S.liveList = function (view) {
+    const cleanup = origList(view);
+    const list = $("#list", view);
+    const box = document.createElement("div");
+    box.id = "reallist";
+    box.innerHTML = `<div class="note" style="padding:8px 16px">Loading lives…</div>`;
+    if (list && list.parentNode) list.parentNode.insertBefore(box, list);
+    let dead = false;
+    async function load() {
+      if (!sb) { box.innerHTML = ""; return; }
+      try {
+        const since = new Date(Date.now() - 60000).toISOString();
+        const { data } = await wt(sb.from("streams").select("id,host_id,title,category,viewer_count").eq("is_live", true).gt("last_seen", since).order("viewer_count", { ascending: false }).limit(50), 10000);
+        if (dead) return;
+        const rows = data || [];
+        await ensureNames(rows.map((r) => r.host_id));
+        if (dead) return;
+        box.innerHTML = rows.length
+          ? `<div class="note" style="padding:8px 16px"><b>Live now</b></div>` + rows.map((r) => {
+            const nm = names[r.host_id] || "Host", h = hueOf(r.host_id);
+            return `<a class="row-item" href="#/live/${r.id}">
+              <span class="ring sm" style="--h:${h}">${avatar(nm, h, 52)}</span>
+              <div class="grow"><b>${esc(r.title || "Live now")}</b><small>${esc(nm)} · ${esc(r.category || "Live")}</small></div>
+              <div class="right"><span class="badge live">LIVE</span><small>👁 ${fmtN(r.viewer_count || 0)}</small></div>
+            </a>`;
+          }).join("") + `<div class="note" style="padding:8px 16px">Sample lives</div>`
+          : `<div class="note" style="padding:8px 16px">No real lives right now. Tap <b>Go Live</b> to be the first! Below are sample lives.</div>`;
+      } catch (e) { if (!dead) box.innerHTML = ""; }
+    }
+    load();
+    const t = setInterval(load, 10000);
+    return () => { dead = true; clearInterval(t); if (typeof cleanup === "function") cleanup(); };
   };
 })();
 </script>
