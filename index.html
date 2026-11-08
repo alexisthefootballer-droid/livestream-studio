@@ -393,6 +393,40 @@ body.immersive #tabbar { display: none; }
 .fbtn { padding: 8px 16px; border-radius: 999px; border: 0; background: #ff3d71; color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
 .fbtn.on { background: rgba(255,255,255,0.18); }
 .fbtn:disabled { opacity: 0.6; }
+
+.tools-fab { position: absolute; top: 8px; right: 96px; z-index: 8; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(0,0,0,0.55); color: #fff; font-size: 17px; }
+.tl-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 80; max-height: 86vh; overflow-y: auto; background: #1c1c1e; color: #fff; border-radius: 22px 22px 0 0; padding: 12px 14px 26px; box-shadow: 0 0 0 100vmax rgba(0,0,0,0.6); }
+.tl-sheet.hidden { display: none; }
+.tl-head { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; text-align: center; margin-bottom: 8px; }
+.tl-head b { font-size: 19px; }
+.tl-head button { width: 36px; height: 36px; border: 0; border-radius: 50%; background: #2f2f33; color: #fff; font-size: 20px; line-height: 1; }
+.tl-icons { display: flex; gap: 26px; padding: 8px 12px 16px; }
+.tl-icons button { background: none; border: 0; color: #fff; font-size: 13px; text-align: center; }
+.tl-icons i { display: grid; place-items: center; width: 58px; height: 58px; margin: 0 auto 6px; border-radius: 50%; background: #2f2f33; font-style: normal; font-size: 26px; }
+.tl-card { background: #2b2b2e; border-radius: 16px; margin: 0 0 12px; padding: 4px 4px; }
+.tl-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 12px; background: none; border: 0; color: #fff; text-align: left; font-size: 17px; }
+.tl-row.dim { opacity: 0.5; }
+.tl-ic { width: 26px; text-align: center; font-size: 20px; flex: none; }
+.tl-t { flex: 1; font-weight: 600; }
+.tl-t small { display: block; font-weight: 400; color: #a0a0a8; font-size: 13px; margin-top: 3px; line-height: 1.35; }
+.tl-val { color: #a0a0a8; font-size: 15px; }
+.tl-go { color: #a0a0a8; font-size: 22px; }
+.tl-row select { appearance: none; -webkit-appearance: none; border: 0; background: transparent; color: #a0a0a8; font-size: 16px; text-align-last: right; padding: 4px; max-width: 42%; }
+.tl-row select option { color: #111; }
+.tl-sw { position: relative; width: 50px; height: 30px; flex: none; }
+.tl-sw input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; z-index: 1; }
+.tl-sw i { position: absolute; inset: 0; border-radius: 15px; background: #555; transition: background .15s; }
+.tl-sw i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.tl-sw input:checked + i { background: #14d58b; }
+.tl-sw input:checked + i::after { transform: translateX(20px); }
+.tl-sw input:disabled + i { opacity: 0.45; }
+.tl-sec { color: #a0a0a8; margin: 12px 6px 8px; font-size: 14px; }
+.tl-empty { color: #a0a0a8; text-align: center; padding: 34px 16px; }
+#tlwords { width: 100%; box-sizing: border-box; background: #1c1c1e; color: #fff; border: 1px solid #3a3a3f; border-radius: 12px; padding: 10px; font-size: 15px; }
+.tl-save { margin-top: 10px; padding: 9px 18px; border: 0; border-radius: 18px; background: #ff3d71; color: #fff; font-weight: 700; }
+.tl-msg { color: #14d58b; font-size: 13px; padding-top: 6px; min-height: 18px; }
+.about-chip { position: absolute; left: 12px; right: 12px; top: 64px; z-index: 5; max-width: 70%; padding: 5px 10px; border: 0; border-radius: 14px; background: rgba(0,0,0,0.5); color: #fff; font-size: 12px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.about-chip.open { white-space: normal; max-width: calc(100% - 24px); }
 </style>
 </head>
 <body>
@@ -2055,6 +2089,9 @@ body.immersive #tabbar { display: none; }
   /* ---------------- Go Live ---------------- */
   S.goLive = function (view) {
     let stream = null, live = false, secs = 0, timer = null, vtimer = null, viewers = 0, bc = null, micOn = true;
+    let T = Object.assign({}, LS.TOOLS_DEFAULT);
+    try { const sv = JSON.parse(localStorage.getItem("ls.tools") || "{}"); if (sv && typeof sv === "object") T = Object.assign(T, sv); } catch (e) { /* ignore */ }
+    T.practice = false;
     const layout = LS.store.get("layout", "split");
     const loop = LS.store.get("loop", "aurora");
     view.innerHTML = `
@@ -2064,7 +2101,9 @@ body.immersive #tabbar { display: none; }
         <span class="badge live hidden" id="badge">● LIVE · <span id="clock">00:00</span></span>
         <span class="pill glass hidden" id="pv">👁 0</span>
         <div class="guests host" id="hostslots"></div>
+        <button class="tools-fab" id="toolsfab" type="button" aria-label="Live tools">🛠</button>
         <button class="seat-fab hidden" id="seatfab" type="button">🎤 Seats <i class="hidden" id="seatbadge">0</i></button>
+        <div class="tl-sheet hidden" id="toolsheet"></div>
         <div class="req-strip hidden" id="reqstrip"></div>
         <div class="seat-sheet hidden" id="seatsheet">
           <div class="ss-bar"><b>Seats</b><button type="button" id="ssclose" aria-label="Close">✕</button></div>
@@ -2076,6 +2115,7 @@ body.immersive #tabbar { display: none; }
           <button class="btn ghost" id="cam">Turn on camera</button>
           <button class="btn ghost" id="flip" title="Switch front/back camera">🔄</button>
           <button class="btn ghost" id="mic" title="Microphone on/off">🎤 Mic on</button>
+          <button class="btn ghost" id="toolsbtn" type="button">🛠 Tools</button>
         </div>
         <label class="field">Stream title
           <input id="title" maxlength="60" placeholder="What are you streaming?" value="${esc(LS.store.get("title", ""))}">
@@ -2103,7 +2143,7 @@ body.immersive #tabbar { display: none; }
     async function camOn() {
       try {
         if (stream) stream.getTracks().forEach((t) => t.stop());
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: true });
+        stream = await navigator.mediaDevices.getUserMedia({ video: LS.videoConstraints(T, facing), audio: LS.audioConstraints(T) });
         stream.getAudioTracks().forEach((t) => { t.enabled = micOn; });
         stage.setStream(stream);
         if (bc) bc.replaceStream(stream);
@@ -2154,6 +2194,23 @@ body.immersive #tabbar { display: none; }
     $("#title", view).addEventListener("input", (e) => LS.store.set("title", e.target.value));
     $("#cat", view).addEventListener("change", (e) => LS.store.set("cat", e.target.value));
 
+    const toolsheet = $("#toolsheet", view);
+    const toolsApi = LS.mountTools(toolsheet, {
+      T,
+      save: () => { try { localStorage.setItem("ls.tools", JSON.stringify(T)); } catch (e) { /* ignore */ } },
+      streamId: () => (bc && bc.streamId) || null,
+      close: () => toolsheet.classList.add("hidden"),
+      openSeats: () => { if (bc && bc.streamId) $("#seatsheet", view).classList.remove("hidden"); else note("Go live first, then open your seats."); },
+      applyMedia: async () => {
+        if (!stream) return;
+        const q = LS.videoConstraints(T, facing);
+        try { const vt = stream.getVideoTracks()[0]; if (vt) await vt.applyConstraints({ width: q.width, height: q.height, frameRate: q.frameRate }); } catch (e) { /* ignore */ }
+        try { const at = stream.getAudioTracks()[0]; if (at) await at.applyConstraints(LS.audioConstraints(T)); } catch (e) { /* ignore */ }
+      },
+    });
+    const openTools = () => { toolsApi.show("main"); toolsheet.classList.remove("hidden"); };
+    $("#toolsfab", view).addEventListener("click", openTools);
+    $("#toolsbtn", view).addEventListener("click", openTools);
     const reqApi = {};
     function drawReqs(list, open) {
       const st = $("#reqstrip", view);
@@ -2200,8 +2257,21 @@ body.immersive #tabbar { display: none; }
         btn.dataset.busy = "1";
         try { await bc.end(); } catch (err) { /* ignore */ }
         bc = null; delete btn.dataset.busy;
+        $("#badge", view).firstChild.textContent = "● LIVE · ";
         setLiveUi(false);
         note("Your live has ended. Thank you for streaming!");
+        return;
+      }
+      if (T.practice) {
+        btn.dataset.busy = "1";
+        if (!stream) await camOn();
+        delete btn.dataset.busy;
+        if (!stream) { note("Turn on your camera first (allow camera and microphone)."); return; }
+        bc = { practice: true, end() {}, setFx() {}, replaceStream() {} };
+        setLiveUi(true);
+        $("#seatfab", view).classList.add("hidden");
+        $("#badge", view).firstChild.textContent = "● PRACTICE · ";
+        note("Practice mode: nobody can see you. Press End live when you are ready, then turn off Practice mode in Tools.");
         return;
       }
       if (!LS.user) { location.hash = "#/auth"; return; }
@@ -2225,6 +2295,7 @@ body.immersive #tabbar { display: none; }
           onCfg: (c) => { $("#hostslots", view).className = "guests host lay-" + c.layout; },
           onRequests: (n) => { const bd = $("#seatbadge", view); if (!bd) return; bd.textContent = n; bd.classList.toggle("hidden", !n); },
           loopVid: stage.loopVid,
+          tools: T,
           onViewers: (n) => { $("#pv", view).textContent = "👁 " + n; },
         });
         setLiveUi(true);
@@ -2925,6 +2996,105 @@ body.immersive #tabbar { display: none; }
     };
   }
 
+
+  /* ---------- Live tools (quality, noise, who can watch, practice, comment safety, rankings) ---------- */
+  const QUALITY = { "480": { w: 854, h: 480, br: 900000 }, "720": { w: 1280, h: 720, br: 2000000 }, "1080": { w: 1920, h: 1080, br: 4000000 } };
+  LS.TOOLS_DEFAULT = { watch: "everyone", about: true, quality: "720", noise: true, stable: true, practice: false, strict: false, blocked: "" };
+  LS.videoConstraints = (T, facing) => { const q = QUALITY[T.quality] || QUALITY["720"]; return { facingMode: facing, width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: T.stable ? 24 : 30 } }; };
+  LS.audioConstraints = (T) => ({ noiseSuppression: !!T.noise, echoCancellation: true, autoGainControl: true });
+  LS.videoEncoding = (T) => ({ maxBitrate: (QUALITY[T.quality] || QUALITY["720"]).br, maxFramerate: T.stable ? 24 : 30 });
+
+  LS.mountTools = function (sheet, ctx) {
+    const T = ctx.T;
+    let vw = "main";
+    const swr = (k, ic, label, hint, dis) => `<label class="tl-row"><span class="tl-ic">${ic}</span><span class="tl-t">${label}${hint ? `<small>${hint}</small>` : ""}</span><span class="tl-sw"><input type="checkbox" data-k="${k}" ${T[k] ? "checked" : ""} ${dis ? "disabled" : ""}><i></i></span></label>`;
+    const sel = (k, ic, label, opts, cur, dis) => `<label class="tl-row"><span class="tl-ic">${ic}</span><span class="tl-t">${label}</span><select data-k="${k}" ${dis ? "disabled" : ""}>${opts.map(([v, t]) => `<option value="${v}" ${String(v) === String(cur) ? "selected" : ""}>${t}</option>`).join("")}</select><span class="tl-go">›</span></label>`;
+    const go = (k, ic, label, val) => `<button type="button" class="tl-row" data-go="${k}"><span class="tl-ic">${ic}</span><span class="tl-t">${label}</span>${val ? `<span class="tl-val">${val}</span>` : ""}<span class="tl-go">›</span></button>`;
+    const head = (title) => `<div class="tl-head">${vw === "main" ? "<span></span>" : `<button type="button" id="tlback" aria-label="Back">‹</button>`}<b>${title}</b><button type="button" id="tlx" aria-label="Close">✕</button></div>`;
+    const live = () => !!ctx.streamId();
+    function mainHtml() {
+      return head("Live tools") + `
+        <div class="tl-icons">
+          <button type="button" data-go="seats"><i>👥</i>Multi-guest</button>
+          <button type="button" data-go="rank"><i>🏆</i>Rankings</button>
+          <button type="button" data-go="gifts"><i>🎁</i>LIVE Gifts</button>
+        </div>
+        <div class="tl-card">
+          ${sel("watch", "🌐", "Who can watch this LIVE", [["everyone", "Everyone"], ["followers", "Followers"]], T.watch)}
+          ${swr("practice", "🏋️", "Practice mode", live() ? "Choose before you go live." : "Test your setup. Nobody can see you.", live())}
+          ${sel("about", "📄", "About me", [["1", "Shown"], ["0", "Hidden"]], T.about ? "1" : "0")}
+        </div>
+        <div class="tl-card">
+          ${sel("quality", "▶️", "LIVE quality", [["480", "480p"], ["720", "720p"], ["1080", "1080p"]], T.quality)}
+          ${swr("noise", "🎚️", "Noise suppression")}
+          ${swr("stable", "🚀", "Optimize for stability", "Lower frame rate to prevent lag or disruptions during your LIVE.")}
+        </div>
+        <div class="tl-card">
+          ${go("safety", "💬", "Comment safety", T.strict ? "Strict" : "")}
+          <div class="tl-row dim"><span class="tl-ic">🛡️</span><span class="tl-t">Moderators<small>Coming soon</small></span></div>
+          <div class="tl-row dim"><span class="tl-ic">🎯</span><span class="tl-t">Marked viewers<small>Coming soon</small></span></div>
+        </div>`;
+    }
+    function safetyHtml() {
+      return head("Comment safety") + `
+        <div class="tl-card">${swr("strict", "🔒", "Strict filter", "Also blocks rude, mocking and spam messages. Insults, links and phone numbers are always blocked.")}</div>
+        <div class="tl-sec">Blocked words</div>
+        <div class="tl-card" style="padding:12px 14px"><textarea id="tlwords" rows="3" maxlength="400" placeholder="Words separated by commas, e.g. ugly, scam, free money">${esc(T.blocked || "")}</textarea><button type="button" class="tl-save" id="tlsave">Save words</button><div class="tl-msg" id="tlmsg"></div></div>`;
+    }
+    async function listHtml(kind) {
+      if (!live()) return head(kind === "rank" ? "Rankings" : "LIVE Gifts") + `<div class="tl-empty">Go live first. ${kind === "rank" ? "Your top gifters show here." : "Gifts sent to you show here."}</div>`;
+      try {
+        if (kind === "rank") {
+          const { data } = await sb.rpc("gift_totals", { p_stream: ctx.streamId() });
+          const rows = (data || []).map((r) => ({ id: r.user_id, coins: Number(r.coins) || 0 })).sort((a, b) => b.coins - a.coins).slice(0, 20);
+          await ensureNames(rows.map((r) => r.id));
+          return head("Rankings") + (rows.length ? `<div class="tl-card">${rows.map((r, i) => `<div class="tl-row"><span class="tl-ic">${["🥇", "🥈", "🥉"][i] || i + 1}</span><span class="tl-t">${esc(names[r.id] || "user")}</span><span class="tl-val">🎁 ${r.coins.toLocaleString()}</span></div>`).join("")}</div>` : `<div class="tl-empty">No gifts yet in this live.</div>`);
+        }
+        const [{ data: msgs }, { data: prices }] = await Promise.all([
+          sb.from("messages").select("gift").eq("stream_id", ctx.streamId()).eq("kind", "gift").limit(1000),
+          sb.from("gift_prices").select("name,cost"),
+        ]);
+        const cost = {}; (prices || []).forEach((p) => { cost[p.name] = p.cost; });
+        const cnt = {}; (msgs || []).forEach((m) => { if (m.gift) cnt[m.gift] = (cnt[m.gift] || 0) + 1; });
+        const list = Object.keys(cnt).map((n) => ({ n, c: cnt[n], coins: cnt[n] * (cost[n] || 0) })).sort((a, b) => b.coins - a.coins);
+        const total = list.reduce((a, g) => a + g.coins, 0);
+        return head("LIVE Gifts") + (list.length ? `<div class="tl-card">${list.map((g) => { const gi = (LS.GIFTS || []).find((x) => x.name === g.n); return `<div class="tl-row"><span class="tl-ic">${gi ? gi.icon : "🎁"}</span><span class="tl-t">${esc(g.n)} × ${g.c}</span><span class="tl-val">${g.coins.toLocaleString()} coins</span></div>`; }).join("")}</div><div class="tl-sec">Total ${total.toLocaleString()} coins · you earn about $${(total * 0.0062).toFixed(2)}</div>` : `<div class="tl-empty">No gifts yet in this live.</div>`);
+      } catch (e) { return head("Live tools") + `<div class="tl-empty">Could not load. Try again.</div>`; }
+    }
+    async function render() {
+      if (vw === "main") sheet.innerHTML = mainHtml();
+      else if (vw === "safety") sheet.innerHTML = safetyHtml();
+      else { sheet.innerHTML = head(vw === "rank" ? "Rankings" : "LIVE Gifts") + `<div class="tl-empty">Loading…</div>`; const h = await listHtml(vw); if (vw === "rank" || vw === "gifts") sheet.innerHTML = h; }
+    }
+    const push = (cols) => { if (live()) sb.from("streams").update(cols).eq("id", ctx.streamId()).then(() => {}, () => {}); };
+    sheet.onclick = (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      if (b.id === "tlx") { ctx.close(); return; }
+      if (b.id === "tlback") { vw = "main"; render(); return; }
+      if (b.dataset.go === "seats") { ctx.close(); ctx.openSeats(); return; }
+      if (b.dataset.go) { vw = b.dataset.go; render(); return; }
+      if (b.id === "tlsave") {
+        T.blocked = $("#tlwords", sheet).value.split(",").map((w) => w.trim()).filter(Boolean).join(", ");
+        ctx.save(); push({ blocked_words: T.blocked });
+        $("#tlmsg", sheet).textContent = "Saved."; $("#tlwords", sheet).value = T.blocked;
+      }
+    };
+    sheet.onchange = (e) => {
+      const el = e.target, k = el.dataset && el.dataset.k;
+      if (!k) return;
+      if (k === "watch") { T.watch = el.value; push({ watch_who: T.watch }); }
+      else if (k === "about") { T.about = el.value === "1"; push({ show_about: T.about }); }
+      else if (k === "quality") { T.quality = el.value; ctx.applyMedia(); }
+      else if (k === "noise" || k === "stable") { T[k] = el.checked; ctx.applyMedia(); }
+      else if (k === "practice") { T.practice = el.checked; }
+      else if (k === "strict") { T.strict = el.checked; push({ chat_strict: T.strict }); }
+      ctx.save();
+    };
+    render();
+    return { show(v) { vw = v || "main"; render(); } };
+  };
+
   /* ---------- host: seats panel (open seats, requests, guests) ---------- */
   const LAYOUTS = [
     ["full", "Full Screen", '<rect x="3" y="3" width="34" height="50" rx="4"/>'],
@@ -3071,7 +3241,8 @@ body.immersive #tabbar { display: none; }
     const roomName = "ls-" + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2));
     const { data: row, error } = await sb.from("streams").insert({
       host_id: me.id, title: o.title, category: o.cat, room_name: roomName, is_live: true,
-      effect: JSON.stringify(o.fx || {}), viewer_count: 0, last_seen: new Date().toISOString(),
+      effect: JSON.stringify(o.fx || {}), viewer_count: 0,
+      ...(o.tools ? { watch_who: o.tools.watch, show_about: o.tools.about, blocked_words: o.tools.blocked || "", chat_strict: !!o.tools.strict } : {}), last_seen: new Date().toISOString(),
     }).select().single();
     if (error || !row) throw new Error("Could not start the live (" + ((error && error.message) || "no row") + ").");
     const room = new LK.Room({ adaptiveStream: true, dynacast: true });
@@ -3099,7 +3270,7 @@ body.immersive #tabbar { display: none; }
       }
       for (const t of o.stream.getTracks()) {
         if (t.kind === "audio" && audioOut) continue;
-        await room.localParticipant.publishTrack(t, { source: t.kind === "video" ? LK.Track.Source.Camera : LK.Track.Source.Microphone });
+        await room.localParticipant.publishTrack(t, t.kind === "video" ? { source: LK.Track.Source.Camera, videoEncoding: LS.videoEncoding(o.tools || LS.TOOLS_DEFAULT) } : { source: LK.Track.Source.Microphone });
       }
       if (audioOut) await room.localParticipant.publishTrack(audioOut, { source: LK.Track.Source.Microphone });
     } catch (e) { await fail(new Error(/timeout/.test(e.message) ? "Connection timed out. Check your internet." : e.message || "Could not connect.")); }
@@ -3208,6 +3379,20 @@ body.immersive #tabbar { display: none; }
       }
       await ensureNames([st.host_id]);
       if (dead) return;
+      if (st.watch_who === "followers" && st.host_id !== LS.user.id) {
+        const mine = await LS.myFollows();
+        if (dead) return;
+        if (!mine.has(st.host_id)) {
+          await new Promise((resolve) => {
+            view.innerHTML = `<div class="pad" style="padding-top:90px;text-align:center"><h3>Followers only</h3><p>${esc(names[st.host_id] || "The host")} lets only followers watch this live.</p><button class="btn big" id="gatefollow" type="button">Follow and watch</button><p><a href="#/live">← Back</a></p></div>`;
+            $("#gatefollow", view).addEventListener("click", async (e) => {
+              e.target.disabled = true;
+              if (await LS.setFollow(st.host_id, true)) resolve(); else { e.target.disabled = false; e.target.textContent = "Could not follow. Try again."; }
+            });
+          });
+          if (dead) return;
+        }
+      }
       let fx0 = {};
       try { fx0 = JSON.parse(st.effect || "{}"); } catch (e) { /* ignore */ }
       const hostName = names[st.host_id] || "Host";
@@ -3234,6 +3419,16 @@ body.immersive #tabbar { display: none; }
                 fb.disabled = false;
               });
             }
+          }
+          if (st.show_about !== false) {
+            sb.from("profiles").select("bio").eq("id", st.host_id).maybeSingle().then(({ data }) => {
+              const bio = data && String(data.bio || "").trim();
+              if (!bio || dead) return;
+              const ab = document.createElement("button");
+              ab.type = "button"; ab.className = "about-chip"; ab.textContent = "About: " + bio;
+              ab.addEventListener("click", () => ab.classList.toggle("open"));
+              fxRoom().appendChild(ab);
+            }).catch(() => {});
           }
           const audioBox = document.createElement("div"); audioBox.style.display = "none"; v.appendChild(audioBox);
           const roomEl = new LK.Room({ adaptiveStream: true, dynacast: true });
