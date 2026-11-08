@@ -323,6 +323,21 @@ body.immersive #tabbar { display: none; }
 .sp-item .btn { padding: 6px 12px; font-size: 13px; }
 .sp-none, .sp-msg { color: var(--muted); font-size: 13px; padding: 4px 0; }
 .sp-msg { color: #ffd6e8; }
+.guests.host { top: 54px; }
+.gslot { position: relative; width: 62px; height: 82px; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: rgba(0,0,0,0.38); border: 2px dashed rgba(255,255,255,0.6); color: #fff; cursor: pointer; backdrop-filter: blur(4px); }
+.gslot i { font-style: normal; font-size: 28px; font-weight: 300; }
+.gslot.gtile { width: 78px; height: 104px; border: 2px solid rgba(255,255,255,0.8); background: #000; }
+.preview .gtile video { transform: none; }
+.seat-fab { position: absolute; top: 46px; right: 12px; z-index: 8; padding: 8px 12px; border: 0; border-radius: 20px; color: #fff; font-weight: 700; font-size: 13px; background: linear-gradient(90deg, #ff3d71, #7c5cff); box-shadow: 0 3px 12px rgba(0,0,0,0.45); cursor: pointer; }
+.seat-fab.hidden { display: none; }
+.seat-fab i { font-style: normal; background: #fff; color: #ff3d71; border-radius: 10px; padding: 1px 7px; margin-left: 4px; }
+.seat-fab i.hidden { display: none; }
+.seat-sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 78%; overflow-y: auto; z-index: 12; background: rgba(14,14,22,0.97); border-radius: 18px 18px 0 0; padding: 8px 12px 14px; }
+.seat-sheet.hidden { display: none; }
+.ss-bar { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+.ss-bar button { background: none; border: 0; color: #fff; font-size: 20px; padding: 4px 8px; cursor: pointer; }
+.seat-sheet .seatbox { margin: 4px 0 0; padding: 0; background: none; }
+.preview.pin { position: sticky; top: 0; z-index: 20; }
 </style>
 </head>
 <body>
@@ -1993,6 +2008,12 @@ body.immersive #tabbar { display: none; }
         <div class="stagebox" id="stage"></div>
         <span class="badge live hidden" id="badge">● LIVE · <span id="clock">00:00</span></span>
         <span class="pill glass hidden" id="pv">👁 0</span>
+        <div class="guests host" id="hostslots"></div>
+        <button class="seat-fab hidden" id="seatfab" type="button">🎤 Seats <i class="hidden" id="seatbadge">0</i></button>
+        <div class="seat-sheet hidden" id="seatsheet">
+          <div class="ss-bar"><b>Seats</b><button type="button" id="ssclose" aria-label="Close">✕</button></div>
+          <div class="seatbox hidden" id="seatbox"></div>
+        </div>
       </div>
       <div class="pad">
         <div class="row">
@@ -2016,8 +2037,6 @@ body.immersive #tabbar { display: none; }
         <p class="note" id="fname"></p>
         <button class="btn big" id="go">Go LIVE</button>
         <div class="hostfeed hidden" id="hostfeed"></div>
-        <div class="seatbox hidden" id="seatbox"></div>
-        <div class="hostguests" id="hostguests"></div>
         <p class="note" id="gonote">Turn on your camera, then press Go LIVE. Viewers will see your camera and the video style you pick. A video you upload yourself is only visible on your phone for now, but viewers can hear its sound.</p>
       </div>
       <div class="spacer"></div>`;
@@ -2079,12 +2098,18 @@ body.immersive #tabbar { display: none; }
     $("#title", view).addEventListener("input", (e) => LS.store.set("title", e.target.value));
     $("#cat", view).addEventListener("change", (e) => LS.store.set("cat", e.target.value));
 
+    $("#seatfab", view).addEventListener("click", () => $("#seatsheet", view).classList.toggle("hidden"));
+    $("#ssclose", view).addEventListener("click", () => $("#seatsheet", view).classList.add("hidden"));
     const note = (t) => { $("#gonote", view).textContent = t; };
     function setLiveUi(on) {
       live = on;
       $("#badge", view).classList.toggle("hidden", !on);
       $("#pv", view).classList.toggle("hidden", !on);
       $("#hostfeed", view).classList.toggle("hidden", !on);
+      $("#seatfab", view).classList.toggle("hidden", !on);
+      if (!on) $("#seatsheet", view).classList.add("hidden");
+      $(".preview", view).classList.toggle("pin", on);
+      if (on) view.scrollTop = 0;
       const g = $("#go", view);
       g.textContent = on ? "End live" : "Go LIVE";
       g.classList.toggle("danger", on);
@@ -2123,7 +2148,9 @@ body.immersive #tabbar { display: none; }
           fx: { layout: stage.state.layout, loop: stage.state.loopId },
           feedEl: $("#hostfeed", view),
           seatsEl: $("#seatbox", view),
-          guestsEl: $("#hostguests", view),
+          guestsEl: $("#hostslots", view),
+          onSlotTap: () => $("#seatsheet", view).classList.remove("hidden"),
+          onRequests: (n) => { const bd = $("#seatbadge", view); if (!bd) return; bd.textContent = n; bd.classList.toggle("hidden", !n); },
           loopVid: stage.loopVid,
           onViewers: (n) => { $("#pv", view).textContent = "👁 " + n; },
         });
@@ -2786,28 +2813,47 @@ body.immersive #tabbar { display: none; }
   LS.chatFeed = chatFeed;
 
 
-  /* ---------- guest tiles (small camera boxes) ---------- */
+  /* ---------- seat slots on the live screen (empty seat = "+", guest = camera box) ---------- */
   function guestTiles(box) {
-    const m = new Map();
+    const slots = [];
+    let tap = null;
+    box.addEventListener("click", (e) => {
+      const el = e.target.closest(".gslot");
+      if (el && !el.dataset.id && tap) tap();
+    });
+    function paintEmpty(sl) { sl.el.className = "gslot"; sl.el.innerHTML = "<i>+</i>"; delete sl.el.dataset.id; sl.id = null; }
+    function mk() { const el = document.createElement("div"); const sl = { el, id: null }; paintEmpty(sl); box.appendChild(el); slots.push(sl); return sl; }
     return {
+      setCount(n, onTap) {
+        tap = onTap || null;
+        while (slots.length < n) mk();
+        while (slots.length > n) { const last = slots[slots.length - 1]; if (last.id) break; last.el.remove(); slots.pop(); }
+      },
       add(id, track, local) {
         this.remove(id);
-        const d = document.createElement("div"); d.className = "gtile";
+        let sl = slots.find((x) => !x.id) || mk();
+        sl.id = id; sl.el.dataset.id = id; sl.el.className = "gslot gtile";
+        sl.el.innerHTML = "";
         const v = document.createElement("video");
         v.autoplay = true; v.muted = true; v.setAttribute("playsinline", "");
         v.srcObject = new MediaStream([track.mediaStreamTrack || track]);
         const l = document.createElement("span"); l.textContent = local ? "You" : (names[id] || "Guest");
-        d.appendChild(v); d.appendChild(l); box.appendChild(d); m.set(id, d);
+        sl.el.appendChild(v); sl.el.appendChild(l);
         if (!local) ensureNames([id]).then(() => { l.textContent = names[id] || "Guest"; });
         const pr = v.play(); if (pr && pr.catch) pr.catch(() => {});
       },
-      remove(id) { const d = m.get(id); if (d) { d.remove(); m.delete(id); } },
-      clear() { m.forEach((d) => d.remove()); m.clear(); },
+      remove(id) {
+        const sl = slots.find((x) => x.id === id);
+        if (!sl) return;
+        paintEmpty(sl);
+      },
+      clear() { slots.forEach((sl) => sl.el.remove()); slots.length = 0; },
     };
   }
 
   /* ---------- host: seats panel (open seats, requests, guests) ---------- */
-  function seatsPanel(box, streamId, roomName) {
+  function seatsPanel(box, streamId, roomName, hooks) {
+    hooks = hooks || {};
     box.classList.remove("hidden");
     box.innerHTML = `<div class="sp-row"><b>🎤 Seats</b><select id="spn">${[1, 2, 3, 4, 5, 6, 7, 8].map((n) => `<option value="${n}">${n}</option>`).join("")}</select><button class="btn" id="spgo">Open seats</button></div><div class="sp-msg" id="spmsg"></div><div id="spreq"></div><div id="spon"></div>`;
     let open = 0, rows = [], stopped = false, ch = null, poll = null;
@@ -2818,6 +2864,8 @@ body.immersive #tabbar { display: none; }
       const go = $("#spgo", box), sel = $("#spn", box);
       if (!go) return;
       go.textContent = open > 0 ? "Close seats" : "Open seats";
+      if (hooks.gt) hooks.gt.setCount(open, hooks.onSlotTap);
+      if (hooks.onRequests) hooks.onRequests(rows.filter((r) => r.status === "pending").length, open);
       sel.disabled = open > 0;
       if (open > 0) sel.value = String(open);
       const pend = rows.filter((r) => r.status === "pending"), acc = rows.filter((r) => r.status === "accepted");
@@ -2876,6 +2924,7 @@ body.immersive #tabbar { display: none; }
       stopped = true; clearInterval(poll); box.onclick = null;
       try { if (ch) sb.removeChannel(ch); } catch (e) { /* ignore */ }
       box.innerHTML = ""; box.classList.add("hidden");
+      if (hooks.onRequests) hooks.onRequests(0, 0);
     };
   }
 
@@ -2940,7 +2989,7 @@ body.immersive #tabbar { display: none; }
     });
     room.on(LK.RoomEvent.ParticipantConnected, () => { upd(); setTimeout(sendFx, 800); });
     room.on(LK.RoomEvent.ParticipantDisconnected, (p) => { if (gtiles) gtiles.remove(p.identity); upd(); });
-    const stopSeats = o.seatsEl ? seatsPanel(o.seatsEl, row.id, roomName) : null;
+    const stopSeats = o.seatsEl ? seatsPanel(o.seatsEl, row.id, roomName, { gt: gtiles, onSlotTap: o.onSlotTap, onRequests: o.onRequests }) : null;
     upd();
     const beat = setInterval(async () => {
       try { await sb.from("streams").update({ last_seen: new Date().toISOString(), viewer_count: count() }).eq("id", row.id); } catch (e) { /* ignore */ }
@@ -3095,6 +3144,7 @@ body.immersive #tabbar { display: none; }
           /* ----- seats: request to join, appear on stage ----- */
           function renderJoin() {
             joinBtn.classList.toggle("hidden", !(seatCount > 0 || mySeat === "accepted") || st.host_id === myId);
+            tiles.setCount(seatCount, () => { if (!mySeat && seatCount > 0 && st.host_id !== myId) joinBtn.click(); });
             if (mySeat === "accepted") { joinBtn.textContent = "Leave seat"; joinBtn.dataset.a = "leave"; }
             else if (mySeat === "pending") { joinBtn.textContent = "Requested · tap to cancel"; joinBtn.dataset.a = "cancel"; }
             else { joinBtn.textContent = "🎤 Request to join"; joinBtn.dataset.a = "request"; }
