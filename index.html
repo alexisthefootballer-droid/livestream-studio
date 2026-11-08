@@ -390,6 +390,9 @@ body.immersive #tabbar { display: none; }
 .guests.lay-fluid .gslot, .guests.lay-fluid .gtile, .guests.lay-fixed .gslot, .guests.lay-fixed .gtile { width: auto !important; height: auto !important; border-radius: 0 !important; min-height: 0; }
 .guests.lay-side { left: auto !important; right: 8px; top: 92px !important; gap: 6px; }
 .guests.lay-side .gslot, .guests.lay-side .gtile { width: 62px !important; height: 82px !important; }
+.fbtn { padding: 8px 16px; border-radius: 999px; border: 0; background: #ff3d71; color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+.fbtn.on { background: rgba(255,255,255,0.18); }
+.fbtn:disabled { opacity: 0.6; }
 </style>
 </head>
 <body>
@@ -2016,7 +2019,7 @@ body.immersive #tabbar { display: none; }
         $("#gifts", view).classList.add("hidden");
       });
     });
-    $("#follow", view).addEventListener("click", (e) => {
+    if (!real) $("#follow", view).addEventListener("click", (e) => {
       following = !following;
       e.target.textContent = following ? "Following" : "Follow";
       e.target.classList.toggle("on", following);
@@ -2464,6 +2467,7 @@ body.immersive #tabbar { display: none; }
     try { host = new URL(u).host; } catch (e) { /* keep full url */ }
     return `<a class="plink" href="${esc(u)}" target="_blank" rel="noopener noreferrer">🔗 ${esc(host)}</a>`;
   }
+  LS.photo = photo; LS.linkHtml = linkHtml;
   const profileUrl = (name) => `${location.host}${location.pathname.replace(/index\.html$/, "")}#/u/${name}`;
 
   // shrink the chosen photo to a 256px square before uploading
@@ -3216,6 +3220,21 @@ body.immersive #tabbar { display: none; }
           const myId = LS.user.id;
           const fxbar = $("#fxbar", v); if (fxbar) fxbar.style.display = "none";
           const vc = $("#viewers", v);
+          const fb = $("#follow", v);
+          if (fb) {
+            if (st.host_id === myId) fb.style.display = "none";
+            else {
+              let on = false;
+              const paint = () => { fb.textContent = on ? "Following" : "Follow"; fb.classList.toggle("on", on); };
+              LS.isFollowing(st.host_id).then((x) => { on = x; paint(); });
+              fb.addEventListener("click", async () => {
+                fb.disabled = true;
+                const ok = await LS.setFollow(st.host_id, !on);
+                if (ok) { on = !on; paint(); if (on) addChat("system", "You followed " + hostName + ".", "sys"); }
+                fb.disabled = false;
+              });
+            }
+          }
           const audioBox = document.createElement("div"); audioBox.style.display = "none"; v.appendChild(audioBox);
           const roomEl = new LK.Room({ adaptiveStream: true, dynacast: true });
           const sys = (t) => addChat("system", t, "sys");
@@ -3392,6 +3411,143 @@ body.immersive #tabbar { display: none; }
   };
   S.room = realRoom(S.room);
 
+  /* ---------- Follow system ---------- */
+  LS.myFollows = async function () {
+    if (!sb || !LS.user) return new Set();
+    try {
+      const { data } = await sb.from("follows").select("followee_id").eq("follower_id", LS.user.id);
+      return new Set((data || []).map((r) => r.followee_id));
+    } catch (e) { return new Set(); }
+  };
+  LS.isFollowing = async function (uid) {
+    if (!sb || !LS.user || !uid) return false;
+    try {
+      const { data } = await sb.from("follows").select("follower_id").eq("follower_id", LS.user.id).eq("followee_id", uid).maybeSingle();
+      return !!data;
+    } catch (e) { return false; }
+  };
+  LS.followCounts = async function (uid) {
+    try {
+      const { data } = await sb.rpc("follow_counts", { p_user: uid });
+      const r = Array.isArray(data) ? data[0] : data;
+      return { following: Number((r && r.following) || 0), followers: Number((r && r.followers) || 0) };
+    } catch (e) { return { following: 0, followers: 0 }; }
+  };
+  LS.setFollow = async function (uid, on) {
+    if (!sb || !LS.user) return false;
+    try {
+      const { error } = await sb.rpc(on ? "follow_user" : "unfollow_user", { p_user: uid });
+      return !error;
+    } catch (e) { return false; }
+  };
+
+  // my own profile: real Following / Followers numbers (tap to see the lists)
+  const origProfile = S.profile;
+  S.profile = function (view) {
+    const cleanup = origProfile(view);
+    if (LS.user) {
+      const stats = $$(".pf-stats div", view);
+      if (stats.length >= 2) {
+        stats[0].style.cursor = stats[1].style.cursor = "pointer";
+        stats[0].addEventListener("click", () => { location.hash = "#/follows/following"; });
+        stats[1].addEventListener("click", () => { location.hash = "#/follows/followers"; });
+        LS.followCounts(LS.user.id).then((n) => {
+          const a2 = stats[0].querySelector("b"), b2 = stats[1].querySelector("b");
+          if (a2) a2.textContent = fmtN(n.following);
+          if (b2) b2.textContent = fmtN(n.followers);
+        });
+      }
+    }
+    return cleanup;
+  };
+
+  function followBtn(uid, on) {
+    return `<button class="fbtn ${on ? "on" : ""}" data-uid="${uid}" type="button">${on ? "Following" : "Follow"}</button>`;
+  }
+
+  // someone else's profile
+  S.userProfile = function (view, uname) {
+    view.innerHTML = `<header class="er-top"><button class="icon-btn" id="uback" aria-label="Back">←</button><div class="er-title">@${esc(uname)}</div><span style="width:40px"></span></header><div class="profile-head" id="ubody"><small>Loading…</small></div>`;
+    $("#uback", view).addEventListener("click", () => { location.hash = "#/profile"; });
+    if (!sb) return;
+    let dead = false;
+    (async () => {
+      const { data } = await sb.from("profiles").select("*").eq("username", uname).maybeSingle();
+      const body = $("#ubody", view);
+      if (dead || !body) return;
+      if (!data) { body.innerHTML = `<h2>Profile not found</h2><small>Nobody has the username @${esc(uname)}.</small>`; return; }
+      const me = LS.user && LS.user.id === data.id;
+      const [counts, on, liveRes] = await Promise.all([
+        LS.followCounts(data.id), me ? false : LS.isFollowing(data.id),
+        sb.from("streams").select("id").eq("host_id", data.id).eq("is_live", true).gt("last_seen", new Date(Date.now() - 60000).toISOString()).limit(1),
+      ]);
+      if (dead) return;
+      const live = liveRes && liveRes.data && liveRes.data[0];
+      body.innerHTML = `
+        <span class="ring lg" style="--h:260">${LS.photo(data, 92)}</span>
+        <h2>${esc(data.display_name || data.username)}</h2>
+        <small>@${esc(data.username)}</small>
+        <div class="pf-stats" style="justify-content:center"><div><b id="ufing">${fmtN(counts.following)}</b><small>Following</small></div><div><b id="ufers">${fmtN(counts.followers)}</b><small>Followers</small></div></div>
+        <p id="pbio">${esc(data.bio || "")}</p>
+        ${LS.linkHtml(data.links)}
+        <div class="pf-btns" style="justify-content:center">
+          ${me ? `<a class="pf-btn" href="#/edit-profile">✏️ Edit profile</a>` : LS.user ? followBtn(data.id, on) : `<a class="pf-btn" href="#/auth">Log in to follow</a>`}
+          ${live ? `<a class="pf-btn" href="#/live/${live.id}">🔴 Watch live</a>` : ""}
+        </div>`;
+      const fb = $(".fbtn", body);
+      if (fb) {
+        let cur = on;
+        fb.addEventListener("click", async () => {
+          fb.disabled = true;
+          if (await LS.setFollow(data.id, !cur)) {
+            cur = !cur; fb.textContent = cur ? "Following" : "Follow"; fb.classList.toggle("on", cur);
+            const n = await LS.followCounts(data.id); $("#ufers", body).textContent = fmtN(n.followers);
+          }
+          fb.disabled = false;
+        });
+      }
+    })();
+    return () => { dead = true; };
+  };
+
+  // my followers / following lists
+  S.follows = function (view, tab) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    let dead = false;
+    view.innerHTML = `<header class="er-top"><button class="icon-btn" id="fback" aria-label="Back">←</button><div class="er-title">${tab === "followers" ? "Followers" : "Following"}</div><span style="width:40px"></span></header>
+      <div class="pf-tabs" id="ftabs" style="margin-top:0"><button data-t="following" class="${tab === "following" ? "on" : ""}" style="font-size:16px;font-weight:700">Following</button><button data-t="followers" class="${tab === "followers" ? "on" : ""}" style="font-size:16px;font-weight:700">Followers</button></div>
+      <div class="list" id="flist"><div class="pad"><small>Loading…</small></div></div>`;
+    $("#fback", view).addEventListener("click", () => { location.hash = "#/profile"; });
+    $("#ftabs", view).addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (b) location.hash = "#/follows/" + b.dataset.t; });
+    (async () => {
+      const me = LS.user.id;
+      const q = tab === "followers"
+        ? sb.from("follows").select("follower_id").eq("followee_id", me).order("created_at", { ascending: false }).limit(200)
+        : sb.from("follows").select("followee_id").eq("follower_id", me).order("created_at", { ascending: false }).limit(200);
+      const { data } = await q;
+      const ids = (data || []).map((r) => (tab === "followers" ? r.follower_id : r.followee_id));
+      const list = $("#flist", view);
+      if (dead || !list) return;
+      if (!ids.length) { list.innerHTML = `<div class="pf-empty">${tab === "followers" ? "Nobody follows you yet. Go live to get followers!" : "You are not following anyone yet."}</div>`; return; }
+      const [{ data: profs }, fset] = await Promise.all([sb.from("profiles").select("*").in("id", ids), LS.myFollows()]);
+      if (dead) return;
+      const byId = {}; (profs || []).forEach((p2) => { byId[p2.id] = p2; });
+      list.innerHTML = ids.filter((i) => byId[i]).map((i) => {
+        const p2 = byId[i];
+        return `<div class="row-item"><a href="#/u/${esc(p2.username)}" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;color:inherit;text-decoration:none"><span class="ring sm" style="--h:260">${LS.photo(p2, 48)}</span><div class="grow"><b>${esc(p2.display_name || p2.username)}</b><small>@${esc(p2.username)}</small></div></a>${followBtn(i, fset.has(i))}</div>`;
+      }).join("");
+    })();
+    view.addEventListener("click", async (e) => {
+      const b = e.target.closest(".fbtn");
+      if (!b) return;
+      const on = b.classList.contains("on");
+      b.disabled = true;
+      if (await LS.setFollow(b.dataset.uid, !on)) { b.classList.toggle("on", !on); b.textContent = !on ? "Following" : "Follow"; }
+      b.disabled = false;
+    });
+    return () => { dead = true; };
+  };
+
   /* ---------- Live list: real lives on top ---------- */
   const origList = S.liveList;
   S.liveList = function (view) {
@@ -3410,13 +3566,15 @@ body.immersive #tabbar { display: none; }
         if (dead) return;
         const rows = data || [];
         await ensureNames(rows.map((r) => r.host_id));
+        const fset = await LS.myFollows();
+        rows.sort((a2, b2) => (fset.has(b2.host_id) ? 1 : 0) - (fset.has(a2.host_id) ? 1 : 0));
         if (dead) return;
         box.innerHTML = rows.length
           ? `<div class="note" style="padding:8px 16px"><b>Live now</b></div>` + rows.map((r) => {
             const nm = names[r.host_id] || "Host", h = hueOf(r.host_id);
             return `<a class="row-item" href="#/live/${r.id}">
               <span class="ring sm" style="--h:${h}">${avatar(nm, h, 52)}</span>
-              <div class="grow"><b>${esc(r.title || "Live now")}</b><small>${esc(nm)} · ${esc(r.category || "Live")}</small></div>
+              <div class="grow"><b>${esc(r.title || "Live now")}</b><small>${esc(nm)} · ${esc(r.category || "Live")}${fset.has(r.host_id) ? " · ✅ Following" : ""}</small></div>
               <div class="right"><span class="badge live">LIVE</span><small>👁 ${fmtN(r.viewer_count || 0)}</small></div>
             </a>`;
           }).join("") + `<div class="note" style="padding:8px 16px">Sample lives</div>`
@@ -3450,6 +3608,7 @@ body.immersive #tabbar { display: none; }
     [/^\/edit-profile$/, S.editProfile, "thread"],
     [/^\/recharge$/, S.recharge, "thread"],
     [/^\/earnings$/, S.earnings, "thread"],
+    [/^\/follows\/(followers|following)$/, S.follows, "profile"],
     [/^\/u\/([\w]+)$/, S.userProfile, "profile"],
   ];
 
