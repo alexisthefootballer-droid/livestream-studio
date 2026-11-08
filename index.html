@@ -338,6 +338,58 @@ body.immersive #tabbar { display: none; }
 .ss-bar button { background: none; border: 0; color: #fff; font-size: 20px; padding: 4px 8px; cursor: pointer; }
 .seat-sheet .seatbox { margin: 4px 0 0; padding: 0; background: none; }
 .preview.pin { position: sticky; top: 0; z-index: 20; }
+
+.seat-sheet { position: fixed !important; left: 0; right: 0; bottom: 0; max-height: 84vh !important; overflow-y: auto; z-index: 70 !important; background: #f4f4f6 !important; color: #111; border-radius: 22px 22px 0 0 !important; padding: 14px 16px 26px !important; box-shadow: 0 0 0 100vmax rgba(0,0,0,0.55); }
+.seat-sheet.hidden { display: none !important; }
+.ss-bar { position: absolute; top: 8px; right: 10px; z-index: 2; padding: 0 !important; }
+.ss-bar b { display: none; }
+.ss-bar button { color: #111 !important; font-size: 20px; }
+.seat-sheet .seatbox { background: none; color: #111; }
+.seat-sheet .btn { background: #ff3d71; color: #fff; border: 0; border-radius: 18px; padding: 9px 16px; font-weight: 700; }
+.seat-sheet .btn.ghost { background: #e3e3ea; color: #111; }
+.seat-sheet select { padding: 8px 10px; border-radius: 10px; border: 1px solid #d5d5de; background: #fff; color: #111; font-size: 15px; }
+.sp-top { display: flex; align-items: center; justify-content: space-between; padding-right: 34px; }
+.sp-top b { font-size: 22px; }
+.sp-gear { background: #e3e3ea; color: #111; border: 0; border-radius: 16px; padding: 7px 12px; font-weight: 600; }
+.sp-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.sp-lbl { flex: 1; color: #444; }
+.seat-sheet .sp-none, .seat-sheet .sp-msg { color: #666; }
+.seat-sheet .sp-msg { color: #d6245a; }
+.sp-h { margin: 14px 0 4px; font-weight: 700; }
+.sp-item span { color: #111; }
+.sp-coin { font-style: normal; font-size: 12px; background: #e9e9f0; border-radius: 10px; padding: 1px 7px; margin-left: 4px; }
+.sp-coin.vip { background: #ffe9a8; color: #6b4b00; }
+.st-head { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; text-align: center; }
+.st-head b { font-size: 22px; }
+.st-head button { width: 38px; height: 38px; border-radius: 50%; border: 0; background: #e3e3ea; color: #111; font-size: 24px; line-height: 1; }
+.st-sec { color: #777; margin: 18px 4px 8px; font-size: 15px; }
+.st-card { background: #fff; border-radius: 18px; padding: 6px 16px; }
+.st-layouts { display: flex; gap: 10px; overflow-x: auto; padding: 14px 12px; }
+.st-lay { flex: none; background: none; border: 0; text-align: center; color: #333; font-size: 13px; }
+.st-lay svg { display: block; margin: 0 auto 6px; border: 2px solid #e1e1e8; border-radius: 14px; padding: 6px; background: #fff; }
+.st-lay.on svg { border-color: #111; }
+.st-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid #f0f0f4; }
+.st-row:last-child { border-bottom: 0; }
+.st-row > span { flex: 1; font-weight: 700; font-size: 16px; color: #111; }
+.st-row small { display: block; font-weight: 400; color: #777; font-size: 13px; margin-top: 3px; }
+.seat-sheet .st-row select { border: 0; background: transparent; color: #777; font-size: 15px; text-align-last: right; }
+.req-strip { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 9; display: flex; flex-direction: column; gap: 6px; }
+.req-strip.hidden { display: none; }
+.req-card { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 16px; background: rgba(0,0,0,0.68); color: #fff; backdrop-filter: blur(6px); }
+.req-av { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, #ff3d71, #7c5cff); font-weight: 800; flex: none; }
+.req-name { flex: 1; min-width: 0; font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.req-name small { display: block; font-weight: 400; font-size: 11px; color: #ccc; }
+.req-ok, .req-no { width: 34px; height: 34px; border-radius: 50%; border: 0; font-size: 16px; font-weight: 800; color: #fff; flex: none; }
+.req-ok { background: #19c37d; }
+.req-no { background: rgba(255,255,255,0.22); }
+.req-more { background: rgba(0,0,0,0.6); color: #fff; border: 0; border-radius: 14px; padding: 6px 10px; font-size: 12px; }
+.guests.lay-full { display: none; }
+.guests.lay-fluid, .guests.lay-fixed { left: 0 !important; right: 0 !important; bottom: 0 !important; top: 46% !important; display: grid; gap: 2px; align-content: stretch; }
+.guests.lay-fluid { grid-template-columns: repeat(2, 1fr); grid-auto-rows: 1fr; }
+.guests.lay-fixed { top: 34% !important; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; }
+.guests.lay-fluid .gslot, .guests.lay-fluid .gtile, .guests.lay-fixed .gslot, .guests.lay-fixed .gtile { width: auto !important; height: auto !important; border-radius: 0 !important; min-height: 0; }
+.guests.lay-side { left: auto !important; right: 8px; top: 92px !important; gap: 6px; }
+.guests.lay-side .gslot, .guests.lay-side .gtile { width: 62px !important; height: 82px !important; }
 </style>
 </head>
 <body>
@@ -2010,6 +2062,7 @@ body.immersive #tabbar { display: none; }
         <span class="pill glass hidden" id="pv">👁 0</span>
         <div class="guests host" id="hostslots"></div>
         <button class="seat-fab hidden" id="seatfab" type="button">🎤 Seats <i class="hidden" id="seatbadge">0</i></button>
+        <div class="req-strip hidden" id="reqstrip"></div>
         <div class="seat-sheet hidden" id="seatsheet">
           <div class="ss-bar"><b>Seats</b><button type="button" id="ssclose" aria-label="Close">✕</button></div>
           <div class="seatbox hidden" id="seatbox"></div>
@@ -2098,6 +2151,20 @@ body.immersive #tabbar { display: none; }
     $("#title", view).addEventListener("input", (e) => LS.store.set("title", e.target.value));
     $("#cat", view).addEventListener("change", (e) => LS.store.set("cat", e.target.value));
 
+    const reqApi = {};
+    function drawReqs(list, open) {
+      const st = $("#reqstrip", view);
+      if (!st) return;
+      st.classList.toggle("hidden", !list.length || !open);
+      st.innerHTML = list.slice(0, 2).map((r) => `<div class="req-card"><span class="req-av">${esc((r.name || "?").slice(0, 1).toUpperCase())}</span><span class="req-name">${esc(r.name)}<small>wants to join${r.coins ? " · 🎁 " + r.coins.toLocaleString() : ""}</small></span><button type="button" class="req-ok" data-act="acc" data-id="${r.id}" aria-label="Accept">✓</button><button type="button" class="req-no" data-act="dec" data-id="${r.id}" aria-label="Decline">✕</button></div>`).join("")
+        + (list.length > 2 ? `<button type="button" class="req-more" id="reqmore">+${list.length - 2} more requests</button>` : "");
+    }
+    $("#reqstrip", view).addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      if (b.id === "reqmore") { $("#seatsheet", view).classList.remove("hidden"); return; }
+      if (b.dataset.act && reqApi.act) reqApi.act(b.dataset.act, b.dataset.id);
+    });
     $("#seatfab", view).addEventListener("click", () => $("#seatsheet", view).classList.toggle("hidden"));
     $("#ssclose", view).addEventListener("click", () => $("#seatsheet", view).classList.add("hidden"));
     const note = (t) => { $("#gonote", view).textContent = t; };
@@ -2150,6 +2217,9 @@ body.immersive #tabbar { display: none; }
           seatsEl: $("#seatbox", view),
           guestsEl: $("#hostslots", view),
           onSlotTap: () => $("#seatsheet", view).classList.remove("hidden"),
+          reqApi,
+          onPending: drawReqs,
+          onCfg: (c) => { $("#hostslots", view).className = "guests host lay-" + c.layout; },
           onRequests: (n) => { const bd = $("#seatbadge", view); if (!bd) return; bd.textContent = n; bd.classList.toggle("hidden", !n); },
           loopVid: stage.loopVid,
           onViewers: (n) => { $("#pv", view).textContent = "👁 " + n; },
@@ -2852,67 +2922,125 @@ body.immersive #tabbar { display: none; }
   }
 
   /* ---------- host: seats panel (open seats, requests, guests) ---------- */
+  const LAYOUTS = [
+    ["full", "Full Screen", '<rect x="3" y="3" width="34" height="50" rx="4"/>'],
+    ["panel", "Fluid Panel", '<rect x="3" y="3" width="34" height="50" rx="4"/><rect x="24" y="30" width="10" height="9" rx="2" fill="#bbb"/><rect x="24" y="41" width="10" height="9" rx="2" fill="#bbb"/>'],
+    ["fluid", "Fluid Grid", '<rect x="3" y="12" width="20" height="32" rx="3"/><rect x="25" y="12" width="12" height="15" rx="3"/><rect x="25" y="29" width="12" height="15" rx="3"/>'],
+    ["fixed", "Fixed Grid", [0, 1, 2].map((r) => [0, 1, 2].map((c) => `<rect x="${4 + c * 11}" y="${14 + r * 12}" width="9" height="10" rx="2"/>`).join("")).join("")],
+    ["side", "Side List", '<rect x="3" y="3" width="23" height="50" rx="4"/><rect x="28" y="3" width="9" height="15" rx="2"/><rect x="28" y="20" width="9" height="15" rx="2"/><rect x="28" y="37" width="9" height="15" rx="2"/>'],
+  ];
+  const GIFT_STEPS = [100, 500, 1000, 2000, 5000];
+
   function seatsPanel(box, streamId, roomName, hooks) {
     hooks = hooks || {};
     box.classList.remove("hidden");
-    box.innerHTML = `<div class="sp-row"><b>🎤 Seats</b><select id="spn">${[1, 2, 3, 4, 5, 6, 7, 8].map((n) => `<option value="${n}">${n}</option>`).join("")}</select><button class="btn" id="spgo">Open seats</button></div><div class="sp-msg" id="spmsg"></div><div id="spreq"></div><div id="spon"></div>`;
-    let open = 0, rows = [], stopped = false, ch = null, poll = null;
-    const say = (t) => { const e = $("#spmsg", box); if (e) e.textContent = t || ""; };
+    let open = 0, rows = [], coins = {}, stopped = false, ch = null, poll = null, view = "main", typing = false;
+    let cfg = { layout: "panel", allow: "everyone", auto: "off", cam: true, min: 2000 };
     const kick = (uid) => sb.functions.invoke("livekit-token", { body: { roomName, action: "kick", identity: uid } }).catch(() => {});
+    const say = (t) => { const e = $("#spmsg", box); if (e) e.textContent = t || ""; };
+    const sorted = () => rows.filter((r) => r.status === "pending").sort((x, y) => ((coins[y.user_id] || 0) >= cfg.min ? 1 : 0) - ((coins[x.user_id] || 0) >= cfg.min ? 1 : 0) || (coins[y.user_id] || 0) - (coins[x.user_id] || 0) || x.id - y.id);
+
+    function mainHtml() {
+      const pend = sorted(), acc = rows.filter((r) => r.status === "accepted");
+      return `<div class="sp-top"><b>Seats</b><button class="sp-gear" id="spgear" type="button">⚙️ Settings</button></div>
+        <div class="sp-row"><span class="sp-lbl">Number of seats</span><select id="spn">${[1, 2, 3, 4, 5, 6, 7, 8].map((n) => `<option value="${n}" ${n === (open || 1) ? "selected" : ""}>${n}</option>`).join("")}</select><button class="btn" id="spgo">${open > 0 ? "Close seats" : "Open seats"}</button></div>
+        <div class="sp-msg" id="spmsg"></div>` + (open > 0 ? `
+        <div class="sp-h">Requests (${pend.length})</div>` + (pend.length ? pend.map((r) => `<div class="sp-item"><span>${esc(names[r.user_id] || "user")}${(coins[r.user_id] || 0) > 0 ? ` <em class="sp-coin${(coins[r.user_id] || 0) >= cfg.min ? " vip" : ""}">🎁 ${(coins[r.user_id] || 0).toLocaleString()}</em>` : ""}</span><button class="btn" data-act="acc" data-id="${r.id}">Accept</button><button class="btn ghost" data-act="dec" data-id="${r.id}">Decline</button></div>`).join("") : `<div class="sp-none">No requests yet.</div>`) + `
+        <div class="sp-h">On stage (${acc.length}/${open})</div>` + (acc.length ? acc.map((r) => `<div class="sp-item"><span>${esc(names[r.user_id] || "user")}</span><button class="btn ghost" data-act="rem" data-id="${r.id}" data-uid="${r.user_id}">Remove</button></div>`).join("") : `<div class="sp-none">Nobody yet.</div>`) : "");
+    }
+    function settingsHtml() {
+      const opt = (v, cur, t) => `<option value="${v}" ${String(v) === String(cur) ? "selected" : ""}>${t}</option>`;
+      return `<div class="st-head"><button id="stback" type="button" aria-label="Back">‹</button><b>Settings</b><span></span></div>
+        <div class="st-sec">Layout</div>
+        <div class="st-card st-layouts">${LAYOUTS.map(([k, t, svg]) => `<button type="button" class="st-lay ${cfg.layout === k ? "on" : ""}" data-lay="${k}"><svg viewBox="0 0 40 56" width="54" height="76" fill="#dcdce2">${svg}</svg><span>${t}</span></button>`).join("")}</div>
+        <div class="st-sec">Permissions</div>
+        <div class="st-card">
+          <label class="st-row"><span>Allow guest requests</span><select data-k="allow">${opt("everyone", cfg.allow, "Everyone")}${opt("gifters", cfg.allow, "Gifters only")}</select></label>
+          <label class="st-row"><span>Auto-accept requests<small>Accepted at once while seats are free.</small></span><select data-k="auto">${opt("off", cfg.auto, "Off")}${opt("everyone", cfg.auto, "Everyone")}${opt("gifters", cfg.auto, "Gifters")}</select></label>
+          <label class="st-row"><span>Guest cameras<small>Turn off to let guests join with sound only.</small></span><select data-k="cam">${opt("1", cfg.cam ? "1" : "0", "On")}${opt("0", cfg.cam ? "1" : "0", "Off")}</select></label>
+        </div>
+        <div class="st-sec">Rewards</div>
+        <div class="st-card"><label class="st-row"><span>Prioritize requests from gifters<small>Viewers who sent this many coins in this live appear first on the request list.</small></span><select data-k="min">${GIFT_STEPS.map((n) => opt(n, cfg.min, n.toLocaleString() + " Coins")).join("")}</select></label></div>
+        <div class="sp-msg" id="spmsg"></div>`;
+    }
     function render() {
       if (stopped) return;
-      const go = $("#spgo", box), sel = $("#spn", box);
-      if (!go) return;
-      go.textContent = open > 0 ? "Close seats" : "Open seats";
       if (hooks.gt) hooks.gt.setCount(open, hooks.onSlotTap);
-      if (hooks.onRequests) hooks.onRequests(rows.filter((r) => r.status === "pending").length, open);
-      sel.disabled = open > 0;
-      if (open > 0) sel.value = String(open);
-      const pend = rows.filter((r) => r.status === "pending"), acc = rows.filter((r) => r.status === "accepted");
-      $("#spreq", box).innerHTML = open > 0
-        ? `<div class="sp-h">Requests (${pend.length})</div>` + (pend.length ? pend.map((r) => `<div class="sp-item"><span>${esc(names[r.user_id] || "user")}</span><button class="btn" data-act="acc" data-id="${r.id}">Accept</button><button class="btn ghost" data-act="dec" data-id="${r.id}">Decline</button></div>`).join("") : `<div class="sp-none">No requests yet.</div>`)
-        : "";
-      $("#spon", box).innerHTML = open > 0
-        ? `<div class="sp-h">On stage (${acc.length}/${open})</div>` + (acc.length ? acc.map((r) => `<div class="sp-item"><span>${esc(names[r.user_id] || "user")}</span><button class="btn ghost" data-act="rem" data-id="${r.id}" data-uid="${r.user_id}">Remove</button></div>`).join("") : `<div class="sp-none">Nobody yet.</div>`)
-        : "";
+      const pend = sorted();
+      if (hooks.onRequests) hooks.onRequests(pend.length, open);
+      if (hooks.onPending) hooks.onPending(pend.map((r) => ({ id: r.id, uid: r.user_id, name: names[r.user_id] || "user", coins: coins[r.user_id] || 0 })), open);
+      if (hooks.onCfg) hooks.onCfg(cfg);
+      if (typing) return; // do not redraw while a menu is open
+      box.innerHTML = view === "main" ? mainHtml() : settingsHtml();
     }
     async function refresh() {
       if (stopped) return;
       try {
-        const { data: st } = await sb.from("streams").select("seat_count").eq("id", streamId).maybeSingle();
-        open = st ? st.seat_count || 0 : 0;
+        const { data: st } = await sb.from("streams").select("seat_count,seat_layout,seat_allow,seat_auto,seat_cam,seat_gifter_min").eq("id", streamId).maybeSingle();
+        if (st) {
+          open = st.seat_count || 0;
+          cfg = { layout: st.seat_layout || "panel", allow: st.seat_allow || "everyone", auto: st.seat_auto || "off", cam: st.seat_cam !== false, min: st.seat_gifter_min || 2000 };
+        }
         const { data } = await sb.from("seat_requests").select("id,user_id,status").eq("stream_id", streamId).in("status", ["pending", "accepted"]).order("id", { ascending: true });
         rows = data || [];
+        try {
+          const { data: gt } = await sb.rpc("gift_totals", { p_stream: streamId });
+          coins = {}; (gt || []).forEach((g) => { coins[g.user_id] = Number(g.coins) || 0; });
+        } catch (e) { /* ignore */ }
         await ensureNames(rows.map((r) => r.user_id));
       } catch (e) { /* ignore */ }
       render();
+    }
+    async function act(kind, id, uid) {
+      try {
+        const status = { acc: "accepted", dec: "declined", rem: "removed" }[kind];
+        const { error } = await sb.rpc("host_seat_action", { p_id: +id, p_status: status });
+        if (error) throw error;
+        if (kind === "rem") kick(uid);
+      } catch (err) {
+        say(/seats_full/.test((err && err.message) || "") ? "All seats are full. Remove someone first." : "Could not do that. Try again.");
+      }
+      refresh();
+    }
+    if (hooks.api) hooks.api.act = act;
+    async function saveCfg() {
+      try {
+        const { error } = await sb.rpc("host_seat_settings", { p_stream: streamId, p_layout: cfg.layout, p_allow: cfg.allow, p_auto: cfg.auto, p_cam: cfg.cam, p_min: cfg.min });
+        if (error) throw error;
+        if (hooks.onCfg) hooks.onCfg(cfg);
+      } catch (e) { say("Could not save the settings. Try again."); }
     }
     box.onclick = async (e) => {
       const b = e.target.closest("button");
       if (!b) return;
       say("");
+      if (b.id === "spgear") { view = "settings"; render(); return; }
+      if (b.id === "stback") { view = "main"; render(); return; }
+      if (b.dataset.lay) { cfg.layout = b.dataset.lay; render(); saveCfg(); return; }
       try {
         if (b.id === "spgo") {
           if (open > 0) {
-            const acc = rows.filter((r) => r.status === "accepted");
+            const accepted = rows.filter((r) => r.status === "accepted");
             const { error } = await sb.rpc("host_set_seats", { p_stream: streamId, p_count: 0 });
             if (error) throw error;
-            acc.forEach((r) => kick(r.user_id));
+            accepted.forEach((r) => kick(r.user_id));
           } else {
             const { error } = await sb.rpc("host_set_seats", { p_stream: streamId, p_count: +$("#spn", box).value });
             if (error) throw error;
           }
-        } else if (b.dataset.act) {
-          const status = { acc: "accepted", dec: "declined", rem: "removed" }[b.dataset.act];
-          const { error } = await sb.rpc("host_seat_action", { p_id: +b.dataset.id, p_status: status });
-          if (error) throw error;
-          if (b.dataset.act === "rem") kick(b.dataset.uid);
-        }
-      } catch (err) {
-        say(/seats_full/.test((err && err.message) || "") ? "All seats are full. Remove someone first." : "Could not do that. Try again.");
-      }
+        } else if (b.dataset.act) { await act(b.dataset.act, b.dataset.id, b.dataset.uid); return; }
+      } catch (err) { say("Could not do that. Try again."); }
       refresh();
     };
+    box.onchange = (e) => {
+      const k = e.target && e.target.dataset && e.target.dataset.k;
+      if (!k) return;
+      const v = e.target.value;
+      if (k === "cam") cfg.cam = v === "1"; else if (k === "min") cfg.min = +v; else cfg[k] = v;
+      typing = false; saveCfg();
+    };
+    box.onfocusin = (e) => { if (e.target && e.target.tagName === "SELECT") typing = true; };
+    box.onfocusout = () => { setTimeout(() => { typing = false; }, 400); };
     refresh();
     try {
       ch = sb.channel("seats-" + streamId + "-" + Math.random().toString(36).slice(2, 7))
@@ -2921,10 +3049,11 @@ body.immersive #tabbar { display: none; }
     } catch (e) { /* polling still works */ }
     poll = setInterval(refresh, 3500);
     return () => {
-      stopped = true; clearInterval(poll); box.onclick = null;
+      stopped = true; clearInterval(poll); box.onclick = null; box.onchange = null; box.onfocusin = null; box.onfocusout = null;
       try { if (ch) sb.removeChannel(ch); } catch (e) { /* ignore */ }
       box.innerHTML = ""; box.classList.add("hidden");
       if (hooks.onRequests) hooks.onRequests(0, 0);
+      if (hooks.onPending) hooks.onPending([], 0);
     };
   }
 
@@ -2989,7 +3118,7 @@ body.immersive #tabbar { display: none; }
     });
     room.on(LK.RoomEvent.ParticipantConnected, () => { upd(); setTimeout(sendFx, 800); });
     room.on(LK.RoomEvent.ParticipantDisconnected, (p) => { if (gtiles) gtiles.remove(p.identity); upd(); });
-    const stopSeats = o.seatsEl ? seatsPanel(o.seatsEl, row.id, roomName, { gt: gtiles, onSlotTap: o.onSlotTap, onRequests: o.onRequests }) : null;
+    const stopSeats = o.seatsEl ? seatsPanel(o.seatsEl, row.id, roomName, { gt: gtiles, onSlotTap: o.onSlotTap, onRequests: o.onRequests, onPending: o.onPending, onCfg: o.onCfg, api: o.reqApi }) : null;
     upd();
     const beat = setInterval(async () => {
       try { await sb.from("streams").update({ last_seen: new Date().toISOString(), viewer_count: count() }).eq("id", row.id); } catch (e) { /* ignore */ }
@@ -3092,10 +3221,10 @@ body.immersive #tabbar { display: none; }
           const sys = (t) => addChat("system", t, "sys");
           let audioBlocked = false, busy = false;
           const roomDiv = fxRoom();
-          const guestsBox = document.createElement("div"); guestsBox.className = "guests"; roomDiv.appendChild(guestsBox);
+          const guestsBox = document.createElement("div"); guestsBox.className = "guests lay-" + (st.seat_layout || "panel"); roomDiv.appendChild(guestsBox);
           const tiles = guestTiles(guestsBox);
           const joinBtn = document.createElement("button"); joinBtn.className = "join-btn hidden"; joinBtn.type = "button"; roomDiv.appendChild(joinBtn);
-          let mySeat = null, seatCount = st.seat_count || 0, onStage = false, localStream = null;
+          let mySeat = null, seatCount = st.seat_count || 0, onStage = false, localStream = null, seatCam = st.seat_cam !== false;
           const count = () => { const n = roomEl.remoteParticipants ? roomEl.remoteParticipants.size : 0; if (vc) vc.textContent = "👁 " + fmtN(n); };
           const onTrack = (track, p) => {
             const id = p && p.identity;
@@ -3154,11 +3283,11 @@ body.immersive #tabbar { display: none; }
             busy = true;
             try {
               sys("The host accepted you! Starting your camera…");
-              localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+              localStream = await navigator.mediaDevices.getUserMedia({ video: seatCam ? { facingMode: "user" } : false, audio: true });
               try { roomEl.disconnect(); } catch (e) { /* ignore */ }
               await connectRoom();
               for (const t of localStream.getTracks()) await roomEl.localParticipant.publishTrack(t, { source: t.kind === "video" ? LK.Track.Source.Camera : LK.Track.Source.Microphone });
-              tiles.add(myId, localStream.getVideoTracks()[0], true);
+              if (localStream.getVideoTracks()[0]) tiles.add(myId, localStream.getVideoTracks()[0], true);
               onStage = true;
               sys("You are on stage. Everyone can see and hear you.");
             } catch (e) {
@@ -3182,11 +3311,11 @@ body.immersive #tabbar { display: none; }
           async function checkSeat() {
             try {
               const [{ data: sr }, { data: me }] = await Promise.all([
-                sb.from("streams").select("is_live,last_seen,effect,seat_count").eq("id", st.id).maybeSingle(),
+                sb.from("streams").select("is_live,last_seen,effect,seat_count,seat_layout,seat_cam").eq("id", st.id).maybeSingle(),
                 sb.from("seat_requests").select("status").eq("stream_id", st.id).eq("user_id", myId).maybeSingle(),
               ]);
               if (dead) return { sr };
-              if (sr) seatCount = sr.seat_count || 0;
+              if (sr) { seatCount = sr.seat_count || 0; seatCam = sr.seat_cam !== false; guestsBox.className = "guests lay-" + (sr.seat_layout || "panel"); }
               const prev = mySeat;
               const now = me ? me.status : null;
               if (now === "accepted") { mySeat = "accepted"; if (!onStage && !busy) goOnStage(); }
@@ -3207,7 +3336,7 @@ body.immersive #tabbar { display: none; }
             try {
               if (a2 === "request") {
                 const { error } = await sb.rpc("request_seat", { p_stream: st.id });
-                if (error) sys(/seats_closed/.test(error.message || "") ? "Seats are closed right now." : "Could not send your request. Try again.");
+                if (error) sys(/seats_closed/.test(error.message || "") ? "Seats are closed right now." : /gifters_only/.test(error.message || "") ? "Only viewers who sent gifts can request a seat. Send a gift first." : "Could not send your request. Try again.");
                 else { mySeat = "pending"; sys("Request sent. Waiting for the host…"); }
               } else {
                 await sb.rpc("leave_seat", { p_stream: st.id });
