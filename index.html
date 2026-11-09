@@ -374,6 +374,29 @@ body.immersive #tabbar { display: none; }
 .st-head { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; text-align: center; }
 .st-head b { font-size: 22px; }
 .st-head button { width: 38px; height: 38px; border-radius: 50%; border: 0; background: #e3e3ea; color: #111; font-size: 24px; line-height: 1; }
+.seat-sheet.sdark { background: #1c1c1e !important; color: #fff; }
+.seat-sheet.sdark .st-head button, .seat-sheet.sdark #ssclose { background: transparent; color: #fff; }
+.seat-sheet.sdark .st-card { background: #2a2a2d; }
+.seat-sheet.sdark .st-row { border-color: #3a3a3f; }
+.seat-sheet.sdark .st-row > span { color: #fff; }
+.seat-sheet.sdark .st-row small, .seat-sheet.sdark .st-autohead small { color: #9a9aa6; }
+.seat-sheet.sdark .st-sec { color: #9a9aa6; }
+.seat-sheet.sdark select { background: #2a2a2d; color: #bbb; border-color: #3a3a3f; }
+.seat-sheet.sdark .st-lay svg { background: #2a2a2d; border-color: #3a3a3f; }
+.seat-sheet.sdark .st-lay { color: #fff; }
+.seat-sheet.sdark .st-lay.on svg { border-color: #fff; }
+.st-line { display: flex; justify-content: space-between; align-items: center; margin: 18px 4px 0; }
+.st-line b { font-size: 20px; }
+.st-link { background: none; border: 0; color: #fff; font-size: 16px; }
+.st-chip { display: inline-block; font-style: normal; background: #333337; color: #fff; border-radius: 14px; padding: 4px 10px; font-size: 14px; font-weight: 700; margin-top: 2px; }
+.st-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 8px; padding: 18px 4px; }
+.st-autohead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 4px 6px; }
+.st-autohead b { font-size: 20px; display: block; }
+.st-autohead small { display: block; font-size: 15px; margin-top: 4px; }
+.st-radios { padding: 0 4px; }
+.st-radio { display: flex; width: 100%; justify-content: space-between; align-items: center; background: none; border: 0; color: #fff; font-size: 18px; padding: 16px 0; text-align: left; }
+.st-radio i { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #6b6b72; box-sizing: border-box; }
+.st-radio i.on { border-color: #ff3b5c; background: radial-gradient(#fff 0 28%, #ff3b5c 32%); }
 .st-sec { color: #777; margin: 18px 4px 8px; font-size: 15px; }
 .st-card { background: #fff; border-radius: 18px; padding: 6px 16px; }
 .st-layouts { display: flex; gap: 10px; overflow-x: auto; padding: 14px 12px; }
@@ -396,6 +419,13 @@ body.immersive #tabbar { display: none; }
 .req-no { background: rgba(255,255,255,0.22); }
 .req-more { background: rgba(0,0,0,0.6); color: #fff; border: 0; border-radius: 14px; padding: 6px 10px; font-size: 12px; }
 .guests.lay-full { display: none; }
+.guests.lay-sbs, .guests.lay-spot { left: 0 !important; right: 0 !important; bottom: 0 !important; top: 34% !important; display: grid !important; gap: 2px; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr; align-content: stretch; max-height: none; }
+.guests.lay-sbs > :nth-child(-n+2) { grid-column: span 2; }
+.guests.lay-spot > :nth-child(1) { grid-column: 1 / -1; }
+.guests.lay-sbs .gslot, .guests.lay-sbs .gtile, .guests.lay-spot .gslot, .guests.lay-spot .gtile { width: auto !important; height: auto !important; border-radius: 0 !important; min-height: 0; }
+.guests.lay-rt1, .guests.lay-rt2 { left: 8px !important; right: 8px !important; top: 104px !important; bottom: auto !important; display: grid !important; grid-auto-flow: column; grid-template-rows: repeat(4, 86px); grid-template-columns: 64px 64px; justify-content: space-between; row-gap: 8px; max-height: none; pointer-events: none; }
+.guests.lay-rt2 { top: 96px !important; grid-template-rows: repeat(4, 74px); grid-template-columns: 56px 56px; }
+.guests.lay-rt1 .gslot, .guests.lay-rt1 .gtile, .guests.lay-rt2 .gslot, .guests.lay-rt2 .gtile { width: 100% !important; height: 100% !important; pointer-events: auto; }
 .guests.lay-panel { max-height: calc(100% - 330px); flex-wrap: wrap; align-content: flex-start; }
 .guests.lay-fluid, .guests.lay-fixed { left: 0 !important; right: 0 !important; bottom: 0 !important; top: 46% !important; display: grid; gap: 2px; align-content: stretch; }
 .guests.lay-fluid { grid-template-columns: repeat(2, 1fr); grid-auto-rows: 1fr; }
@@ -3194,18 +3224,23 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   /* ---------- host: seats panel (open seats, requests, guests) ---------- */
   const LAYOUTS = [
     ["full", "Full Screen", '<rect x="3" y="3" width="34" height="50" rx="4"/>'],
-    ["panel", "Fluid Panel", '<rect x="3" y="3" width="34" height="50" rx="4"/><rect x="24" y="30" width="10" height="9" rx="2" fill="#bbb"/><rect x="24" y="41" width="10" height="9" rx="2" fill="#bbb"/>'],
+    ["panel", "Fluid Panel", '<rect x="3" y="3" width="34" height="50" rx="4"/><rect x="24" y="30" width="10" height="9" rx="2" fill="#777"/><rect x="24" y="41" width="10" height="9" rx="2" fill="#777"/>'],
     ["fluid", "Fluid Grid", '<rect x="3" y="12" width="20" height="32" rx="3"/><rect x="25" y="12" width="12" height="15" rx="3"/><rect x="25" y="29" width="12" height="15" rx="3"/>'],
     ["fixed", "Fixed Grid", [0, 1, 2].map((r) => [0, 1, 2].map((c) => `<rect x="${4 + c * 11}" y="${14 + r * 12}" width="9" height="10" rx="2"/>`).join("")).join("")],
     ["side", "Side List", '<rect x="3" y="3" width="23" height="50" rx="4"/><rect x="28" y="3" width="9" height="15" rx="2"/><rect x="28" y="20" width="9" height="15" rx="2"/><rect x="28" y="37" width="9" height="15" rx="2"/>'],
+    ["sbs", "Side by Side", '<rect x="3" y="8" width="16" height="16" rx="3"/><rect x="21" y="8" width="16" height="16" rx="3"/><rect x="3.0" y="27" width="8" height="8" rx="2"/><rect x="12.2" y="27" width="8" height="8" rx="2"/><rect x="21.4" y="27" width="8" height="8" rx="2"/><rect x="30.599999999999998" y="27" width="8" height="8" rx="2"/><rect x="3.0" y="37" width="8" height="8" rx="2"/><rect x="12.2" y="37" width="8" height="8" rx="2"/><rect x="21.4" y="37" width="8" height="8" rx="2"/><rect x="30.599999999999998" y="37" width="8" height="8" rx="2"/>'],
+    ["spot", "Spotlight", '<rect x="3" y="8" width="34" height="16" rx="3"/><rect x="3.0" y="27" width="8" height="8" rx="2"/><rect x="12.2" y="27" width="8" height="8" rx="2"/><rect x="21.4" y="27" width="8" height="8" rx="2"/><rect x="30.599999999999998" y="27" width="8" height="8" rx="2"/><rect x="3.0" y="37" width="8" height="8" rx="2"/><rect x="12.2" y="37" width="8" height="8" rx="2"/><rect x="21.4" y="37" width="8" height="8" rx="2"/><rect x="30.599999999999998" y="37" width="8" height="8" rx="2"/>'],
+    ["rt1", "Roundtable I", '<rect x="3" y="3" width="34" height="50" rx="5"/><rect fill="#8a8a90" x="6" y="10" width="6" height="8" rx="2"/><rect fill="#8a8a90" x="28" y="10" width="6" height="8" rx="2"/><rect fill="#8a8a90" x="6" y="20" width="6" height="8" rx="2"/><rect fill="#8a8a90" x="28" y="20" width="6" height="8" rx="2"/><rect fill="#8a8a90" x="6" y="30" width="6" height="8" rx="2"/><rect fill="#8a8a90" x="28" y="30" width="6" height="8" rx="2"/><rect fill="#8a8a90" x="6" y="40" width="6" height="8" rx="2"/><rect fill="#8a8a90" x="28" y="40" width="6" height="8" rx="2"/>'],
+    ["rt2", "Roundtable II", '<rect x="14" y="10" width="12" height="36" rx="3"/><rect x="3" y="10" width="8" height="8" rx="2"/><rect x="29" y="10" width="8" height="8" rx="2"/><rect x="3" y="20" width="8" height="8" rx="2"/><rect x="29" y="20" width="8" height="8" rx="2"/><rect x="3" y="30" width="8" height="8" rx="2"/><rect x="29" y="30" width="8" height="8" rx="2"/><rect x="3" y="40" width="8" height="8" rx="2"/><rect x="29" y="40" width="8" height="8" rx="2"/>'],
   ];
   const GIFT_STEPS = [100, 500, 1000, 2000, 5000];
+  LS.seatsPanel = (...a) => seatsPanel(...a);
 
   function seatsPanel(box, streamId, roomName, hooks) {
     hooks = hooks || {};
     box.classList.remove("hidden");
     let open = 0, want = 0, rows = [], coins = {}, stopped = false, ch = null, poll = null, view = "main", typing = false;
-    let cfg = { layout: "panel", allow: "everyone", auto: "off", cam: true, min: 2000 };
+    let cfg = { layout: "panel", allow: "everyone", auto: "off", cam: true, min: 2000 }, lastAuto = "everyone";
     const kick = (uid) => sb.functions.invoke("livekit-token", { body: { roomName, action: "kick", identity: uid } }).catch(() => {});
     const say = (t) => { const e = $("#spmsg", box); if (e) e.textContent = t || ""; };
     const sorted = () => rows.filter((r) => r.status === "pending").sort((x, y) => ((coins[y.user_id] || 0) >= cfg.min ? 1 : 0) - ((coins[x.user_id] || 0) >= cfg.min ? 1 : 0) || (coins[y.user_id] || 0) - (coins[x.user_id] || 0) || x.id - y.id);
@@ -3218,15 +3253,26 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         <div class="sp-h">Requests (${pend.length})</div>` + (pend.length ? pend.map((r) => `<div class="sp-item"><span>${esc(names[r.user_id] || "user")}${(coins[r.user_id] || 0) > 0 ? ` <em class="sp-coin${(coins[r.user_id] || 0) >= cfg.min ? " vip" : ""}">🎁 ${(coins[r.user_id] || 0).toLocaleString()}</em>` : ""}</span><button class="btn" data-act="acc" data-id="${r.id}">Accept</button><button class="btn ghost" data-act="dec" data-id="${r.id}">Decline</button></div>`).join("") : `<div class="sp-none">No requests yet.</div>`) + `
         <div class="sp-h">On stage (${acc.length}/${open})</div>` + (acc.length ? acc.map((r) => `<div class="sp-item"><span>${esc(names[r.user_id] || "user")}</span><button class="btn ghost" data-act="rem" data-id="${r.id}" data-uid="${r.user_id}">Remove</button></div>`).join("") : `<div class="sp-none">Nobody yet.</div>`) : "");
     }
+    function layoutBtn(k, t, svg) {
+      const on = cfg.layout === k;
+      return `<button type="button" class="st-lay ${on ? "on" : ""}" data-lay="${k}"><svg viewBox="0 0 40 56" width="62" height="86" fill="#4a4a4f">${svg}</svg>${on ? `<em class="st-chip">👥 ${open || want || 1} ›</em>` : `<span>${t}</span>`}</button>`;
+    }
     function settingsHtml() {
       const opt = (v, cur, t) => `<option value="${v}" ${String(v) === String(cur) ? "selected" : ""}>${t}</option>`;
-      return `<div class="st-head"><button id="stback" type="button" aria-label="Back">‹</button><b>Settings</b><span></span></div>
-        <div class="st-sec">Layout</div>
-        <div class="st-card st-layouts">${LAYOUTS.map(([k, t, svg]) => `<button type="button" class="st-lay ${cfg.layout === k ? "on" : ""}" data-lay="${k}"><svg viewBox="0 0 40 56" width="54" height="76" fill="#dcdce2">${svg}</svg><span>${t}</span></button>`).join("")}</div>
+      if (view === "layouts") {
+        return `<div class="st-head"><button id="stback2" type="button" aria-label="Back">‹</button><b>Layout</b><span></span></div>
+          <div class="st-grid">${LAYOUTS.map(([k, t, svg]) => layoutBtn(k, t, svg).replace('class="st-lay', 'class="st-lay big')).join("")}</div>`;
+      }
+      const autoOn = cfg.auto !== "off";
+      const radio = (v, t) => `<button type="button" class="st-radio" data-auto="${v}"><span>${t}</span><i class="${cfg.auto === v ? "on" : ""}"></i></button>`;
+      return `<div class="st-head"><button id="stback" type="button" aria-label="Back">‹</button><b>Multi-guest settings</b><span></span></div>
+        <div class="st-line"><b>Layout</b><button type="button" id="stall" class="st-link">Show all</button></div>
+        <div class="st-layouts">${LAYOUTS.map(([k, t, svg]) => layoutBtn(k, t, svg)).join("")}</div>
+        <div class="st-autohead"><div><b>Auto-accept requests</b><small>This setting applies to all LIVE streams.</small></div><label class="tl-sw"><input type="checkbox" data-k="autoon" ${autoOn ? "checked" : ""}><i></i></label></div>
+        ${autoOn ? `<div class="st-radios">${radio("everyone", "Everyone")}${radio("followers", "Followers")}${radio("friends", "Friends")}${radio("gifters", "Gifters")}</div>` : ""}
         <div class="st-sec">Permissions</div>
         <div class="st-card">
           <label class="st-row"><span>Allow guest requests</span><select data-k="allow">${opt("everyone", cfg.allow, "Everyone")}${opt("gifters", cfg.allow, "Gifters only")}</select></label>
-          <label class="st-row"><span>Auto-accept requests<small>Accepted at once while seats are free.</small></span><select data-k="auto">${opt("off", cfg.auto, "Off")}${opt("everyone", cfg.auto, "Everyone")}${opt("gifters", cfg.auto, "Gifters")}</select></label>
           <label class="st-row"><span>Guest cameras<small>Turn off to let guests join with sound only.</small></span><select data-k="cam">${opt("1", cfg.cam ? "1" : "0", "On")}${opt("0", cfg.cam ? "1" : "0", "Off")}</select></label>
         </div>
         <div class="st-sec">Rewards</div>
@@ -3241,6 +3287,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (hooks.onPending) hooks.onPending(pend.map((r) => ({ id: r.id, uid: r.user_id, name: names[r.user_id] || "user", coins: coins[r.user_id] || 0 })), open);
       if (hooks.onCfg) hooks.onCfg(cfg);
       if (typing) return; // do not redraw while a menu is open
+      const sheet = box.closest(".seat-sheet");
+      if (sheet) sheet.classList.toggle("sdark", view !== "main");
       box.innerHTML = view === "main" ? mainHtml() : settingsHtml();
     }
     async function refresh() {
@@ -3336,7 +3384,10 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       say("");
       if (b.id === "spgear") { view = "settings"; render(); return; }
       if (b.id === "stback") { view = "main"; render(); return; }
-      if (b.dataset.lay) { cfg.layout = b.dataset.lay; render(); saveCfg(); return; }
+      if (b.id === "stall") { view = "layouts"; render(); return; }
+      if (b.id === "stback2") { view = "settings"; render(); return; }
+      if (b.dataset.auto) { cfg.auto = lastAuto = b.dataset.auto; render(); saveCfg(); return; }
+      if (b.dataset.lay) { cfg.layout = b.dataset.lay; if (view === "layouts") view = "settings"; render(); saveCfg(); return; }
       try {
         if (b.id === "spgo") {
           if (open > 0) {
@@ -3365,6 +3416,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       const k = e.target && e.target.dataset && e.target.dataset.k;
       if (!k) return;
       const v = e.target.value;
+      if (k === "autoon") { cfg.auto = e.target.checked ? lastAuto : "off"; typing = false; render(); saveCfg(); return; }
       if (k === "cam") cfg.cam = v === "1"; else if (k === "min") cfg.min = +v; else cfg[k] = v;
       typing = false; saveCfg();
     };
