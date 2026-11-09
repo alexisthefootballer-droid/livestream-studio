@@ -3168,7 +3168,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   function seatsPanel(box, streamId, roomName, hooks) {
     hooks = hooks || {};
     box.classList.remove("hidden");
-    let open = 0, rows = [], coins = {}, stopped = false, ch = null, poll = null, view = "main", typing = false;
+    let open = 0, want = 0, rows = [], coins = {}, stopped = false, ch = null, poll = null, view = "main", typing = false;
     let cfg = { layout: "panel", allow: "everyone", auto: "off", cam: true, min: 2000 };
     const kick = (uid) => sb.functions.invoke("livekit-token", { body: { roomName, action: "kick", identity: uid } }).catch(() => {});
     const say = (t) => { const e = $("#spmsg", box); if (e) e.textContent = t || ""; };
@@ -3177,7 +3177,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     function mainHtml() {
       const pend = sorted(), acc = rows.filter((r) => r.status === "accepted");
       return `<div class="sp-top"><b>Seats</b><button class="sp-gear" id="spgear" type="button">⚙️ Settings</button></div>
-        <div class="sp-row"><span class="sp-lbl">Number of seats</span><select id="spn">${[1, 2, 3, 4, 5, 6, 7, 8].map((n) => `<option value="${n}" ${n === (open || 1) ? "selected" : ""}>${n}</option>`).join("")}</select><button class="btn" id="spgo">${open > 0 ? "Close seats" : "Open seats"}</button></div>
+        <div class="sp-row"><span class="sp-lbl">Number of seats</span><select id="spn">${[1, 2, 3, 4, 5, 6, 7, 8].map((n) => `<option value="${n}" ${n === (open || want || 1) ? "selected" : ""}>${n}</option>`).join("")}</select><button class="btn" id="spgo">${open > 0 ? "Close seats" : "Open seats"}</button></div>
         <div class="sp-msg" id="spmsg"></div>` + (open > 0 ? `
         <div class="sp-h">Requests (${pend.length})</div>` + (pend.length ? pend.map((r) => `<div class="sp-item"><span>${esc(names[r.user_id] || "user")}${(coins[r.user_id] || 0) > 0 ? ` <em class="sp-coin${(coins[r.user_id] || 0) >= cfg.min ? " vip" : ""}">🎁 ${(coins[r.user_id] || 0).toLocaleString()}</em>` : ""}</span><button class="btn" data-act="acc" data-id="${r.id}">Accept</button><button class="btn ghost" data-act="dec" data-id="${r.id}">Decline</button></div>`).join("") : `<div class="sp-none">No requests yet.</div>`) + `
         <div class="sp-h">On stage (${acc.length}/${open})</div>` + (acc.length ? acc.map((r) => `<div class="sp-item"><span>${esc(names[r.user_id] || "user")}</span><button class="btn ghost" data-act="rem" data-id="${r.id}" data-uid="${r.user_id}">Remove</button></div>`).join("") : `<div class="sp-none">Nobody yet.</div>`) : "");
@@ -3266,7 +3266,16 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       } catch (err) { say("Could not do that. Try again."); }
       refresh();
     };
-    box.onchange = (e) => {
+    box.onchange = async (e) => {
+      if (e.target && e.target.id === "spn") {
+        want = +e.target.value; typing = false;
+        if (open > 0) {
+          const { error } = await sb.rpc("host_set_seats", { p_stream: streamId, p_count: want });
+          if (error) say("Could not change the seats. Try again.");
+          refresh();
+        }
+        return;
+      }
       const k = e.target && e.target.dataset && e.target.dataset.k;
       if (!k) return;
       const v = e.target.value;
