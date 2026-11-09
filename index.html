@@ -293,6 +293,8 @@ body.immersive #tabbar { display: none; }
 .pf-tabs { display: flex; justify-content: space-around; border-bottom: 1px solid rgba(255,255,255,0.1); margin-top: 6px; }
 .pf-tabs button { flex: 1; background: none; border: 0; color: #8a8aa0; font-size: 22px; padding: 12px 0 10px; border-bottom: 2px solid transparent; cursor: pointer; }
 .pf-tabs button.on { color: #fff; border-bottom-color: #fff; }
+.msg.marked { background: rgba(255,200,40,.18); border-radius: 8px; }
+.msg[data-del] { cursor: pointer; }
 .pf-empty { padding: 48px 24px; text-align: center; color: var(--muted); }
 .drawer-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 40; }
 .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(86vw, 380px); background: #1f1f22; z-index: 41; padding: 28px 22px; overflow-y: auto; box-shadow: -8px 0 30px rgba(0,0,0,0.5); }
@@ -422,6 +424,8 @@ body.immersive #tabbar { display: none; }
 .tl-sw input:disabled + i { opacity: 0.45; }
 .tl-sec { color: #a0a0a8; margin: 12px 6px 8px; font-size: 14px; }
 .tl-empty { color: #a0a0a8; text-align: center; padding: 34px 16px; }
+#tlpuser { background: #1c1c1e; color: #fff; border: 1px solid #3a3a3f; border-radius: 12px; padding: 10px; font-size: 15px; }
+button.tl-val { background: none; border: 0; cursor: pointer; }
 #tlwords { width: 100%; box-sizing: border-box; background: #1c1c1e; color: #fff; border: 1px solid #3a3a3f; border-radius: 12px; padding: 10px; font-size: 15px; }
 .tl-save { margin-top: 10px; padding: 9px 18px; border: 0; border-radius: 18px; background: #ff3d71; color: #fff; font-weight: 700; }
 .tl-msg { color: #14d58b; font-size: 13px; padding-top: 6px; min-height: 18px; }
@@ -2915,7 +2919,7 @@ body.immersive #tabbar { display: none; }
   }
 
   /* ---------- real-time chat + gifts feed (realtime + polling backup) ---------- */
-  function chatFeed(streamId, onMsg) {
+  function chatFeed(streamId, onMsg, onDel) {
     const seen = new Set();
     let lastId = 0, ready = false, stopped = false, ch = null, poll = null;
     async function deliver(rows, live) {
@@ -2947,6 +2951,7 @@ body.immersive #tabbar { display: none; }
     try {
       ch = sb.channel("room-" + streamId + "-" + Math.random().toString(36).slice(2, 7))
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: "stream_id=eq." + streamId }, (p) => { if (ready && p && p.new) deliver([p.new], true); })
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "messages" }, (p) => { if (onDel && p && p.old && p.old.id) onDel(p.old.id); })
         .subscribe();
     } catch (e) { /* polling still works */ }
     poll = setInterval(pollNow, 3500);
@@ -2999,6 +3004,41 @@ body.immersive #tabbar { display: none; }
 
   /* ---------- Live tools (quality, noise, who can watch, practice, comment safety, rankings) ---------- */
   const QUALITY = { "480": { w: 854, h: 480, br: 900000 }, "720": { w: 1280, h: 720, br: 2000000 }, "1080": { w: 1920, h: 1080, br: 4000000 } };
+  LS.hostLists = { mods: new Set(), marked: new Set() };
+  LS.loadHostLists = async function () {
+    if (!sb || !LS.user) return;
+    try {
+      const [a, b] = await Promise.all([
+        sb.from("moderators").select("user_id").eq("host_id", LS.user.id),
+        sb.from("marked_viewers").select("user_id").eq("host_id", LS.user.id),
+      ]);
+      LS.hostLists.mods = new Set((a.data || []).map((r) => r.user_id));
+      LS.hostLists.marked = new Set((b.data || []).map((r) => r.user_id));
+    } catch (e) { /* ignore */ }
+  };
+  const LIST_TABLE = { mods: "moderators", marked: "marked_viewers" };
+  LS.hostSetAdd = async function (kind, username) {
+    if (!sb || !LS.user) return "Log in first.";
+    try {
+      let { data: p } = await sb.from("profiles").select("id,username,display_name").eq("username", username).maybeSingle();
+      if (!p) ({ data: p } = await sb.from("profiles").select("id,username,display_name").eq("username", username.toLowerCase()).maybeSingle());
+      if (!p) return "Nobody has the username @" + username + ".";
+      if (p.id === LS.user.id) return "That is you.";
+      if (LS.hostLists[kind].has(p.id)) return "Already added.";
+      const { error } = await sb.from(LIST_TABLE[kind]).insert({ host_id: LS.user.id, user_id: p.id });
+      if (error) return /row-level|policy/i.test(error.message || "") ? "List is full." : "Could not add. Try again.";
+      LS.hostLists[kind].add(p.id);
+      names[p.id] = p.display_name || p.username;
+      return "ok";
+    } catch (e) { return "Could not add. Try again."; }
+  };
+  LS.hostSetRemove = async function (kind, uid) {
+    if (!sb || !LS.user) return;
+    try {
+      await sb.from(LIST_TABLE[kind]).delete().eq("host_id", LS.user.id).eq("user_id", uid);
+      LS.hostLists[kind].delete(uid);
+    } catch (e) { /* ignore */ }
+  };
   LS.TOOLS_DEFAULT = { watch: "everyone", about: true, quality: "720", noise: true, stable: true, practice: false, strict: false, blocked: "" };
   LS.videoConstraints = (T, facing) => { const q = QUALITY[T.quality] || QUALITY["720"]; return { facingMode: facing, width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: T.stable ? 24 : 30 } }; };
   LS.audioConstraints = (T) => ({ noiseSuppression: !!T.noise, echoCancellation: true, autoGainControl: true });
@@ -3031,8 +3071,8 @@ body.immersive #tabbar { display: none; }
         </div>
         <div class="tl-card">
           ${go("safety", "💬", "Comment safety", T.strict ? "Strict" : "")}
-          <div class="tl-row dim"><span class="tl-ic">🛡️</span><span class="tl-t">Moderators<small>Coming soon</small></span></div>
-          <div class="tl-row dim"><span class="tl-ic">🎯</span><span class="tl-t">Marked viewers<small>Coming soon</small></span></div>
+          ${go("mods", "🛡️", "Moderators", LS.hostLists.mods.size ? String(LS.hostLists.mods.size) : "")}
+          ${go("marked", "🎯", "Marked viewers", LS.hostLists.marked.size ? String(LS.hostLists.marked.size) : "")}
         </div>`;
     }
     function safetyHtml() {
@@ -3061,8 +3101,19 @@ body.immersive #tabbar { display: none; }
         return head("LIVE Gifts") + (list.length ? `<div class="tl-card">${list.map((g) => { const gi = (LS.GIFTS || []).find((x) => x.name === g.n); return `<div class="tl-row"><span class="tl-ic">${gi ? gi.icon : "🎁"}</span><span class="tl-t">${esc(g.n)} × ${g.c}</span><span class="tl-val">${g.coins.toLocaleString()} coins</span></div>`; }).join("")}</div><div class="tl-sec">Total ${total.toLocaleString()} coins · you earn about $${(total * 0.0062).toFixed(2)}</div>` : `<div class="tl-empty">No gifts yet in this live.</div>`);
       } catch (e) { return head("Live tools") + `<div class="tl-empty">Could not load. Try again.</div>`; }
     }
+    async function peopleHtml(kind) {
+      const title = kind === "mods" ? "Moderators" : "Marked viewers";
+      const set = LS.hostLists[kind];
+      const ids = Array.from(set);
+      await ensureNames(ids);
+      const hint = kind === "mods" ? "Moderators help you keep chat clean. They can delete messages in your live and show a 🛡 badge." : "Mark people you want to notice. You see a ⭐ when they join your live and their messages stand out.";
+      return head(title) + `<div class="tl-sec">${hint}</div>
+        <div class="tl-card" style="padding:12px 14px"><input id="tlpuser" type="text" placeholder="Username, e.g. alexis" maxlength="40" autocapitalize="none" autocomplete="off" style="width:100%;box-sizing:border-box"><button type="button" class="tl-save" id="tlpadd">Add</button><div class="tl-msg" id="tlpmsg"></div></div>
+        ${ids.length ? `<div class="tl-card">${ids.map((i) => `<div class="tl-row"><span class="tl-ic">${kind === "mods" ? "🛡️" : "⭐"}</span><span class="tl-t">${esc(names[i] || "user")}</span><button type="button" class="tl-val" data-prem="${esc(i)}">Remove</button></div>`).join("")}</div>` : `<div class="tl-empty">Nobody added yet.</div>`}`;
+    }
     async function render() {
       if (vw === "main") sheet.innerHTML = mainHtml();
+      else if (vw === "mods" || vw === "marked") { sheet.innerHTML = head(vw === "mods" ? "Moderators" : "Marked viewers") + `<div class="tl-empty">Loading…</div>`; const h = await peopleHtml(vw); if (vw === "mods" || vw === "marked") sheet.innerHTML = h; }
       else if (vw === "safety") sheet.innerHTML = safetyHtml();
       else { sheet.innerHTML = head(vw === "rank" ? "Rankings" : "LIVE Gifts") + `<div class="tl-empty">Loading…</div>`; const h = await listHtml(vw); if (vw === "rank" || vw === "gifts") sheet.innerHTML = h; }
     }
@@ -3073,6 +3124,15 @@ body.immersive #tabbar { display: none; }
       if (b.id === "tlx") { ctx.close(); return; }
       if (b.id === "tlback") { vw = "main"; render(); return; }
       if (b.dataset.go === "seats") { ctx.close(); ctx.openSeats(); return; }
+      if (b.dataset.prem) { const kind = vw; LS.hostSetRemove(kind, b.dataset.prem).then(() => render()); return; }
+      if (b.id === "tlpadd") {
+        const kind = vw, inp = $("#tlpuser", sheet), msg = $("#tlpmsg", sheet);
+        const u = inp.value.trim().replace(/^@/, "");
+        if (!u) return;
+        b.disabled = true; msg.textContent = "Adding…";
+        LS.hostSetAdd(kind, u).then((r) => { b.disabled = false; if (r === "ok") render(); else msg.textContent = r; });
+        return;
+      }
       if (b.dataset.go) { vw = b.dataset.go; render(); return; }
       if (b.id === "tlsave") {
         T.blocked = $("#tlwords", sheet).value.split(",").map((w) => w.trim()).filter(Boolean).join(", ");
@@ -3303,13 +3363,30 @@ body.immersive #tabbar { display: none; }
     let stopFeed = null;
     if (o.feedEl) {
       const box = o.feedEl; box.innerHTML = "";
+      const tag = (uid) => (LS.hostLists.mods.has(uid) ? "🛡 " : "") + (LS.hostLists.marked.has(uid) ? "⭐ " : "");
       stopFeed = chatFeed(row.id, (m, live, who) => {
         const el = document.createElement("div");
-        el.className = "msg " + (m.kind === "gift" ? "gift" : "");
-        el.innerHTML = m.kind === "gift" ? `<b>${esc(who)}</b> sent you ${esc(m.gift || m.body)} 🎁` : `<b>${esc(who)}</b> ${esc(m.body)}`;
+        el.className = "msg " + (m.kind === "gift" ? "gift" : "") + (LS.hostLists.marked.has(m.user_id) ? " marked" : "");
+        el.dataset.mid = m.id; if (m.kind !== "gift") el.dataset.del = "1";
+        el.innerHTML = m.kind === "gift" ? `<b>${esc(tag(m.user_id) + who)}</b> sent you ${esc(m.gift || m.body)} 🎁` : `<b>${esc(tag(m.user_id) + who)}</b> ${esc(m.body)}`;
         box.appendChild(el);
         while (box.children.length > 40) box.removeChild(box.firstChild);
         box.scrollTop = box.scrollHeight;
+      }, (id) => { const x = box.querySelector(`[data-mid="${id}"]`); if (x) x.remove(); });
+      box.onclick = async (e) => {
+        const el = e.target.closest("[data-del]");
+        if (!el || !confirm("Delete this message?")) return;
+        const { error } = await sb.from("messages").delete().eq("id", el.dataset.mid);
+        if (!error) el.remove();
+      };
+      LS.loadHostLists();
+      room.on(LK.RoomEvent.ParticipantConnected, async (p) => {
+        if (!p || !LS.hostLists.marked.has(p.identity)) return;
+        await ensureNames([p.identity]);
+        const el = document.createElement("div");
+        el.className = "msg marked";
+        el.innerHTML = `<b>⭐ ${esc(names[p.identity] || "A marked viewer")}</b> joined your live`;
+        box.appendChild(el); box.scrollTop = box.scrollHeight;
       });
     }
 
@@ -3563,15 +3640,33 @@ body.immersive #tabbar { display: none; }
           renderJoin();
 
           // chat and gifts from everyone
+          const chat = $("#chat", v);
+          const hostMods = new Set();
+          sb.from("moderators").select("user_id").eq("host_id", st.host_id).then(({ data }) => { (data || []).forEach((r) => hostMods.add(r.user_id)); }, () => {});
+          const canMod = () => st.host_id === myId || hostMods.has(myId);
+          chat.addEventListener("click", async (e) => {
+            const el = e.target.closest("[data-del]");
+            if (!el || !canMod() || !confirm("Delete this message?")) return;
+            const { error } = await sb.from("messages").delete().eq("id", el.dataset.mid);
+            if (!error) el.remove();
+          });
           stops.push(chatFeed(st.id, (m, live, who) => {
+            if (m.kind !== "gift") {
+              const before = chat.lastChild;
+              const tg = m.user_id === st.host_id ? "👑 " : hostMods.has(m.user_id) ? "🛡 " : "";
+              addChat(tg + who, m.body, who === "You" ? "me" : "");
+              const el = chat.lastChild;
+              if (el && el !== before) { el.dataset.mid = m.id; el.dataset.del = "1"; }
+              return;
+            }
             if (m.kind === "gift") {
               addChat(who, `sent ${m.gift || m.body} 🎁`, "gift");
               if (live && who !== "You") {
                 const g = LS.GIFTS.find((x) => x.name === (m.gift || m.body));
                 if (g) { if (!LS.giftFx(fxRoom(), g, who)) for (let i = 0; i < 4; i++) setTimeout(() => heart(g.icon), i * 100); }
               }
-            } else addChat(who, m.body, who === "You" ? "me" : "");
-          }));
+            }
+          }, (id) => { const x = chat.querySelector(`[data-mid="${id}"]`); if (x) x.remove(); }));
           // is the live still on? is the host's look changed? seats?
           const watch = setInterval(async () => {
             const { sr } = await checkSeat();
