@@ -327,6 +327,15 @@ body.immersive #tabbar { display: none; }
 .sp-msg { color: #ffd6e8; }
 .guests.host { top: 54px; }
 .gslot { position: relative; width: 62px; height: 82px; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: rgba(0,0,0,0.38); border: 2px dashed rgba(255,255,255,0.6); color: #fff; cursor: pointer; backdrop-filter: blur(4px); }
+.gslot.gtile { cursor: pointer; }
+.gmenu-bg { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 90; display: flex; align-items: flex-end; }
+.gmenu { width: 100%; background: #1f1f22; border-radius: 18px 18px 0 0; padding: 14px 16px 24px; color: #fff; }
+.gm-h { display: flex; justify-content: space-between; align-items: center; font-size: 17px; margin-bottom: 8px; }
+.gm-h button { background: none; border: 0; color: #fff; font-size: 20px; }
+.gm-row { display: flex; width: 100%; justify-content: space-between; align-items: center; box-sizing: border-box; padding: 14px 4px; background: none; border: 0; border-top: 1px solid rgba(255,255,255,.1); color: #fff; font-size: 16px; text-align: left; }
+.gm-row select { background: #2c2c30; color: #fff; border: 1px solid #3a3a3f; border-radius: 10px; padding: 8px; font-size: 15px; }
+.gm-row.red { color: #ff5c7a; }
+.gm-msg { min-height: 20px; color: #9aa; font-size: 14px; padding-top: 8px; }
 .gslot i { font-style: normal; font-size: 28px; font-weight: 300; }
 .gslot.gtile { width: 78px; height: 104px; border: 2px solid rgba(255,255,255,0.8); background: #000; }
 .preview .gtile video { transform: none; }
@@ -2965,39 +2974,64 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
 
   /* ---------- seat slots on the live screen (empty seat = "+", guest = camera box) ---------- */
   function guestTiles(box) {
-    const slots = [];
-    let tap = null;
+    const slotEls = [], tr = new Map(), pos = new Map(), els = new Map();
+    let tap = null, gtap = null, n = 0;
     box.addEventListener("click", (e) => {
       const el = e.target.closest(".gslot");
-      if (el && !el.dataset.id && tap) tap();
+      if (!el) return;
+      if (el.dataset.id) { if (gtap) gtap(el.dataset.id, +el.dataset.slot); }
+      else if (tap) tap();
     });
-    function paintEmpty(sl) { sl.el.className = "gslot"; sl.el.innerHTML = "<i>+</i>"; delete sl.el.dataset.id; sl.id = null; }
-    function mk() { const el = document.createElement("div"); const sl = { el, id: null }; paintEmpty(sl); box.appendChild(el); slots.push(sl); return sl; }
+    function tileEl(id) {
+      let t = els.get(id);
+      if (t) return t;
+      const info = tr.get(id);
+      const wrap = document.createElement("div");
+      const v = document.createElement("video");
+      v.autoplay = true; v.muted = true; v.setAttribute("playsinline", "");
+      v.srcObject = new MediaStream([info.track.mediaStreamTrack || info.track]);
+      const l = document.createElement("span"); l.textContent = info.local ? "You" : (names[id] || "Guest");
+      wrap.appendChild(v); wrap.appendChild(l);
+      if (!info.local) ensureNames([id]).then(() => { l.textContent = names[id] || "Guest"; });
+      const pr = v.play(); if (pr && pr.catch) pr.catch(() => {});
+      t = { wrap, v };
+      els.set(id, t);
+      return t;
+    }
+    function paint() {
+      const ids = Array.from(tr.keys()), used = new Set();
+      ids.forEach((id) => { const q = pos.get(id); if (q == null || used.has(q)) pos.delete(id); else used.add(q); });
+      ids.forEach((id) => { if (!pos.has(id)) { let q = 0; while (used.has(q)) q++; pos.set(id, q); used.add(q); } });
+      let cap = n;
+      used.forEach((q) => { if (q + 1 > cap) cap = q + 1; });
+      while (slotEls.length < cap) { const el = document.createElement("div"); box.appendChild(el); slotEls.push(el); }
+      while (slotEls.length > cap) slotEls.pop().remove();
+      slotEls.forEach((el, i) => {
+        const id = ids.find((x) => pos.get(x) === i);
+        if (id) {
+          const t = tileEl(id);
+          el.className = "gslot gtile"; el.dataset.id = id; el.dataset.slot = i;
+          if (t.wrap.parentNode !== el) { el.innerHTML = ""; el.appendChild(t.wrap); t.wrap.style.display = "contents"; if (t.v.paused) { const pr = t.v.play(); if (pr && pr.catch) pr.catch(() => {}); } }
+        } else {
+          el.className = "gslot"; el.innerHTML = "<i>+</i>"; delete el.dataset.id; delete el.dataset.slot;
+        }
+      });
+    }
     return {
-      setCount(n, onTap) {
-        tap = onTap || null;
-        while (slots.length < n) mk();
-        while (slots.length > n) { const last = slots[slots.length - 1]; if (last.id) break; last.el.remove(); slots.pop(); }
+      setCount(nn, onTap, onGuestTap) { n = nn; tap = onTap || null; if (onGuestTap) gtap = onGuestTap; paint(); },
+      add(id, track, local, slot) {
+        tr.delete(id); els.delete(id);
+        tr.set(id, { track, local });
+        if (slot != null) pos.set(id, slot);
+        paint();
       },
-      add(id, track, local) {
-        this.remove(id);
-        let sl = slots.find((x) => !x.id) || mk();
-        sl.id = id; sl.el.dataset.id = id; sl.el.className = "gslot gtile";
-        sl.el.innerHTML = "";
-        const v = document.createElement("video");
-        v.autoplay = true; v.muted = true; v.setAttribute("playsinline", "");
-        v.srcObject = new MediaStream([track.mediaStreamTrack || track]);
-        const l = document.createElement("span"); l.textContent = local ? "You" : (names[id] || "Guest");
-        sl.el.appendChild(v); sl.el.appendChild(l);
-        if (!local) ensureNames([id]).then(() => { l.textContent = names[id] || "Guest"; });
-        const pr = v.play(); if (pr && pr.catch) pr.catch(() => {});
+      remove(id) { if (!tr.has(id)) return; tr.delete(id); els.delete(id); pos.delete(id); paint(); },
+      setSlots(map) {
+        let changed = false;
+        Object.keys(map).forEach((id) => { if (map[id] != null && pos.get(id) !== map[id]) { pos.set(id, map[id]); changed = true; } });
+        if (changed) { Array.from(pos.keys()).forEach((id) => { if (!(id in map) && !tr.has(id)) pos.delete(id); }); paint(); }
       },
-      remove(id) {
-        const sl = slots.find((x) => x.id === id);
-        if (!sl) return;
-        paintEmpty(sl);
-      },
-      clear() { slots.forEach((sl) => sl.el.remove()); slots.length = 0; },
+      clear() { slotEls.forEach((el) => el.remove()); slotEls.length = 0; tr.clear(); els.clear(); pos.clear(); },
     };
   }
 
@@ -3199,7 +3233,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     }
     function render() {
       if (stopped) return;
-      if (hooks.gt) hooks.gt.setCount(open, hooks.onSlotTap);
+      if (hooks.gt) hooks.gt.setCount(open, hooks.onSlotTap, guestMenu);
       const pend = sorted();
       if (hooks.onRequests) hooks.onRequests(pend.length, open);
       if (hooks.onPending) hooks.onPending(pend.map((r) => ({ id: r.id, uid: r.user_id, name: names[r.user_id] || "user", coins: coins[r.user_id] || 0 })), open);
@@ -3217,6 +3251,11 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         }
         const { data } = await sb.from("seat_requests").select("id,user_id,status").eq("stream_id", streamId).in("status", ["pending", "accepted"]).order("id", { ascending: true });
         rows = data || [];
+        try {
+          const { data: sl } = await sb.rpc("seat_slots", { p_stream: streamId });
+          const m = {}; (sl || []).forEach((x) => { m[x.user_id] = x.slot; });
+          if (hooks.gt) hooks.gt.setSlots(m);
+        } catch (e) { /* ignore */ }
         try {
           const { data: gt } = await sb.rpc("gift_totals", { p_stream: streamId });
           coins = {}; (gt || []).forEach((g) => { coins[g.user_id] = Number(g.coins) || 0; });
@@ -3237,6 +3276,51 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       refresh();
     }
     if (hooks.api) hooks.api.act = act;
+
+    /* tap a guest box: switch seat, mute, hide camera, remove, block */
+    let menu = null;
+    function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+    function guestMenu(uid, slot) {
+      closeMenu();
+      const row = rows.find((r) => r.user_id === uid && r.status === "accepted");
+      menu = document.createElement("div");
+      menu.className = "gmenu-bg";
+      const seatsOpt = Array.from({ length: Math.max(open, 1) }, (_, i) => `<option value="${i}" ${i === slot ? "selected" : ""}>Seat ${i + 1}</option>`).join("");
+      menu.innerHTML = `<div class="gmenu"><div class="gm-h"><b>${esc(names[uid] || "Guest")}</b><button type="button" data-g="x" aria-label="Close">✕</button></div>
+        <label class="gm-row"><span>🔀 Switch to</span><select id="gmslot">${seatsOpt}</select></label>
+        <button type="button" class="gm-row" data-g="mic">🔇 Mute microphone</button>
+        <button type="button" class="gm-row" data-g="cam">🙈 Hide camera</button>
+        <button type="button" class="gm-row" data-g="rem">🚪 Remove from seat</button>
+        <button type="button" class="gm-row red" data-g="block">⛔ Remove and block</button>
+        <div class="gm-msg" id="gmmsg"></div></div>`;
+      document.body.appendChild(menu);
+      const gm = (t) => { const e = $("#gmmsg", menu); if (e) e.textContent = t; };
+      menu.addEventListener("click", async (e) => {
+        if (e.target === menu) { closeMenu(); return; }
+        const b = e.target.closest("button");
+        if (!b) return;
+        const g = b.dataset.g;
+        if (g === "x") { closeMenu(); return; }
+        if (g === "mic" || g === "cam") {
+          gm("Working…");
+          sb.functions.invoke("livekit-token", { body: { roomName, action: "mute", identity: uid, kind: g } }).then(() => gm(g === "mic" ? "Microphone muted." : "Camera hidden."), () => gm("Could not do that."));
+          return;
+        }
+        if (g === "rem") { if (row) await act("rem", row.id, uid); closeMenu(); return; }
+        if (g === "block") {
+          if (!confirm("Remove " + (names[uid] || "this guest") + " and stop them joining seats again?")) return;
+          try { await sb.rpc("host_block_guest", { p_stream: streamId, p_user: uid }); kick(uid); } catch (err) { /* ignore */ }
+          closeMenu(); refresh(); return;
+        }
+      });
+      menu.addEventListener("change", async (e) => {
+        if (e.target.id !== "gmslot") return;
+        gm("Switching…");
+        const { error } = await sb.rpc("host_move_guest", { p_stream: streamId, p_user: uid, p_slot: +e.target.value });
+        if (error) { gm("Could not switch. Try again."); return; }
+        await refresh(); closeMenu();
+      });
+    }
     async function saveCfg() {
       try {
         const { error } = await sb.rpc("host_seat_settings", { p_stream: streamId, p_layout: cfg.layout, p_allow: cfg.allow, p_auto: cfg.auto, p_cam: cfg.cam, p_min: cfg.min });
@@ -3292,7 +3376,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     } catch (e) { /* polling still works */ }
     poll = setInterval(refresh, 3500);
     return () => {
-      stopped = true; clearInterval(poll); box.onclick = null; box.onchange = null; box.onfocusin = null; box.onfocusout = null;
+      stopped = true; closeMenu(); clearInterval(poll); box.onclick = null; box.onchange = null; box.onfocusin = null; box.onfocusout = null;
       try { if (ch) sb.removeChannel(ch); } catch (e) { /* ignore */ }
       box.innerHTML = ""; box.classList.add("hidden");
       if (hooks.onRequests) hooks.onRequests(0, 0);
@@ -3615,6 +3699,11 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
                 sb.from("seat_requests").select("status").eq("stream_id", st.id).eq("user_id", myId).maybeSingle(),
               ]);
               if (dead) return { sr };
+              try {
+                const { data: sl } = await sb.rpc("seat_slots", { p_stream: st.id });
+                const m = {}; (sl || []).forEach((x) => { m[x.user_id] = x.slot; });
+                tiles.setSlots(m);
+              } catch (e) { /* ignore */ }
               if (sr) { seatCount = sr.seat_count || 0; seatCam = sr.seat_cam !== false; guestsBox.className = "guests lay-" + (sr.seat_layout || "panel"); }
               const prev = mySeat;
               const now = me ? me.status : null;
@@ -3636,7 +3725,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
             try {
               if (a2 === "request") {
                 const { error } = await sb.rpc("request_seat", { p_stream: st.id });
-                if (error) sys(/seats_closed/.test(error.message || "") ? "Seats are closed right now." : /gifters_only/.test(error.message || "") ? "Only viewers who sent gifts can request a seat. Send a gift first." : "Could not send your request. Try again.");
+                if (error) sys(/seats_closed/.test(error.message || "") ? "Seats are closed right now." : /gifters_only/.test(error.message || "") ? "Only viewers who sent gifts can request a seat. Send a gift first." : /blocked/.test(error.message || "") ? "The host has not allowed you to join seats." : "Could not send your request. Try again.");
                 else { mySeat = "pending"; sys("Request sent. Waiting for the host…"); }
               } else {
                 await sb.rpc("leave_seat", { p_stream: st.id });
