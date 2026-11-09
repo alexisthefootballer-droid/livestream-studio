@@ -3784,6 +3784,254 @@ body.immersive #tabbar { display: none; }
 })();
 </script>
   <script>
+/* Videos: upload, profile grid, player, likes */
+(function () {
+  const LS = window.LS;
+  const S = LS.screens;
+  const $ = LS.$, $$ = LS.$$;
+  const esc = LS.esc;
+  const sb = LS.sb;
+  const MAX = 50 * 1024 * 1024;
+  const fmtN = (n) => (n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "K" : String(n || 0));
+  const url = (p) => (sb && p ? sb.storage.from("videos").getPublicUrl(p).data.publicUrl : "");
+  const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : "v" + Date.now() + Math.random().toString(16).slice(2));
+
+  const css = document.createElement("style");
+  css.textContent = `
+  .vgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px}
+  .vcell{position:relative;aspect-ratio:3/4;background:#1a1a24;border:0;padding:0;cursor:pointer;overflow:hidden}
+  .vcell img,.vcell video{width:100%;height:100%;object-fit:cover;display:block}
+  .vcell span{position:absolute;left:6px;bottom:5px;color:#fff;font-size:12px;font-weight:700;text-shadow:0 1px 3px #000}
+  .vplayer{position:fixed;inset:0;background:#000;z-index:80;display:flex;flex-direction:column}
+  .vplayer video{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
+  .vp-close{position:absolute;top:12px;left:12px;width:42px;height:42px;border-radius:50%;border:0;background:rgba(0,0,0,.5);color:#fff;font-size:22px;z-index:2}
+  .vp-side{position:absolute;right:12px;bottom:110px;display:flex;flex-direction:column;gap:18px;align-items:center;z-index:2}
+  .vp-side button{background:rgba(0,0,0,.45);border:0;color:#fff;width:50px;height:50px;border-radius:50%;font-size:24px}
+  .vp-side button.on{color:#ff3b5c}
+  .vp-side small{color:#fff;font-size:12px;margin-top:-14px}
+  .vp-info{position:absolute;left:14px;right:80px;bottom:24px;color:#fff;z-index:2;text-shadow:0 1px 4px #000}
+  .vp-info p{margin:4px 0 0;font-size:15px}
+  .upv{padding:8px 16px;display:flex;flex-direction:column;gap:12px}
+  .upv video{width:100%;max-height:46vh;background:#000;border-radius:12px}
+  .upv textarea{width:100%;min-height:80px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:#14141c;color:#fff;padding:10px;font-size:15px;box-sizing:border-box}
+  .upv .msg{color:#ff8a8a;font-size:14px;min-height:18px}
+  `;
+  document.head.appendChild(css);
+
+  /* ---- data ---- */
+  async function listVideos(uid) {
+    if (!sb) return [];
+    const { data } = await sb.from("videos").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(60);
+    return data || [];
+  }
+  async function totalLikes(uid) {
+    if (!sb) return 0;
+    try { const { data } = await sb.rpc("profile_likes", { p_user: uid }); return Number(data) || 0; } catch (e) { return 0; }
+  }
+  async function iLiked(vid) {
+    if (!sb || !LS.user) return false;
+    const { data } = await sb.from("video_likes").select("video_id").eq("video_id", vid).eq("user_id", LS.user.id).maybeSingle();
+    return !!data;
+  }
+
+  /* ---- player ---- */
+  function openPlayer(v, mine, onChange) {
+    const box = document.createElement("div");
+    box.className = "vplayer";
+    box.innerHTML = `<button class="vp-close" aria-label="Close">✕</button>
+      <video src="${esc(url(v.video_path))}" ${v.thumb_path ? `poster="${esc(url(v.thumb_path))}"` : ""} autoplay loop playsinline controls></video>
+      <div class="vp-side">
+        <button class="vp-like" aria-label="Like">♥</button><small class="vp-lc">${fmtN(v.likes_count)}</small>
+        ${mine ? `<button class="vp-del" aria-label="Delete">🗑</button>` : ""}
+      </div>
+      <div class="vp-info"><small>👁 ${fmtN(v.views)} views</small><p>${esc(v.caption || "")}</p></div>`;
+    document.body.appendChild(box);
+    const close = () => { const vd = $("video", box); if (vd) vd.pause(); box.remove(); };
+    $(".vp-close", box).addEventListener("click", close);
+    if (sb) sb.rpc("add_view", { p_video: v.id }).then(() => {}, () => {});
+    const likeBtn = $(".vp-like", box), lc = $(".vp-lc", box);
+    let liked = false;
+    iLiked(v.id).then((x) => { liked = x; likeBtn.classList.toggle("on", liked); });
+    likeBtn.addEventListener("click", async () => {
+      if (!LS.user) { close(); location.hash = "#/auth"; return; }
+      likeBtn.disabled = true;
+      const { data, error } = await sb.rpc("like_video", { p_video: v.id, p_on: !liked });
+      likeBtn.disabled = false;
+      if (error) return;
+      liked = !liked; likeBtn.classList.toggle("on", liked);
+      v.likes_count = Number(data) || 0; lc.textContent = fmtN(v.likes_count);
+      if (onChange) onChange();
+    });
+    const del = $(".vp-del", box);
+    if (del) del.addEventListener("click", async () => {
+      if (!confirm("Delete this video?")) return;
+      del.disabled = true;
+      const { error } = await sb.from("videos").delete().eq("id", v.id);
+      if (error) { del.disabled = false; alert("Could not delete. Try again."); return; }
+      sb.storage.from("videos").remove([v.video_path].concat(v.thumb_path ? [v.thumb_path] : [])).catch(() => {});
+      close(); if (onChange) onChange(true);
+    });
+  }
+
+  /* ---- grid ---- */
+  LS.mountVideoGrid = function (box, uid, mine, onCount) {
+    let dead = false;
+    async function load() {
+      box.innerHTML = `<div class="pf-empty">Loading…</div>`;
+      const vids = await listVideos(uid);
+      if (dead) return;
+      if (onCount) onCount(vids);
+      if (!vids.length) {
+        box.innerHTML = `<div class="pf-empty">${mine ? `No videos yet.<br><a class="pf-btn" href="#/upload-video" style="margin-top:14px">⬆️ Upload your first video</a>` : "No videos yet."}</div>`;
+        return;
+      }
+      box.innerHTML = `<div class="vgrid">${vids.map((v, i) => `<button class="vcell" data-i="${i}" type="button">${v.thumb_path ? `<img loading="lazy" src="${esc(url(v.thumb_path))}" alt="">` : `<video muted preload="metadata" src="${esc(url(v.video_path))}#t=0.5"></video>`}<span>▶ ${fmtN(v.views)}</span></button>`).join("")}</div>`;
+      $$(".vcell", box).forEach((b) => b.addEventListener("click", () => openPlayer(vids[+b.dataset.i], mine, (gone) => { if (gone) load(); else if (onCount) onCount(vids); })));
+    }
+    load();
+    return () => { dead = true; };
+  };
+
+  /* ---- my profile: grid, Upload button, real likes ---- */
+  const origProfile = S.profile;
+  S.profile = function (view) {
+    const cleanup = origProfile(view);
+    if (!LS.user || !$("#pftabs", view)) return cleanup;
+    const btns = $(".pf-btns", view);
+    if (btns) btns.insertAdjacentHTML("beforeend", `<a class="pf-btn" href="#/upload-video">⬆️ Upload</a>`);
+    const dr = $("#drawer", view);
+    if (dr) { const first = $(".dr-sec:nth-of-type(3), .dr-sec", dr); const secs = $$(".dr-sec", dr); const target = secs[2] || null; const a = document.createElement("a"); a.className = "dr-item"; a.href = "#/upload-video"; a.innerHTML = `<span class="dr-ic">⬆️</span><b>Upload video</b><span class="dr-go">›</span>`; if (target && target.nextSibling) target.parentNode.insertBefore(a, target.nextSibling); else dr.appendChild(a); }
+    const empty = $("#pfempty", view);
+    const grid = document.createElement("div");
+    grid.id = "pfvid";
+    empty.parentNode.insertBefore(grid, empty);
+    empty.style.display = "none";
+    const stop = LS.mountVideoGrid(grid, LS.user.id, true);
+    const likesEl = $$(".pf-stats b", view)[2];
+    totalLikes(LS.user.id).then((n) => { if (likesEl) likesEl.textContent = fmtN(n); });
+    $("#pftabs", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-i]");
+      if (!b) return;
+      const first = b.dataset.i === "0";
+      grid.style.display = first ? "" : "none";
+      empty.style.display = first ? "none" : "";
+    });
+    return () => { stop(); if (typeof cleanup === "function") cleanup(); };
+  };
+
+  /* ---- someone else's profile ---- */
+  const origUser = S.userProfile;
+  S.userProfile = function (view, uname) {
+    const cleanup = origUser(view, uname);
+    let dead = false, stop = null;
+    (async () => {
+      if (!sb) return;
+      const { data } = await sb.from("profiles").select("id").eq("username", uname).maybeSingle();
+      if (dead || !data) return;
+      const body = $("#ubody", view);
+      if (!body) return;
+      // wait until the profile card has been drawn
+      for (let i = 0; i < 40 && !dead && !$(".pf-btns", body); i++) await new Promise((r) => setTimeout(r, 150));
+      if (dead || !$(".pf-btns", body)) return;
+      const mine = LS.user && LS.user.id === data.id;
+      const grid = document.createElement("div");
+      body.appendChild(grid);
+      stop = LS.mountVideoGrid(grid, data.id, mine);
+      totalLikes(data.id).then((n) => { const ls = $("#ulikes", body); if (ls) ls.textContent = fmtN(n); });
+      const stats = $(".pf-stats", body);
+      if (stats) { stats.insertAdjacentHTML("beforeend", `<div><b id="ulikes">…</b><small>Likes</small></div>`); totalLikes(data.id).then((n) => { const l = $("#ulikes", body); if (l) l.textContent = fmtN(n); }); }
+    })();
+    return () => { dead = true; if (stop) stop(); if (typeof cleanup === "function") cleanup(); };
+  };
+
+  /* ---- upload screen ---- */
+  function makeThumb(file) {
+    return new Promise((resolve) => {
+      const v = document.createElement("video");
+      const u = URL.createObjectURL(file);
+      let done = false;
+      const fin = (b) => { if (done) return; done = true; URL.revokeObjectURL(u); resolve(b); };
+      v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = u;
+      v.addEventListener("loadeddata", () => { try { v.currentTime = Math.min(0.5, (v.duration || 1) / 2); } catch (e) { fin(null); } });
+      v.addEventListener("seeked", () => {
+        try {
+          const w = v.videoWidth, h = v.videoHeight;
+          if (!w || !h) return fin(null);
+          const sc = Math.min(1, 480 / w);
+          const c = document.createElement("canvas");
+          c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+          c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+          c.toBlob((b) => fin(b), "image/jpeg", 0.8);
+        } catch (e) { fin(null); }
+      });
+      v.addEventListener("error", () => fin(null));
+      setTimeout(() => fin(null), 8000);
+    });
+  }
+
+  S.uploadVideo = function (view) {
+    if (!sb || !LS.user) { location.hash = "#/auth"; return; }
+    view.innerHTML = `<header class="er-top"><button class="icon-btn" id="ubk" aria-label="Back">←</button><div class="er-title">Upload video</div><span style="width:40px"></span></header>
+      <div class="upv">
+        <input type="file" id="ufile" accept="video/mp4,video/webm,video/quicktime,video/*" hidden>
+        <button class="btn big" id="upick" type="button">🎬 Choose a video</button>
+        <video id="uprev" controls playsinline hidden></video>
+        <textarea id="ucap" maxlength="150" placeholder="Write a caption (optional)"></textarea>
+        <div class="msg" id="umsg"></div>
+        <button class="btn big" id="upost" type="button" disabled>Post</button>
+      </div>`;
+    let file = null, busy = false;
+    const msg = (t) => { $("#umsg", view).textContent = t || ""; };
+    $("#ubk", view).addEventListener("click", () => { location.hash = "#/profile"; });
+    $("#upick", view).addEventListener("click", () => $("#ufile", view).click());
+    $("#ufile", view).addEventListener("change", (e) => {
+      const f = e.target.files && e.target.files[0];
+      file = null; $("#upost", view).disabled = true; msg("");
+      if (!f) return;
+      if (!/^video\/(mp4|webm|quicktime)$/.test(f.type)) { msg("Please choose an MP4, WebM or MOV video."); return; }
+      if (f.size > MAX) { msg("That video is over 50 MB. Choose a smaller one."); return; }
+      file = f;
+      const pv = $("#uprev", view);
+      pv.src = URL.createObjectURL(f); pv.hidden = false;
+      $("#upick", view).textContent = "🎬 Choose a different video";
+      $("#upost", view).disabled = false;
+    });
+    $("#upost", view).addEventListener("click", async () => {
+      if (!file || busy) return;
+      busy = true; const btn = $("#upost", view); btn.disabled = true; btn.textContent = "Checking caption…"; msg("");
+      try {
+        const cap = $("#ucap", view).value.trim().slice(0, 150);
+        if (cap) {
+          const m = await LS.moderate(cap, "caption");
+          if (m && m.allowed === false) { msg(m.message || "That caption is not allowed."); return; }
+        }
+        btn.textContent = "Uploading… please wait";
+        const id = uuid(), uid = LS.user.id;
+        const ext = file.type === "video/webm" ? "webm" : file.type === "video/quicktime" ? "mov" : "mp4";
+        const vpath = `${uid}/${id}.${ext}`;
+        const up = await sb.storage.from("videos").upload(vpath, file, { contentType: file.type, upsert: false });
+        if (up.error) { msg("Upload failed: " + up.error.message); return; }
+        let tpath = null;
+        const tb = await makeThumb(file);
+        if (tb) {
+          tpath = `${uid}/${id}.jpg`;
+          const tu = await sb.storage.from("videos").upload(tpath, tb, { contentType: "image/jpeg", upsert: false });
+          if (tu.error) tpath = null;
+        }
+        const ins = await sb.from("videos").insert({ user_id: uid, video_path: vpath, thumb_path: tpath, caption: cap || null });
+        if (ins.error) { sb.storage.from("videos").remove([vpath].concat(tpath ? [tpath] : [])).catch(() => {}); msg("Could not save: " + ins.error.message); return; }
+        location.hash = "#/profile";
+      } catch (e) {
+        msg("Something went wrong. Try again.");
+      } finally {
+        busy = false;
+        if ($("#upost", view)) { $("#upost", view).textContent = "Post"; $("#upost", view).disabled = !file; }
+      }
+    });
+  };
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
@@ -3804,6 +4052,7 @@ body.immersive #tabbar { display: none; }
     [/^\/edit-profile$/, S.editProfile, "thread"],
     [/^\/recharge$/, S.recharge, "thread"],
     [/^\/earnings$/, S.earnings, "thread"],
+    [/^\/upload-video$/, S.uploadVideo, "thread"],
     [/^\/follows\/(followers|following)$/, S.follows, "profile"],
     [/^\/u\/([\w]+)$/, S.userProfile, "profile"],
   ];
