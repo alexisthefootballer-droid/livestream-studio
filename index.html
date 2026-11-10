@@ -479,7 +479,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     <main id="view"></main>
     <nav id="tabbar">
       <a href="#/" data-tab="home"><span>🏠</span><small>Home</small></a>
-      <a href="#/discover" data-tab="discover"><span>🔍</span><small>Discover</small></a>
+      <a href="#/friends" data-tab="friends"><span>👥</span><small>Friends</small></a>
       <a href="#/golive" data-tab="golive" class="center" aria-label="Go Live"><span>＋</span></a>
       <a href="#/inbox" data-tab="inbox"><span>💬</span><small>Inbox</small></a>
       <a href="#/profile" data-tab="profile"><span>👤</span><small>Profile</small></a>
@@ -4286,7 +4286,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   const $ = LS.$, $$ = LS.$$;
   const esc = LS.esc;
   const sb = LS.sb;
-  const fmtN = (n) => (n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "K" : String(n || 0));
+  const fmtN = (n) => { n = Number(n) || 0; return n >= 10000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "K" : n.toLocaleString("en-US"); };
   const vurl = (p) => (sb && p ? sb.storage.from("videos").getPublicUrl(p).data.publicUrl : "");
   const hueOf = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
   const P = {}; // profile cache
@@ -4327,6 +4327,38 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   .fy-fol{position:absolute;left:50%;bottom:-10px;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;border:0;background:#ff2d55;color:#fff;font-size:16px;line-height:20px;padding:0}
   .fy-like,.fy-mute{background:none;border:0;color:#fff;font-size:34px;text-shadow:0 1px 4px #000;margin-top:10px}
   .fy-like.on{color:#ff2d55}
+  .fy-ic{background:none;border:0;padding:0;margin-top:8px;display:flex;flex-direction:column;align-items:center;gap:2px;color:#fff}
+  .fy-ic svg{width:36px;height:36px;fill:#fff;filter:drop-shadow(0 1px 3px #000a)}
+  .fy-ic.on svg{fill:#ffc93c}
+  .fy-ic small{margin-top:0!important}
+  .fy-top .fy-live-btn{position:absolute;left:12px;top:8px;display:flex;flex-direction:column;align-items:center;gap:0;font-size:11px;font-weight:800;color:#fff;border:2px solid #fff;border-radius:7px;padding:1px 6px;line-height:1.2;border-bottom-color:#fff}
+  .fy-top .fy-title{color:#fff;font-size:18px}
+  .fy-more{background:none;border:0;color:#ffffffcc;font-weight:700;padding:0 0 0 4px;font-size:15px}
+  .fy-cap{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .fy-cap.open{-webkit-line-clamp:unset;max-height:30vh;overflow-y:auto}
+  .fy-disc{position:absolute;right:10px;bottom:22px;z-index:3;width:44px;height:44px;border-radius:50%;background:#222;border:8px solid #111;box-sizing:content-box;display:grid;place-items:center;animation:fyspin 6s linear infinite}
+  .fy-disc>span{display:block;width:30px;height:30px;border-radius:50%;overflow:hidden}
+  @keyframes fyspin{to{transform:rotate(360deg)}}
+  .fy-pop{position:absolute;font-size:96px;line-height:1;color:#ff2d55;transform:translate(-50%,-50%);pointer-events:none;z-index:6;text-shadow:0 2px 12px #0006;animation:fypop .85s ease forwards}
+  .cm-bg{position:fixed;inset:0;background:#0008;z-index:150;display:flex;align-items:flex-end}
+  .cm{width:100%;max-height:72vh;min-height:46vh;display:flex;flex-direction:column;background:#161618;color:#fff;border-radius:16px 16px 0 0}
+  .cm-h{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;font-size:15px;border-bottom:1px solid #2a2a2e}
+  .cm-x{background:none;border:0;color:#fff;font-size:20px}
+  .cm-list{flex:1;overflow-y:auto;padding:8px 16px}
+  .cm-row{display:flex;gap:10px;padding:10px 0;align-items:flex-start}
+  .cm-row>div{flex:1;min-width:0}
+  .cm-row small{color:#9a9aa6;margin-left:6px}
+  .cm-row p{margin:2px 0 0;font-size:15px;line-height:1.35;word-break:break-word}
+  .cm-row .cm-del{background:none;border:0;color:#9a9aa6;font-size:16px}
+  .cm-empty{color:#9a9aa6;text-align:center;padding:40px 0}
+  .cm-in{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid #2a2a2e}
+  .cm-in input{flex:1;height:42px;border-radius:21px;border:0;background:#2a2a2e;color:#fff;padding:0 16px;font-size:15px;outline:none}
+  .cm-in button{width:42px;height:42px;border-radius:50%;border:0;background:#ff2d55;color:#fff;font-size:18px}
+  .cm-msg{color:#ff8a8a;font-size:13px;padding:0 16px 8px;min-height:0}
+  .lvl-row{display:flex;align-items:center;gap:12px;padding:12px 16px;text-decoration:none;color:#fff;border-bottom:1px solid #2a2a2e}
+  .lvl-row>div{flex:1;min-width:0}
+  .lvl-row small{display:block;color:#9a9aa6}
+  .lvl-row .btn{padding:6px 14px}
   .fy-pop{position:absolute;font-size:96px;line-height:1;color:#ff2d55;transform:translate(-50%,-50%);pointer-events:none;z-index:6;text-shadow:0 2px 12px #0006;animation:fypop .85s ease forwards}
   @keyframes fypop{0%{transform:translate(-50%,-50%) scale(.3);opacity:0}25%{transform:translate(-50%,-50%) scale(1.15);opacity:1}100%{transform:translate(-50%,-110%) scale(1);opacity:0}}
   .fy-info{position:absolute;left:14px;right:84px;bottom:22px;color:#fff;z-index:3;text-shadow:0 1px 4px #000}
@@ -4347,15 +4379,80 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   `;
   document.head.appendChild(css);
 
+  /* ---------- comments sheet + live list ---------- */
+  function openComments(v, countEl) {
+    const bg = document.createElement("div");
+    bg.className = "cm-bg";
+    bg.innerHTML = `<div class="cm"><div class="cm-h"><b id="cmt">Comments</b><button type="button" class="cm-x" aria-label="Close">✕</button></div><div class="cm-list" id="cml"><div class="cm-empty">Loading…</div></div><div class="cm-msg" id="cmm"></div><div class="cm-in"><input id="cmi" maxlength="300" placeholder="Add comment..." autocomplete="off"><button type="button" id="cms" aria-label="Send">➤</button></div></div>`;
+    document.body.appendChild(bg);
+    const close = () => bg.remove();
+    let rows = [], busy = false;
+    const myId = LS.user && LS.user.id;
+    const setCount = () => { $("#cmt", bg).textContent = fmtN(v.comments_count) + " comments"; if (countEl) countEl.textContent = fmtN(v.comments_count); };
+    const render = () => {
+      const l = $("#cml", bg);
+      if (!rows.length) { l.innerHTML = `<div class="cm-empty">No comments yet. Be the first!</div>`; return; }
+      l.innerHTML = rows.map((r) => {
+        const pr = P[r.user_id] || {};
+        return `<div class="cm-row" data-id="${r.id}"><a href="#/u/${esc(pr.username || "")}" class="ring" style="--h:${hueOf(r.user_id)}">${LS.photo(pr, 36)}</a><div><b>@${esc(pr.username || "user")}</b><small>${ago(new Date(r.created_at).getTime())}</small><p>${esc(r.body)}</p></div>${myId && (myId === r.user_id || myId === v.user_id) ? `<button type="button" class="cm-del" data-del="${r.id}" aria-label="Delete">🗑</button>` : ""}</div>`;
+      }).join("");
+    };
+    async function load() {
+      const { data } = await sb.from("video_comments").select("*").eq("video_id", v.id).order("created_at", { ascending: false }).limit(100);
+      rows = data || [];
+      await profs(rows.map((r) => r.user_id));
+      render(); setCount();
+    }
+    bg.addEventListener("click", async (e) => {
+      if (e.target === bg || e.target.closest(".cm-x")) { close(); return; }
+      const d = e.target.closest("[data-del]");
+      if (d) {
+        const { error } = await sb.from("video_comments").delete().eq("id", d.dataset.del);
+        if (!error) { rows = rows.filter((r) => String(r.id) !== d.dataset.del); v.comments_count = Math.max(0, (v.comments_count || 0) - 1); render(); setCount(); }
+        return;
+      }
+      if (e.target.closest("#cms")) send();
+    });
+    $("#cmi", bg).addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    async function send() {
+      if (busy) return;
+      if (!LS.user) { close(); location.hash = "#/auth"; return; }
+      const inp = $("#cmi", bg), msg = $("#cmm", bg), text = inp.value.trim();
+      if (!text) return;
+      busy = true; msg.textContent = "";
+      try {
+        const m = await LS.moderate(text, "comment");
+        if (m && m.allowed === false) { msg.textContent = m.message || "That comment is not allowed."; return; }
+        const { error } = await sb.from("video_comments").insert({ video_id: v.id, user_id: LS.user.id, body: text.slice(0, 300) });
+        if (error) { msg.textContent = "Could not post. Try again."; return; }
+        inp.value = ""; v.comments_count = (v.comments_count || 0) + 1;
+        await load();
+      } catch (e) { msg.textContent = "Something went wrong."; } finally { busy = false; }
+    }
+    setCount(); load();
+  }
+
+  async function openLives() {
+    const bg = document.createElement("div");
+    bg.className = "cm-bg";
+    bg.innerHTML = `<div class="cm"><div class="cm-h"><b>LIVE now</b><button type="button" class="cm-x" aria-label="Close">✕</button></div><div class="cm-list"><div class="cm-empty">Loading…</div></div></div>`;
+    document.body.appendChild(bg);
+    bg.addEventListener("click", (e) => { if (e.target === bg || e.target.closest(".cm-x") || e.target.closest("a")) bg.remove(); });
+    const rows = await liveRows();
+    await profs(rows.map((r) => r.host_id));
+    const l = $(".cm-list", bg);
+    l.innerHTML = rows.length ? rows.map((r) => `<a class="lvl-row" href="#/live/${r.id}"><span class="ring" style="--h:${hueOf(r.host_id)}">${LS.photo(P[r.host_id], 44)}</span><div><b>${esc(nameOf(r.host_id))}</b><small>${esc(r.title || "Live now")} · 👁 ${fmtN(r.viewer_count)}</small></div><span class="btn">Watch</span></a>`).join("") : `<div class="cm-empty">Nobody is live right now.</div>`;
+  }
+
   /* ---------- For You feed ---------- */
   const origHome = S.home;
-  S.home = function (view) {
+  S.home = function (view, forced) {
     if (!sb) return origHome(view);
-    let tab = LS.store ? LS.store.get("fyTab", "fy") : "fy";
+    let tab = forced || (LS.store ? LS.store.get("fyTab", "fy") : "fy");
     let dead = false, io = null, soundOn = false;
     const viewed = new Set();
     view.innerHTML = `<div class="fyp">
-      <div class="fy-top"><button data-t="fol">Following</button><button data-t="fy">For You</button><a class="fy-search" href="#/discover" aria-label="Search">🔍</a></div>
+      <div class="fy-top">${forced ? `<b class="fy-title">Friends</b>` : `<button type="button" class="fy-live-btn" data-live="1" aria-label="Live">LIVE</button><button data-t="fol">Following</button><button data-t="fy">For You</button>`}<a class="fy-search" href="#/discover" aria-label="Search">🔍</a></div>
       <div class="fy-scroll" id="fyscroll"><div class="fy-empty">Loading…</div></div>
     </div>`;
     const scroll = $("#fyscroll", view);
@@ -4382,6 +4479,11 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       try {
         let qy = sb.from("videos").select("*").order("created_at", { ascending: false }).limit(40);
         if (tab === "fol") qy = fset.size ? qy.in("user_id", Array.from(fset)) : null;
+        else if (tab === "friends") {
+          let mut = [];
+          if (myId) { const { data: fr } = await sb.from("follows").select("follower_id").eq("followee_id", myId); mut = (fr || []).map((r) => r.follower_id).filter((i) => fset.has(i)); }
+          qy = mut.length ? qy.in("user_id", mut) : null;
+        }
         if (qy) { const { data } = await qy; vids = data || []; }
       } catch (e) { /* ignore */ }
       if (dead) return;
@@ -4390,8 +4492,12 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (myId && vids.length) {
         try { const { data } = await sb.from("video_likes").select("video_id").eq("user_id", myId).in("video_id", vids.map((v) => v.id)); liked = new Set((data || []).map((r) => r.video_id)); } catch (e) { /* ignore */ }
       }
+      let saved = new Set();
+      if (myId && vids.length) {
+        try { const { data } = await sb.from("video_saves").select("video_id").eq("user_id", myId).in("video_id", vids.map((v) => v.id)); saved = new Set((data || []).map((r) => r.video_id)); } catch (e) { /* ignore */ }
+      }
       if (dead) return;
-      const liveHtml = fl.map((r) => {
+      const liveHtml = (tab === "friends" ? [] : fl).map((r) => {
         const h = hueOf(r.host_id), pr = P[r.host_id];
         return `<section class="fy-item fy-live" style="--h:${h}"><div class="fy-lc"><span class="tag">● LIVE NOW</span><br><span class="ring lg" style="--h:${h}">${LS.photo(pr, 92)}</span><h3>${esc(nameOf(r.host_id))} is live</h3><p>${esc(r.title || "Live now")} · 👁 ${fmtN(r.viewer_count)}</p><a class="btn big" href="#/live/${r.id}">🔴 Watch live</a></div></section>`;
       }).join("");
@@ -4402,13 +4508,16 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           <div class="fy-side">
             <a class="fy-av" href="#/u/${esc(pr.username || "")}"><span class="ring" style="--h:${hueOf(v.user_id)}">${LS.photo(pr, 48)}</span>${mine || fol ? "" : `<button class="fy-fol" type="button" data-uid="${v.user_id}" aria-label="Follow">+</button>`}</a>
             <button class="fy-like ${liked.has(v.id) ? "on" : ""}" type="button" data-i="${i}" aria-label="Like">♥</button><small class="fy-lc2">${fmtN(v.likes_count)}</small>
-            <small>👁 ${fmtN(v.views)}</small>
+            <button class="fy-ic fy-cm" type="button" data-i="${i}" aria-label="Comments"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 5.9 2 10.7c0 2.6 1.3 4.9 3.4 6.5L4.5 22l4.6-2.4c.9.2 1.9.3 2.9.3 5.5 0 10-3.9 10-8.7S17.5 2 12 2zm-4 10.2a1.3 1.3 0 110-2.6 1.3 1.3 0 010 2.6zm4 0a1.3 1.3 0 110-2.6 1.3 1.3 0 010 2.6zm4 0a1.3 1.3 0 110-2.6 1.3 1.3 0 010 2.6z"/></svg><small class="fy-cmc">${fmtN(v.comments_count)}</small></button>
+            <button class="fy-ic fy-sv ${saved.has(v.id) ? "on" : ""}" type="button" data-i="${i}" aria-label="Save"><svg viewBox="0 0 24 24"><path d="M5 2h14a1 1 0 011 1v19l-8-5-8 5V3a1 1 0 011-1z"/></svg><small class="fy-svc">${fmtN(v.saves_count)}</small></button>
+            <button class="fy-ic fy-sh" type="button" data-i="${i}" aria-label="Share"><svg viewBox="0 0 24 24"><path d="M14 3v5C7 8.5 3 12.5 2 20c2.6-3.7 6.2-5.3 12-5.3V20l8-8.5L14 3z"/></svg><small class="fy-shc">${fmtN(v.shares_count)}</small></button>
           </div>
-          <div class="fy-info"><b>@${esc(pr.username || "user")}</b>${v.caption ? `<p>${esc(v.caption)}</p>` : ""}</div>
+          <div class="fy-info"><b>@${esc(pr.username || "user")}</b>${v.caption ? `<p class="fy-cap">${esc(v.caption)}</p>${v.caption.length > 60 ? `<button type="button" class="fy-more" data-more="1">…more</button>` : ""}` : ""}<small style="opacity:.8;display:block;margin-top:4px">👁 ${fmtN(v.views)} views</small></div>
+          <div class="fy-disc"><span>${LS.photo(pr, 30)}</span></div>
         </section>`;
       }).join("");
       if (!liveHtml && !vidHtml) {
-        scroll.innerHTML = `<div class="fy-empty"><div>${tab === "fol" ? (fset.size ? "People you follow have not posted yet." : "Follow people to see their videos and lives here.") : "No videos yet."}<br><br>${LS.user ? `<a class="btn" href="#/upload-video">⬆️ Upload a video</a>` : `<a class="btn" href="#/auth">Log in</a>`}</div></div>`;
+        scroll.innerHTML = `<div class="fy-empty"><div>${tab === "fol" ? (fset.size ? "People you follow have not posted yet." : "Follow people to see their videos and lives here.") : tab === "friends" ? "Friends are people who follow each other. Their videos show here." : "No videos yet."}<br><br>${LS.user ? `<a class="btn" href="#/upload-video">⬆️ Upload a video</a>` : `<a class="btn" href="#/auth">Log in</a>`}</div></div>`;
         return;
       }
       scroll.innerHTML = liveHtml + vidHtml + (vids.length ? "" : "");
@@ -4450,6 +4559,33 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         if (f) { e.preventDefault(); e.stopPropagation(); f.disabled = true; if (await LS.setFollow(f.dataset.uid, true)) f.remove(); else f.disabled = false; return; }
         const lk = e.target.closest(".fy-like");
         if (lk) { toggleLike(lk, null); return; }
+        const mo = e.target.closest("[data-more]");
+        if (mo) { const c = $(".fy-cap", mo.parentNode); if (c) { const o = c.classList.toggle("open"); mo.textContent = o ? " less" : "…more"; } return; }
+        const cmb = e.target.closest(".fy-cm");
+        if (cmb) { openComments(vids[+cmb.dataset.i], $(".fy-cmc", cmb)); return; }
+        const svb = e.target.closest(".fy-sv");
+        if (svb) {
+          if (!LS.user) { location.hash = "#/auth"; return; }
+          if (svb.disabled) return;
+          const v = vids[+svb.dataset.i], on = !svb.classList.contains("on");
+          svb.disabled = true;
+          const { data, error } = await sb.rpc("save_video", { p_video: v.id, p_on: on });
+          svb.disabled = false;
+          if (error) return;
+          svb.classList.toggle("on", on); $(".fy-svc", svb).textContent = fmtN(Number(data) || 0);
+          return;
+        }
+        const shb = e.target.closest(".fy-sh");
+        if (shb) {
+          const v = vids[+shb.dataset.i], pr = P[v.user_id] || {};
+          const url = location.origin + "/#/u/" + (pr.username || "");
+          const text = (v.caption || "Watch this video") + " — @" + (pr.username || "user");
+          let done = false;
+          try { if (navigator.share) { await navigator.share({ title: "LiveStream Studio", text, url }); done = true; } } catch (x) { /* cancelled */ }
+          if (!done) { try { await navigator.clipboard.writeText(url); const h = document.createElement("div"); h.className = "fy-hint"; h.textContent = "🔗 Link copied"; $(".fyp", view).appendChild(h); setTimeout(() => h.remove(), 2000); done = true; } catch (x) { /* ignore */ } }
+          if (done) { const { data } = await sb.rpc("share_video", { p_video: v.id }); if (data != null) $(".fy-shc", shb).textContent = fmtN(Number(data) || 0); }
+          return;
+        }
         const it = e.target.closest(".fy-item[data-i]");
         if (it && !e.target.closest("a,button")) {
           const now = Date.now();
@@ -4474,6 +4610,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     }
 
     $(".fy-top", view).addEventListener("click", (e) => {
+      if (e.target.closest("[data-live]")) { openLives(); return; }
       const b = e.target.closest("[data-t]");
       if (!b || b.dataset.t === tab) return;
       tab = b.dataset.t; try { LS.store && LS.store.set("fyTab", tab); } catch (x) { /* ignore */ }
@@ -4482,6 +4619,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     setTabs(); load(); bell();
     return () => { dead = true; if (io) io.disconnect(); $$("video", scroll).forEach((x) => { try { x.pause(); x.removeAttribute("src"); x.load(); } catch (e) { /* ignore */ } }); };
   };
+
+  S.friends = function (view) { return S.home(view, "friends"); };
 
   /* ---------- live alerts: someone you follow goes live ---------- */
   const seen = new Set();
@@ -4551,6 +4690,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   const routes = [
     [/^\/$/, S.home, "home"],
     [/^\/discover$/, S.discover, "discover"],
+    [/^\/friends$/, (v) => S.friends(v), "friends"],
     [/^\/live$/, S.liveList, "home"],
     [/^\/live\/([\w-]+)$/, S.room, "room"],
     [/^\/golive$/, S.goLive, "golive"],
