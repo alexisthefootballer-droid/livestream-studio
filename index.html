@@ -3935,7 +3935,10 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         <div class="pf-btns" style="justify-content:center">
           ${me ? `<a class="pf-btn" href="#/edit-profile">✏️ Edit profile</a>` : LS.user ? followBtn(data.id, on) : `<a class="pf-btn" href="#/auth">Log in to follow</a>`}
           ${live ? `<a class="pf-btn" href="#/live/${live.id}">🔴 Watch live</a>` : ""}
+          ${me ? "" : `<button class="pf-btn" id="umore" type="button">⋯</button>`}
         </div>`;
+      const um = $("#umore", body);
+      if (um) um.addEventListener("click", () => LS.reportSheet({ uid: data.id, uname: data.username }));
       const fb = $(".fbtn", body);
       if (fb) {
         let cur = on;
@@ -4090,6 +4093,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       <div class="vp-side">
         <button class="vp-like" aria-label="Like">♥</button><small class="vp-lc">${fmtN(v.likes_count)}</small>
         ${mine ? `<button class="vp-del" aria-label="Delete">🗑</button>` : ""}
+        ${mine ? "" : `<button class="vp-mr" aria-label="More">⋯</button>`}
       </div>
       <div class="vp-info"><small>👁 ${fmtN(v.views)} views</small><p>${esc(v.caption || "")}</p></div>`;
     document.body.appendChild(box);
@@ -4108,6 +4112,12 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       liked = !liked; likeBtn.classList.toggle("on", liked);
       v.likes_count = Number(data) || 0; lc.textContent = fmtN(v.likes_count);
       if (onChange) onChange();
+    });
+    const mr = $(".vp-mr", box);
+    if (mr) mr.addEventListener("click", async () => {
+      let uname = "user";
+      try { const { data } = await sb.from("profiles").select("username").eq("id", v.user_id).maybeSingle(); if (data) uname = data.username; } catch (e) { /* ignore */ }
+      LS.reportSheet({ uid: v.user_id, uname, vid: v.id, done: (k) => { if (k === "block") { close(); if (onChange) onChange(true); } } });
     });
     const del = $(".vp-del", box);
     if (del) del.addEventListener("click", async () => {
@@ -4589,6 +4599,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       let vids = [];
       try { const { data } = await sb.from("videos").select("*").order("created_at", { ascending: false }).limit(60); vids = data || []; } catch (e) { /* ignore */ }
       if (dead || tab !== "com") return;
+      { const bl = await LS.myBlocks(true); vids = vids.filter((v) => !bl.has(v.user_id)); }
       await profs(vids.map((v) => v.user_id));
       if (dead || tab !== "com") return;
       if (!vids.length) { scroll.innerHTML = `<div class="fy-empty"><div>No videos yet.<br><br>${LS.user ? `<a class="btn" href="#/upload-video">⬆️ Upload a video</a>` : `<a class="btn" href="#/auth">Log in</a>`}</div></div>`; return; }
@@ -4630,6 +4641,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         if (qy) { const { data } = await qy; vids = data || []; }
       } catch (e) { /* ignore */ }
       if (dead) return;
+      { const bl = await LS.myBlocks(true); vids = vids.filter((v) => !bl.has(v.user_id)); }
       let jump = false;
       if (startVid) {
         const at = vids.findIndex((v) => v.id === startVid);
@@ -4662,6 +4674,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
             <button class="fy-ic fy-cm" type="button" data-i="${i}" aria-label="Comments"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 5.9 2 10.7c0 2.6 1.3 4.9 3.4 6.5L4.5 22l4.6-2.4c.9.2 1.9.3 2.9.3 5.5 0 10-3.9 10-8.7S17.5 2 12 2zm-4 10.2a1.3 1.3 0 110-2.6 1.3 1.3 0 010 2.6zm4 0a1.3 1.3 0 110-2.6 1.3 1.3 0 010 2.6zm4 0a1.3 1.3 0 110-2.6 1.3 1.3 0 010 2.6z"/></svg><small class="fy-cmc">${fmtN(v.comments_count)}</small></button>
             <button class="fy-ic fy-sv ${saved.has(v.id) ? "on" : ""}" type="button" data-i="${i}" aria-label="Save"><svg viewBox="0 0 24 24"><path d="M5 2h14a1 1 0 011 1v19l-8-5-8 5V3a1 1 0 011-1z"/></svg><small class="fy-svc">${fmtN(v.saves_count)}</small></button>
             <button class="fy-ic fy-sh" type="button" data-i="${i}" aria-label="Share"><svg viewBox="0 0 24 24"><path d="M14 3v5C7 8.5 3 12.5 2 20c2.6-3.7 6.2-5.3 12-5.3V20l8-8.5L14 3z"/></svg><small class="fy-shc">${fmtN(v.shares_count)}</small></button>
+            ${mine ? "" : `<button class="fy-mr" type="button" data-i="${i}" aria-label="More">⋯</button>`}
           </div>
           <div class="fy-info"><b>@${esc(pr.username || "user")}</b>${v.caption ? `<p class="fy-cap">${esc(v.caption)}</p>${v.caption.length > 60 ? `<button type="button" class="fy-more" data-more="1">…more</button>` : ""}` : ""}<small style="opacity:.8;display:block;margin-top:4px">👁 ${fmtN(v.views)} views</small></div>
           <div class="fy-disc"><span>${LS.photo(pr, 30)}</span></div>
@@ -4727,6 +4740,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           svb.classList.toggle("on", on); $(".fy-svc", svb).textContent = fmtN(Number(data) || 0);
           return;
         }
+        const mrb = e.target.closest(".fy-mr");
+        if (mrb) { const v = vids[+mrb.dataset.i], pr = P[v.user_id] || {}; LS.reportSheet({ uid: v.user_id, uname: pr.username, vid: v.id, done: (k) => { if (k === "block") load(); } }); return; }
         const shb = e.target.closest(".fy-sh");
         if (shb) {
           const v = vids[+shb.dataset.i], pr = P[v.user_id] || {};
@@ -4830,6 +4845,81 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     setInterval(check, 15000);
     try { sb.channel("live-alerts-" + Math.random().toString(36).slice(2, 7)).on("postgres_changes", { event: "*", schema: "public", table: "streams" }, () => setTimeout(check, 800)).subscribe(); } catch (e) { /* polling still works */ }
   }
+})();
+</script>
+  <script>
+/* Report and Block. */
+(function () {
+  const LS = window.LS;
+  const sb = LS.sb;
+  const esc = LS.esc;
+  const st = document.createElement("style");
+  st.textContent = `
+  .rb-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:flex-end}
+  .rb-sh{width:100%;max-width:520px;margin:0 auto;background:#1b1b22;color:#fff;border-radius:18px 18px 0 0;padding:10px 0 18px}
+  .rb-sh h4{margin:8px 16px 6px;font-size:15px;opacity:.7;font-weight:600}
+  .rb-sh button{display:block;width:100%;text-align:left;background:none;border:0;color:#fff;font-size:16px;padding:14px 18px}
+  .rb-sh button.red{color:#ff4d6a}
+  .rb-sh button.cx{text-align:center;opacity:.7;border-top:1px solid #ffffff18;margin-top:6px}
+  .rb-toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#000c;color:#fff;padding:10px 16px;border-radius:20px;z-index:210;font-size:14px}
+  .fy-mr{background:none;border:0;color:#fff;font-size:26px;line-height:1;padding:0;width:44px;height:30px;text-shadow:0 1px 3px #000}
+  `;
+  document.head.appendChild(st);
+
+  let cache = null;
+  LS.myBlocks = async function (force) {
+    if (!LS.user || !sb) return new Set();
+    if (cache && !force) return cache;
+    try {
+      const { data } = await sb.from("user_blocks").select("blocked_id").eq("blocker_id", LS.user.id);
+      cache = new Set((data || []).map((r) => r.blocked_id));
+    } catch (e) { cache = new Set(); }
+    return cache;
+  };
+  function toast(t) { const d = document.createElement("div"); d.className = "rb-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); }
+
+  /* opts: { uid, uname, vid, done(kind) } */
+  LS.reportSheet = async function (o) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    if (LS.user.id === o.uid) return;
+    const blocked = (await LS.myBlocks()).has(o.uid);
+    const ov = document.createElement("div");
+    ov.className = "rb-ov";
+    const close = () => ov.remove();
+    const show = (html) => { ov.innerHTML = `<div class="rb-sh">${html}<button class="cx" data-x="1">Cancel</button></div>`; };
+    ov.addEventListener("click", (e) => { if (e.target === ov || e.target.closest("[data-x]")) close(); });
+    const main = () => {
+      show(`${o.vid ? `<button data-a="rv">🚩 Report video</button>` : ""}<button data-a="ru">🚩 Report @${esc(o.uname || "user")}</button><button class="red" data-a="bl">${blocked ? "✅ Unblock" : "🚫 Block"} @${esc(o.uname || "user")}</button>`);
+    };
+    const REASONS = ["Spam or scam", "Nudity or sexual content", "Violence or dangerous acts", "Harassment or hate", "Under 18 / child safety", "Something else"];
+    const reasons = (kind) => { show(`<h4>Why are you reporting this?</h4>${REASONS.map((r, i) => `<button data-r="${i}">${r}</button>`).join("")}`); ov.dataset.kind = kind; };
+    ov.addEventListener("click", async (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      if (b.dataset.a === "rv") return reasons("video");
+      if (b.dataset.a === "ru") return reasons("user");
+      if (b.dataset.a === "bl") {
+        b.disabled = true;
+        let ok = false;
+        if (blocked) { const r = await sb.from("user_blocks").delete().eq("blocker_id", LS.user.id).eq("blocked_id", o.uid); ok = !r.error; }
+        else { const r = await sb.from("user_blocks").insert({ blocker_id: LS.user.id, blocked_id: o.uid }); ok = !r.error; }
+        if (!ok) { b.disabled = false; toast("Could not do that. Try again."); return; }
+        await LS.myBlocks(true);
+        close(); toast(blocked ? "Unblocked" : "Blocked. Their videos are hidden from you.");
+        if (o.done) o.done(blocked ? "unblock" : "block");
+        return;
+      }
+      if (b.dataset.r != null) {
+        const kind = ov.dataset.kind, reason = REASONS[+b.dataset.r];
+        b.disabled = true;
+        const row = kind === "video" ? { reporter_id: LS.user.id, kind, target_id: o.vid, target_user: o.uid, reason } : { reporter_id: LS.user.id, kind, target_id: o.uid, target_user: o.uid, reason };
+        const r = await sb.from("reports").insert(row);
+        close(); toast(r.error ? "Could not send the report." : "Thanks. We will review it.");
+      }
+    });
+    main();
+    document.body.appendChild(ov);
+  };
 })();
 </script>
   <script>
