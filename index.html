@@ -4162,12 +4162,38 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     const stop = LS.mountVideoGrid(grid, LS.user.id, true);
     const likesEl = $$(".pf-stats b", view)[2];
     totalLikes(LS.user.id).then((n) => { if (likesEl) likesEl.textContent = fmtN(n); });
+    const sgrid = document.createElement("div");
+    sgrid.id = "pfsaved";
+    sgrid.style.display = "none";
+    empty.parentNode.insertBefore(sgrid, empty);
+    let savedStop = null, savedLoaded = false;
+    async function loadSaved() {
+      sgrid.innerHTML = `<div class="pf-empty">Loading…</div>`;
+      let vids = [];
+      try {
+        const r1 = await sb.from("video_saves").select("video_id").eq("user_id", LS.user.id).order("created_at", { ascending: false }).limit(60);
+        const ids = ((r1 && r1.data) || []).map((r) => r.video_id);
+        if (ids.length) {
+          const r2 = await sb.from("videos").select("*").in("id", ids);
+          const by = new Map(((r2 && r2.data) || []).map((v) => [v.id, v]));
+          vids = ids.map((i) => by.get(i)).filter(Boolean);
+        }
+      } catch (e) { /* ignore */ }
+      if (!vids.length) { sgrid.innerHTML = `<div class="pf-empty">No saved videos yet.<br>Tap the 🔖 on any video to save it here.</div>`; return; }
+      sgrid.innerHTML = `<div class="vgrid">${vids.map((v, i) => `<button class="vcell" data-i="${i}" type="button">${v.thumb_path ? `<img loading="lazy" src="${esc(url(v.thumb_path))}" alt="">` : `<video muted preload="metadata" src="${esc(url(v.video_path))}#t=0.5"></video>`}<span>▶ ${fmtN(v.views)}</span></button>`).join("")}</div>`;
+      $$(".vcell", sgrid).forEach((b) => b.addEventListener("click", () => {
+        const v = vids[+b.dataset.i];
+        openPlayer(v, !!(LS.user && v.user_id === LS.user.id), (gone) => { if (gone) loadSaved(); });
+      }));
+    }
     $("#pftabs", view).addEventListener("click", (e) => {
       const b = e.target.closest("[data-i]");
       if (!b) return;
-      const first = b.dataset.i === "0";
-      grid.style.display = first ? "" : "none";
-      empty.style.display = first ? "none" : "";
+      const t = b.dataset.i;
+      grid.style.display = t === "0" ? "" : "none";
+      sgrid.style.display = t === "3" ? "" : "none";
+      empty.style.display = (t === "0" || t === "3") ? "none" : "";
+      if (t === "3") loadSaved();
     });
     return () => { stop(); if (typeof cleanup === "function") cleanup(); };
   };
