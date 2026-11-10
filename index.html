@@ -4138,6 +4138,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         const i = vids.indexOf(v), cell = box.querySelector(`.vcell[data-i="${i}"]`);
         const m = cell && cell.firstElementChild;
         if (m && m.tagName === "VIDEO") { const im = document.createElement("img"); im.alt = ""; im.src = url(tp); cell.replaceChild(im, m); }
+        else if (m && m.tagName === "IMG") m.src = url(tp);
       });
     }
     load();
@@ -4197,6 +4198,42 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   };
 
   /* ---- upload screen ---- */
+  function lumaOf(c) {
+    try {
+      const t = document.createElement("canvas"); t.width = 16; t.height = 16;
+      const x = t.getContext("2d"); x.drawImage(c, 0, 0, 16, 16);
+      const d = x.getImageData(0, 0, 16, 16).data; let sum = 0;
+      for (let k = 0; k < d.length; k += 4) sum += 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2];
+      return sum / 256;
+    } catch (e) { return 255; }
+  }
+  /* grab a few frames and keep the brightest one */
+  LS.pickFrame = function (v) {
+    return new Promise((resolve) => {
+      const dur = v.duration && isFinite(v.duration) ? v.duration : 2;
+      const times = [0.5, 1.5, dur * 0.25, dur * 0.5, dur * 0.75].map((t) => Math.min(Math.max(t, 0.05), Math.max(dur - 0.05, 0.05)));
+      let best = null, bestL = -1, k = 0;
+      const sc = Math.min(1, 480 / (v.videoWidth || 480));
+      const finish = () => { if (!best) return resolve(null); best.toBlob((b) => resolve(b), "image/jpeg", 0.8); };
+      const next = () => {
+        if (k >= times.length || bestL > 40) return finish();
+        try { v.currentTime = times[k++]; } catch (e) { finish(); }
+      };
+      v.addEventListener("seeked", () => {
+        try {
+          const w = v.videoWidth, h = v.videoHeight;
+          if (!w || !h) return next();
+          const c = document.createElement("canvas");
+          c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+          c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+          const l = lumaOf(c);
+          if (l > bestL) { bestL = l; best = c; }
+        } catch (e) { /* ignore */ }
+        next();
+      });
+      next();
+    });
+  };
   function makeThumb(file) {
     return new Promise((resolve) => {
       const v = document.createElement("video");
@@ -4204,20 +4241,9 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       let done = false;
       const fin = (b) => { if (done) return; done = true; URL.revokeObjectURL(u); resolve(b); };
       v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = u;
-      v.addEventListener("loadeddata", () => { try { v.currentTime = Math.min(0.5, (v.duration || 1) / 2); } catch (e) { fin(null); } });
-      v.addEventListener("seeked", () => {
-        try {
-          const w = v.videoWidth, h = v.videoHeight;
-          if (!w || !h) return fin(null);
-          const sc = Math.min(1, 480 / w);
-          const c = document.createElement("canvas");
-          c.width = Math.round(w * sc); c.height = Math.round(h * sc);
-          c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
-          c.toBlob((b) => fin(b), "image/jpeg", 0.8);
-        } catch (e) { fin(null); }
-      });
+      v.addEventListener("loadeddata", () => { LS.pickFrame(v).then(fin, () => fin(null)); }, { once: true });
       v.addEventListener("error", () => fin(null));
-      setTimeout(() => fin(null), 8000);
+      setTimeout(() => fin(null), 15000);
     });
   }
 
@@ -4403,34 +4429,41 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       let done = false;
       const fin = (b) => { if (done) return; done = true; try { v.removeAttribute("src"); v.load(); } catch (e) { /* ignore */ } resolve(b); };
       v.crossOrigin = "anonymous"; v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = u;
-      v.addEventListener("loadeddata", () => { try { v.currentTime = Math.min(0.5, (v.duration || 1) / 2); } catch (e) { fin(null); } });
-      v.addEventListener("seeked", () => {
-        try {
-          const w = v.videoWidth, h = v.videoHeight;
-          if (!w || !h) return fin(null);
-          const sc = Math.min(1, 480 / w);
-          const c = document.createElement("canvas");
-          c.width = Math.round(w * sc); c.height = Math.round(h * sc);
-          c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
-          c.toBlob((b) => fin(b), "image/jpeg", 0.8);
-        } catch (e) { fin(null); }
-      });
+      v.addEventListener("loadeddata", () => { LS.pickFrame(v).then(fin, () => fin(null)); }, { once: true });
       v.addEventListener("error", () => fin(null));
-      setTimeout(() => fin(null), 12000);
+      setTimeout(() => fin(null), 20000);
+    });
+  }
+  function isDarkImg(u) {
+    return new Promise((resolve) => {
+      const im = new Image();
+      im.crossOrigin = "anonymous";
+      im.onload = () => {
+        try {
+          const c = document.createElement("canvas"); c.width = 16; c.height = 16;
+          const x = c.getContext("2d"); x.drawImage(im, 0, 0, 16, 16);
+          const d = x.getImageData(0, 0, 16, 16).data; let sum = 0;
+          for (let k = 0; k < d.length; k += 4) sum += 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2];
+          resolve(sum / 256 < 18);
+        } catch (e) { resolve(false); }
+      };
+      im.onerror = () => resolve(false);
+      im.src = u;
     });
   }
   const fixing = new Set();
   LS.fixThumbs = async function (vids, onFixed) {
     if (!sb || !LS.user) return;
     for (const v of vids) {
-      if (v.thumb_path || v.user_id !== LS.user.id || fixing.has(v.id)) continue;
+      if (v.user_id !== LS.user.id || fixing.has(v.id)) continue;
       fixing.add(v.id);
       try {
+        if (v.thumb_path && !(await isDarkImg(vurl(v.thumb_path) + "?t=" + Date.now()))) continue;
         const blob = await thumbFromUrl(vurl(v.video_path));
         if (!blob) continue;
-        const tp = v.user_id + "/" + v.id + ".jpg";
+        const tp = v.user_id + "/" + v.id + "_" + Date.now().toString(36) + ".jpg";
         const up = await sb.storage.from("videos").upload(tp, blob, { contentType: "image/jpeg", upsert: false });
-        if (up.error && !/exist|duplicate/i.test(up.error.message || "")) continue;
+        if (up.error) continue;
         const { error } = await sb.rpc("set_video_thumb", { p_video: v.id, p_path: tp });
         if (!error) { v.thumb_path = tp; if (onFixed) onFixed(v, tp); }
       } catch (e) { /* ignore */ } finally { fixing.delete(v.id); }
@@ -4542,6 +4575,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         const cell = $(`.cg-c[data-vid="${v.id}"]`, scroll);
         const m = cell && cell.firstElementChild;
         if (m && m.tagName === "VIDEO") { const im = document.createElement("img"); im.alt = ""; im.src = vurl(tp); cell.replaceChild(im, m); }
+        else if (m && m.tagName === "IMG") m.src = vurl(tp);
       });
       scroll.onclick = (e) => {
         const c = e.target.closest("[data-vid]");
