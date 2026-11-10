@@ -4333,6 +4333,18 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   .fy-ic small{margin-top:0!important}
   .fy-top .fy-live-btn{position:absolute;left:12px;top:8px;display:flex;flex-direction:column;align-items:center;gap:0;font-size:11px;font-weight:800;color:#fff;border:2px solid #fff;border-radius:7px;padding:1px 6px;line-height:1.2;border-bottom-color:#fff}
   .fy-top .fy-title{color:#fff;font-size:18px}
+  .fy-top{gap:16px}
+  .fy-top button[data-t]{font-size:17px}
+  .fyp.com .fy-top{background:#0b0b0f}
+  .fy-scroll.com{scroll-snap-type:none;padding-top:60px;background:#0b0b0f}
+  .cg{column-count:2;column-gap:6px;padding:6px 6px 20px}
+  .cg-c{break-inside:avoid;margin-bottom:6px;background:#161618;border-radius:10px;overflow:hidden;position:relative;color:#fff;display:block;width:100%;border:0;padding:0;text-align:left}
+  .cg-c img,.cg-c video{width:100%;display:block;background:#222;min-height:120px;object-fit:cover}
+  .cg-pl{position:absolute;right:8px;top:8px;font-size:12px;background:#0006;border-radius:6px;padding:1px 5px}
+  .cg-cap{padding:8px 10px 0;font-size:15px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .cg-meta{display:flex;align-items:center;gap:8px;padding:8px 10px;color:#ffffffbb;font-size:14px}
+  .cg-meta .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cg-meta .av{width:22px;height:22px;border-radius:50%;overflow:hidden;flex:none;display:block}
   .fy-more{background:none;border:0;color:#ffffffcc;font-weight:700;padding:0 0 0 4px;font-size:15px}
   .fy-cap{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .fy-cap.open{-webkit-line-clamp:unset;max-height:30vh;overflow-y:auto}
@@ -4449,14 +4461,14 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   S.home = function (view, forced) {
     if (!sb) return origHome(view);
     let tab = forced || (LS.store ? LS.store.get("fyTab", "fy") : "fy");
-    let dead = false, io = null, soundOn = false;
+    let dead = false, io = null, soundOn = false, startVid = null;
     const viewed = new Set();
     view.innerHTML = `<div class="fyp">
-      <div class="fy-top">${forced ? `<b class="fy-title">Friends</b>` : `<button type="button" class="fy-live-btn" data-live="1" aria-label="Live">LIVE</button><button data-t="fol">Following</button><button data-t="fy">For You</button>`}<a class="fy-search" href="#/discover" aria-label="Search">🔍</a></div>
+      <div class="fy-top">${forced ? `<b class="fy-title">Friends</b>` : `<button type="button" class="fy-live-btn" data-live="1" aria-label="Live">LIVE</button><button data-t="com">Community</button><button data-t="fol">Following</button><button data-t="fy">For You</button>`}<a class="fy-search" href="#/discover" aria-label="Search">🔍</a></div>
       <div class="fy-scroll" id="fyscroll"><div class="fy-empty">Loading…</div></div>
     </div>`;
     const scroll = $("#fyscroll", view);
-    const setTabs = () => $$(".fy-top button", view).forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
+    const setTabs = () => { $$(".fy-top button", view).forEach((b) => b.classList.toggle("on", b.dataset.t === tab)); $(".fyp", view).classList.toggle("com", tab === "com"); scroll.classList.toggle("com", tab === "com"); };
 
     function bell() {
       try {
@@ -4468,9 +4480,29 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       } catch (e) { /* ignore */ }
     }
 
+    async function loadCom() {
+      let vids = [];
+      try { const { data } = await sb.from("videos").select("*").order("created_at", { ascending: false }).limit(60); vids = data || []; } catch (e) { /* ignore */ }
+      if (dead || tab !== "com") return;
+      await profs(vids.map((v) => v.user_id));
+      if (dead || tab !== "com") return;
+      if (!vids.length) { scroll.innerHTML = `<div class="fy-empty"><div>No videos yet.<br><br>${LS.user ? `<a class="btn" href="#/upload-video">⬆️ Upload a video</a>` : `<a class="btn" href="#/auth">Log in</a>`}</div></div>`; return; }
+      scroll.innerHTML = `<div class="cg">${vids.map((v) => {
+        const pr = P[v.user_id] || {};
+        const media = v.thumb_path ? `<img loading="lazy" alt="" src="${esc(vurl(v.thumb_path))}">` : `<video muted playsinline preload="metadata" src="${esc(vurl(v.video_path))}#t=0.5"></video>`;
+        return `<button type="button" class="cg-c" data-vid="${v.id}">${media}<span class="cg-pl">▶</span>${v.caption ? `<div class="cg-cap">${esc(v.caption)}</div>` : ""}<div class="cg-meta"><span class="av">${LS.photo(pr, 22)}</span><span class="nm">${esc(pr.display_name || pr.username || "user")}</span><span>♡ ${fmtN(v.likes_count)}</span></div></button>`;
+      }).join("")}</div>`;
+      scroll.onclick = (e) => {
+        const c = e.target.closest("[data-vid]");
+        if (!c) return;
+        startVid = c.dataset.vid; tab = "fy"; setTabs(); load();
+      };
+    }
+
     async function load() {
       scroll.innerHTML = `<div class="fy-empty">Loading…</div>`;
       if (io) io.disconnect();
+      if (tab === "com") { await loadCom(); return; }
       const [fset, lives] = await Promise.all([LS.myFollows(), liveRows()]);
       if (dead) return;
       const myId = LS.user && LS.user.id;
@@ -4487,6 +4519,14 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         if (qy) { const { data } = await qy; vids = data || []; }
       } catch (e) { /* ignore */ }
       if (dead) return;
+      let jump = false;
+      if (startVid) {
+        const at = vids.findIndex((v) => v.id === startVid);
+        let one = at >= 0 ? vids.splice(at, 1)[0] : null;
+        if (!one) { try { const { data } = await sb.from("videos").select("*").eq("id", startVid).maybeSingle(); one = data; } catch (e) { /* ignore */ } }
+        if (one) { vids.unshift(one); jump = true; }
+        startVid = null;
+      }
       await profs(fl.map((r) => r.host_id).concat(vids.map((v) => v.user_id)));
       let liked = new Set();
       if (myId && vids.length) {
@@ -4523,6 +4563,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       scroll.innerHTML = liveHtml + vidHtml + (vids.length ? "" : "");
       const hint = document.createElement("div"); hint.className = "fy-hint"; hint.textContent = "🔇 Tap the video for sound"; $(".fyp", view).appendChild(hint);
       setTimeout(() => hint.remove(), 5000);
+      if (jump) { const f = $('.fy-item[data-i="0"]', scroll); if (f) f.scrollIntoView(); }
       const items = $$(".fy-item[data-i]", scroll);
       io = new IntersectionObserver((ents) => {
         ents.forEach((en) => {
