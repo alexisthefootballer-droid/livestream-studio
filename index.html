@@ -4279,6 +4279,246 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
 })();
 </script>
   <script>
+/* For You page (FYP) + live alerts for followers */
+(function () {
+  const LS = window.LS;
+  const S = LS.screens;
+  const $ = LS.$, $$ = LS.$$;
+  const esc = LS.esc;
+  const sb = LS.sb;
+  const fmtN = (n) => (n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "K" : String(n || 0));
+  const vurl = (p) => (sb && p ? sb.storage.from("videos").getPublicUrl(p).data.publicUrl : "");
+  const hueOf = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+  const P = {}; // profile cache
+  async function profs(ids) {
+    const need = Array.from(new Set(ids)).filter((i) => i && !P[i]);
+    if (!need.length || !sb) return;
+    try {
+      const { data } = await sb.from("profiles").select("*").in("id", need);
+      (data || []).forEach((p) => { P[p.id] = p; });
+    } catch (e) { /* ignore */ }
+    need.forEach((i) => { if (!P[i]) P[i] = { id: i, username: "user", display_name: "user" }; });
+  }
+  const nameOf = (id) => { const p = P[id]; return p ? (p.display_name || p.username || "user") : "user"; };
+  async function liveRows() {
+    if (!sb) return [];
+    try {
+      const since = new Date(Date.now() - 60000).toISOString();
+      const { data } = await sb.from("streams").select("id,host_id,title,category,viewer_count").eq("is_live", true).gt("last_seen", since).order("viewer_count", { ascending: false }).limit(30);
+      return data || [];
+    } catch (e) { return []; }
+  }
+
+  const css = document.createElement("style");
+  css.textContent = `
+  .fyp{position:absolute;inset:0;background:#000}
+  .fy-top{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:center;gap:22px;padding:14px 16px 26px;background:linear-gradient(#000a,transparent)}
+  .fy-top button{background:none;border:0;color:#ffffffaa;font-size:18px;font-weight:700;padding:4px 2px;border-bottom:2px solid transparent}
+  .fy-top button.on{color:#fff;border-bottom-color:#fff}
+  .fy-top .fy-search{position:absolute;right:14px;top:12px;font-size:20px;color:#fff;text-decoration:none}
+  .fy-scroll{height:100%;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none}
+  .fy-scroll::-webkit-scrollbar{display:none}
+  .fy-item{height:100%;scroll-snap-align:start;scroll-snap-stop:always;position:relative;background:#000;overflow:hidden}
+  .fy-item video{width:100%;height:100%;object-fit:cover;background:#000}
+  .fy-side{position:absolute;right:10px;bottom:90px;display:flex;flex-direction:column;align-items:center;gap:14px;z-index:3}
+  .fy-side small{color:#fff;font-size:12px;font-weight:700;margin-top:-10px;text-shadow:0 1px 3px #000}
+  .fy-av{position:relative;display:block;width:48px;height:48px}
+  .fy-av .ring{display:block}
+  .fy-fol{position:absolute;left:50%;bottom:-10px;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;border:0;background:#ff2d55;color:#fff;font-size:16px;line-height:20px;padding:0}
+  .fy-like,.fy-mute{background:none;border:0;color:#fff;font-size:34px;text-shadow:0 1px 4px #000;margin-top:10px}
+  .fy-like.on{color:#ff2d55}
+  .fy-info{position:absolute;left:14px;right:84px;bottom:22px;color:#fff;z-index:3;text-shadow:0 1px 4px #000}
+  .fy-info b{font-size:17px}
+  .fy-info p{margin:4px 0 0;font-size:15px;line-height:1.35}
+  .fy-live{display:grid;place-items:center;background:radial-gradient(circle at 50% 35%,hsl(var(--h) 70% 38%),#0b0b12 70%)}
+  .fy-lc{text-align:center;color:#fff;padding:0 28px}
+  .fy-lc .ring{display:inline-block;margin-bottom:14px}
+  .fy-lc h3{margin:6px 0 4px;font-size:22px}
+  .fy-lc p{margin:0 0 18px;color:#ffffffcc}
+  .fy-lc .tag{display:inline-block;background:#ff2d55;color:#fff;font-weight:800;font-size:12px;border-radius:6px;padding:3px 8px;margin-bottom:10px}
+  .fy-empty{height:100%;display:grid;place-items:center;text-align:center;color:#ffffffbb;padding:0 30px}
+  .fy-hint{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:6;background:#000a;color:#fff;border-radius:16px;padding:6px 12px;font-size:13px;pointer-events:none}
+  .fy-bell{position:absolute;left:12px;right:12px;top:54px;z-index:6;background:#1f1f22ee;color:#fff;border:0;border-radius:14px;padding:10px 12px;font-size:14px;text-align:left}
+  .lv-banner{position:fixed;left:10px;right:10px;top:10px;z-index:200;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:16px;background:linear-gradient(90deg,#ff3d71,#7c5cff);color:#fff;font-weight:700;box-shadow:0 6px 24px #0008;text-decoration:none;animation:lvin .3s ease}
+  .lv-banner small{display:block;font-weight:500;opacity:.9}
+  @keyframes lvin{from{transform:translateY(-80px);opacity:0}to{transform:none;opacity:1}}
+  `;
+  document.head.appendChild(css);
+
+  /* ---------- For You feed ---------- */
+  const origHome = S.home;
+  S.home = function (view) {
+    if (!sb) return origHome(view);
+    let tab = LS.store ? LS.store.get("fyTab", "fy") : "fy";
+    let dead = false, io = null, soundOn = false;
+    const viewed = new Set();
+    view.innerHTML = `<div class="fyp">
+      <div class="fy-top"><button data-t="fol">Following</button><button data-t="fy">For You</button><a class="fy-search" href="#/discover" aria-label="Search">🔍</a></div>
+      <div class="fy-scroll" id="fyscroll"><div class="fy-empty">Loading…</div></div>
+    </div>`;
+    const scroll = $("#fyscroll", view);
+    const setTabs = () => $$(".fy-top button", view).forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
+
+    function bell() {
+      try {
+        if (!("Notification" in window) || Notification.permission !== "default" || !LS.user) return;
+        const b = document.createElement("button"); b.type = "button"; b.className = "fy-bell";
+        b.textContent = "🔔 Tap to get an alert when people you follow go live";
+        b.addEventListener("click", () => { try { Notification.requestPermission().then(() => b.remove()); } catch (e) { b.remove(); } });
+        $(".fyp", view).appendChild(b);
+      } catch (e) { /* ignore */ }
+    }
+
+    async function load() {
+      scroll.innerHTML = `<div class="fy-empty">Loading…</div>`;
+      if (io) io.disconnect();
+      const [fset, lives] = await Promise.all([LS.myFollows(), liveRows()]);
+      if (dead) return;
+      const myId = LS.user && LS.user.id;
+      const fl = lives.filter((r) => fset.has(r.host_id) && r.host_id !== myId);
+      let vids = [];
+      try {
+        let qy = sb.from("videos").select("*").order("created_at", { ascending: false }).limit(40);
+        if (tab === "fol") qy = fset.size ? qy.in("user_id", Array.from(fset)) : null;
+        if (qy) { const { data } = await qy; vids = data || []; }
+      } catch (e) { /* ignore */ }
+      if (dead) return;
+      await profs(fl.map((r) => r.host_id).concat(vids.map((v) => v.user_id)));
+      let liked = new Set();
+      if (myId && vids.length) {
+        try { const { data } = await sb.from("video_likes").select("video_id").eq("user_id", myId).in("video_id", vids.map((v) => v.id)); liked = new Set((data || []).map((r) => r.video_id)); } catch (e) { /* ignore */ }
+      }
+      if (dead) return;
+      const liveHtml = fl.map((r) => {
+        const h = hueOf(r.host_id), pr = P[r.host_id];
+        return `<section class="fy-item fy-live" style="--h:${h}"><div class="fy-lc"><span class="tag">● LIVE NOW</span><br><span class="ring lg" style="--h:${h}">${LS.photo(pr, 92)}</span><h3>${esc(nameOf(r.host_id))} is live</h3><p>${esc(r.title || "Live now")} · 👁 ${fmtN(r.viewer_count)}</p><a class="btn big" href="#/live/${r.id}">🔴 Watch live</a></div></section>`;
+      }).join("");
+      const vidHtml = vids.map((v, i) => {
+        const pr = P[v.user_id], mine = myId === v.user_id, fol = fset.has(v.user_id);
+        return `<section class="fy-item" data-i="${i}">
+          <video src="${esc(vurl(v.video_path))}" ${v.thumb_path ? `poster="${esc(vurl(v.thumb_path))}"` : ""} loop playsinline muted preload="metadata"></video>
+          <div class="fy-side">
+            <a class="fy-av" href="#/u/${esc(pr.username || "")}"><span class="ring" style="--h:${hueOf(v.user_id)}">${LS.photo(pr, 48)}</span>${mine || fol ? "" : `<button class="fy-fol" type="button" data-uid="${v.user_id}" aria-label="Follow">+</button>`}</a>
+            <button class="fy-like ${liked.has(v.id) ? "on" : ""}" type="button" data-i="${i}" aria-label="Like">♥</button><small class="fy-lc2">${fmtN(v.likes_count)}</small>
+            <small>👁 ${fmtN(v.views)}</small>
+          </div>
+          <div class="fy-info"><b>@${esc(pr.username || "user")}</b>${v.caption ? `<p>${esc(v.caption)}</p>` : ""}</div>
+        </section>`;
+      }).join("");
+      if (!liveHtml && !vidHtml) {
+        scroll.innerHTML = `<div class="fy-empty"><div>${tab === "fol" ? (fset.size ? "People you follow have not posted yet." : "Follow people to see their videos and lives here.") : "No videos yet."}<br><br>${LS.user ? `<a class="btn" href="#/upload-video">⬆️ Upload a video</a>` : `<a class="btn" href="#/auth">Log in</a>`}</div></div>`;
+        return;
+      }
+      scroll.innerHTML = liveHtml + vidHtml + (vids.length ? "" : "");
+      const hint = document.createElement("div"); hint.className = "fy-hint"; hint.textContent = "🔇 Tap the video for sound"; $(".fyp", view).appendChild(hint);
+      setTimeout(() => hint.remove(), 5000);
+      const items = $$(".fy-item[data-i]", scroll);
+      io = new IntersectionObserver((ents) => {
+        ents.forEach((en) => {
+          const vd = $("video", en.target);
+          if (!vd) return;
+          if (en.isIntersecting && en.intersectionRatio >= 0.7) {
+            vd.muted = !soundOn;
+            const pr = vd.play(); if (pr && pr.catch) pr.catch(() => {});
+            const v = vids[+en.target.dataset.i];
+            if (v && !viewed.has(v.id)) { viewed.add(v.id); setTimeout(() => { if (!vd.paused) sb.rpc("add_view", { p_video: v.id }).then(() => {}, () => {}); }, 2000); }
+          } else vd.pause();
+        });
+      }, { root: scroll, threshold: [0, 0.7, 1] });
+      items.forEach((it) => io.observe(it));
+      scroll.onclick = async (e) => {
+        const f = e.target.closest(".fy-fol");
+        if (f) { e.preventDefault(); e.stopPropagation(); f.disabled = true; if (await LS.setFollow(f.dataset.uid, true)) f.remove(); else f.disabled = false; return; }
+        const lk = e.target.closest(".fy-like");
+        if (lk) {
+          if (!LS.user) { location.hash = "#/auth"; return; }
+          const v = vids[+lk.dataset.i], on = !lk.classList.contains("on");
+          lk.disabled = true;
+          const { data, error } = await sb.rpc("like_video", { p_video: v.id, p_on: on });
+          lk.disabled = false;
+          if (error) return;
+          lk.classList.toggle("on", on);
+          const c = lk.nextElementSibling; if (c) c.textContent = fmtN(Number(data) || 0);
+          return;
+        }
+        const it = e.target.closest(".fy-item[data-i]");
+        if (it && !e.target.closest("a,button")) {
+          const vd = $("video", it);
+          if (!soundOn) { soundOn = true; $$("video", scroll).forEach((x) => { x.muted = false; }); const h = $(".fy-hint", view); if (h) h.remove(); }
+          else if (vd.paused) vd.play().catch(() => {}); else vd.pause();
+        }
+      };
+    }
+
+    $(".fy-top", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-t]");
+      if (!b || b.dataset.t === tab) return;
+      tab = b.dataset.t; try { LS.store && LS.store.set("fyTab", tab); } catch (x) { /* ignore */ }
+      setTabs(); load();
+    });
+    setTabs(); load(); bell();
+    return () => { dead = true; if (io) io.disconnect(); $$("video", scroll).forEach((x) => { try { x.pause(); x.removeAttribute("src"); x.load(); } catch (e) { /* ignore */ } }); };
+  };
+
+  /* ---------- live alerts: someone you follow goes live ---------- */
+  const seen = new Set();
+  try { JSON.parse(localStorage.getItem("ls.alertSeen") || "[]").forEach((i) => seen.add(i)); } catch (e) { /* ignore */ }
+  const saveSeen = () => { try { localStorage.setItem("ls.alertSeen", JSON.stringify(Array.from(seen).slice(-60))); } catch (e) { /* ignore */ } };
+  let log = [];
+  try { log = JSON.parse(localStorage.getItem("ls.alertLog") || "[]"); } catch (e) { log = []; }
+  const ago = (t) => { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? "now" : m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
+  function syncActivity() {
+    if (!LS.ACTIVITY) return;
+    LS.ACTIVITY = log.slice(0, 20).map((a) => ({ icon: "🔴", text: a.text, time: ago(a.t), id: a.id })).concat(LS.ACTIVITY.filter((a) => !a.id));
+  }
+  syncActivity();
+  let queue = [], showing = false;
+  function banner(a) {
+    queue.push(a);
+    if (showing) return;
+    showing = true;
+    (function next() {
+      const x = queue.shift();
+      if (!x) { showing = false; return; }
+      const el = document.createElement("a");
+      el.className = "lv-banner"; el.href = "#/live/" + x.id;
+      el.innerHTML = `<span style="font-size:22px">🔴</span><div>${esc(x.name)} is live now<small>${esc(x.title)}</small></div>`;
+      el.addEventListener("click", () => el.remove());
+      document.body.appendChild(el);
+      setTimeout(() => { el.remove(); next(); }, 7000);
+    })();
+  }
+  let busy = false;
+  async function check() {
+    if (busy || !sb || !LS.user) return;
+    busy = true;
+    try {
+      const fset = await LS.myFollows();
+      if (!fset.size) return;
+      const rows = (await liveRows()).filter((r) => fset.has(r.host_id) && r.host_id !== LS.user.id && !seen.has(r.id));
+      if (!rows.length) return;
+      await profs(rows.map((r) => r.host_id));
+      rows.forEach((r) => {
+        seen.add(r.id);
+        if (location.hash.indexOf(r.id) >= 0) return;
+        const nm = nameOf(r.host_id), title = r.title || "Live now";
+        log.unshift({ t: Date.now(), id: r.id, text: nm + " is live: " + title });
+        banner({ id: r.id, name: nm, title });
+        try { if ("Notification" in window && Notification.permission === "granted") { const n = new Notification(nm + " is live now", { body: title, tag: r.id }); n.onclick = () => { window.focus(); location.hash = "#/live/" + r.id; n.close(); }; } } catch (e) { /* ignore */ }
+      });
+      log = log.slice(0, 30);
+      try { localStorage.setItem("ls.alertLog", JSON.stringify(log)); } catch (e) { /* ignore */ }
+      saveSeen(); syncActivity();
+    } catch (e) { /* ignore */ } finally { busy = false; }
+  }
+  if (sb) {
+    setTimeout(check, 3500);
+    setInterval(check, 15000);
+    try { sb.channel("live-alerts-" + Math.random().toString(36).slice(2, 7)).on("postgres_changes", { event: "*", schema: "public", table: "streams" }, () => setTimeout(check, 800)).subscribe(); } catch (e) { /* polling still works */ }
+  }
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
