@@ -4327,6 +4327,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   .fy-fol{position:absolute;left:50%;bottom:-10px;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;border:0;background:#ff2d55;color:#fff;font-size:16px;line-height:20px;padding:0}
   .fy-like,.fy-mute{background:none;border:0;color:#fff;font-size:34px;text-shadow:0 1px 4px #000;margin-top:10px}
   .fy-like.on{color:#ff2d55}
+  .fy-pop{position:absolute;font-size:96px;line-height:1;color:#ff2d55;transform:translate(-50%,-50%);pointer-events:none;z-index:6;text-shadow:0 2px 12px #0006;animation:fypop .85s ease forwards}
+  @keyframes fypop{0%{transform:translate(-50%,-50%) scale(.3);opacity:0}25%{transform:translate(-50%,-50%) scale(1.15);opacity:1}100%{transform:translate(-50%,-110%) scale(1);opacity:0}}
   .fy-info{position:absolute;left:14px;right:84px;bottom:22px;color:#fff;z-index:3;text-shadow:0 1px 4px #000}
   .fy-info b{font-size:17px}
   .fy-info p{margin:4px 0 0;font-size:15px;line-height:1.35}
@@ -4426,26 +4428,47 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         });
       }, { root: scroll, threshold: [0, 0.7, 1] });
       items.forEach((it) => io.observe(it));
+      let lastTap = { it: null, t: 0, timer: 0 };
+      const pop = (it, x, y) => {
+        const h = document.createElement("span"); h.className = "fy-pop"; h.textContent = "♥";
+        h.style.left = x + "px"; h.style.top = y + "px"; it.appendChild(h);
+        setTimeout(() => h.remove(), 850);
+      };
+      async function toggleLike(lk, forceOn) {
+        if (!LS.user) { location.hash = "#/auth"; return; }
+        if (lk.disabled) return;
+        const v = vids[+lk.dataset.i], on = forceOn == null ? !lk.classList.contains("on") : forceOn;
+        lk.disabled = true;
+        const { data, error } = await sb.rpc("like_video", { p_video: v.id, p_on: on });
+        lk.disabled = false;
+        if (error) return;
+        lk.classList.toggle("on", on);
+        const c = lk.nextElementSibling; if (c) c.textContent = fmtN(Number(data) || 0);
+      }
       scroll.onclick = async (e) => {
         const f = e.target.closest(".fy-fol");
         if (f) { e.preventDefault(); e.stopPropagation(); f.disabled = true; if (await LS.setFollow(f.dataset.uid, true)) f.remove(); else f.disabled = false; return; }
         const lk = e.target.closest(".fy-like");
-        if (lk) {
-          if (!LS.user) { location.hash = "#/auth"; return; }
-          const v = vids[+lk.dataset.i], on = !lk.classList.contains("on");
-          lk.disabled = true;
-          const { data, error } = await sb.rpc("like_video", { p_video: v.id, p_on: on });
-          lk.disabled = false;
-          if (error) return;
-          lk.classList.toggle("on", on);
-          const c = lk.nextElementSibling; if (c) c.textContent = fmtN(Number(data) || 0);
-          return;
-        }
+        if (lk) { toggleLike(lk, null); return; }
         const it = e.target.closest(".fy-item[data-i]");
         if (it && !e.target.closest("a,button")) {
-          const vd = $("video", it);
-          if (!soundOn) { soundOn = true; $$("video", scroll).forEach((x) => { x.muted = false; }); const h = $(".fy-hint", view); if (h) h.remove(); }
-          else if (vd.paused) vd.play().catch(() => {}); else vd.pause();
+          const now = Date.now();
+          if (lastTap.it === it && now - lastTap.t < 320) {
+            // double tap = like
+            clearTimeout(lastTap.timer); lastTap = { it: null, t: 0, timer: 0 };
+            const r = it.getBoundingClientRect();
+            pop(it, e.clientX - r.left, e.clientY - r.top);
+            const btn = $(".fy-like", it);
+            if (btn && !btn.classList.contains("on")) toggleLike(btn, true);
+            return;
+          }
+          clearTimeout(lastTap.timer);
+          lastTap = { it, t: now, timer: setTimeout(() => {
+            const vd = $("video", it);
+            if (!vd) return;
+            if (!soundOn) { soundOn = true; $$("video", scroll).forEach((x) => { x.muted = false; }); const h = $(".fy-hint", view); if (h) h.remove(); }
+            else if (vd.paused) vd.play().catch(() => {}); else vd.pause();
+          }, 330) };
         }
       };
     }
