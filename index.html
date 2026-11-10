@@ -4134,6 +4134,11 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       }
       box.innerHTML = `<div class="vgrid">${vids.map((v, i) => `<button class="vcell" data-i="${i}" type="button">${v.thumb_path ? `<img loading="lazy" src="${esc(url(v.thumb_path))}" alt="">` : `<video muted preload="metadata" src="${esc(url(v.video_path))}#t=0.5"></video>`}<span>▶ ${fmtN(v.views)}</span></button>`).join("")}</div>`;
       $$(".vcell", box).forEach((b) => b.addEventListener("click", () => openPlayer(vids[+b.dataset.i], mine, (gone) => { if (gone) load(); else if (onCount) onCount(vids); })));
+      if (mine && LS.fixThumbs) LS.fixThumbs(vids, (v, tp) => {
+        const i = vids.indexOf(v), cell = box.querySelector(`.vcell[data-i="${i}"]`);
+        const m = cell && cell.firstElementChild;
+        if (m && m.tagName === "VIDEO") { const im = document.createElement("img"); im.alt = ""; im.src = url(tp); cell.replaceChild(im, m); }
+      });
     }
     load();
     return () => { dead = true; };
@@ -4391,6 +4396,47 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   `;
   document.head.appendChild(css);
 
+  /* ---------- make missing preview pictures for my own videos ---------- */
+  function thumbFromUrl(u) {
+    return new Promise((resolve) => {
+      const v = document.createElement("video");
+      let done = false;
+      const fin = (b) => { if (done) return; done = true; try { v.removeAttribute("src"); v.load(); } catch (e) { /* ignore */ } resolve(b); };
+      v.crossOrigin = "anonymous"; v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = u;
+      v.addEventListener("loadeddata", () => { try { v.currentTime = Math.min(0.5, (v.duration || 1) / 2); } catch (e) { fin(null); } });
+      v.addEventListener("seeked", () => {
+        try {
+          const w = v.videoWidth, h = v.videoHeight;
+          if (!w || !h) return fin(null);
+          const sc = Math.min(1, 480 / w);
+          const c = document.createElement("canvas");
+          c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+          c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+          c.toBlob((b) => fin(b), "image/jpeg", 0.8);
+        } catch (e) { fin(null); }
+      });
+      v.addEventListener("error", () => fin(null));
+      setTimeout(() => fin(null), 12000);
+    });
+  }
+  const fixing = new Set();
+  LS.fixThumbs = async function (vids, onFixed) {
+    if (!sb || !LS.user) return;
+    for (const v of vids) {
+      if (v.thumb_path || v.user_id !== LS.user.id || fixing.has(v.id)) continue;
+      fixing.add(v.id);
+      try {
+        const blob = await thumbFromUrl(vurl(v.video_path));
+        if (!blob) continue;
+        const tp = v.user_id + "/" + v.id + ".jpg";
+        const up = await sb.storage.from("videos").upload(tp, blob, { contentType: "image/jpeg", upsert: false });
+        if (up.error && !/exist|duplicate/i.test(up.error.message || "")) continue;
+        const { error } = await sb.rpc("set_video_thumb", { p_video: v.id, p_path: tp });
+        if (!error) { v.thumb_path = tp; if (onFixed) onFixed(v, tp); }
+      } catch (e) { /* ignore */ } finally { fixing.delete(v.id); }
+    }
+  };
+
   /* ---------- comments sheet + live list ---------- */
   function openComments(v, countEl) {
     const bg = document.createElement("div");
@@ -4492,6 +4538,11 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         const media = v.thumb_path ? `<img loading="lazy" alt="" src="${esc(vurl(v.thumb_path))}">` : `<video muted playsinline preload="metadata" src="${esc(vurl(v.video_path))}#t=0.5"></video>`;
         return `<button type="button" class="cg-c" data-vid="${v.id}">${media}<span class="cg-pl">▶</span>${v.caption ? `<div class="cg-cap">${esc(v.caption)}</div>` : ""}<div class="cg-meta"><span class="av">${LS.photo(pr, 22)}</span><span class="nm">${esc(pr.display_name || pr.username || "user")}</span><span>♡ ${fmtN(v.likes_count)}</span></div></button>`;
       }).join("")}</div>`;
+      LS.fixThumbs(vids, (v, tp) => {
+        const cell = $(`.cg-c[data-vid="${v.id}"]`, scroll);
+        const m = cell && cell.firstElementChild;
+        if (m && m.tagName === "VIDEO") { const im = document.createElement("img"); im.alt = ""; im.src = vurl(tp); cell.replaceChild(im, m); }
+      });
       scroll.onclick = (e) => {
         const c = e.target.closest("[data-vid]");
         if (!c) return;
