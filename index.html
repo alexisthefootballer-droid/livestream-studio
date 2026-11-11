@@ -6622,7 +6622,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
 
   const ROWS = [
     ["▶", "Watch history", "#/history/watch"], ["💬", "Comment history", "#/history/comments"], ["🔍", "Search history", "#/history/search"],
-    ["AD", "Ads activity history"], ["@", "Mention history"], ["👤", "Account history"], ["🎬", "Reuse of content history"]];
+    ["AD", "Ads activity history", "#/history/ads"], ["@", "Mention history", "#/history/mentions"], ["👤", "Account history", "#/history/account"], ["🎬", "Reuse of content history", "#/history/reuse"]];
 
   S.activity = function (view) {
     if (!LS.user) { location.hash = "#/auth"; return; }
@@ -6644,7 +6644,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
 
   S.history = function (view, kind) {
     if (!LS.user) { location.hash = "#/auth"; return; }
-    const titles = { watch: "Watch history", comments: "Comment history", search: "Search history" };
+    const titles = { watch: "Watch history", comments: "Comment history", search: "Search history", ads: "Ads activity history", mentions: "Mention history", account: "Account history", reuse: "Reuse of content history" };
     view.innerHTML = `<div class="sp"><div class="sp-top"><button id="hb" aria-label="Back">←</button><div>${titles[kind]}</div></div><div id="hbody"><div class="sp-empty">Loading…</div></div></div>`;
     $("#hb", view).addEventListener("click", () => { location.hash = "#/activity"; });
     const body = $("#hbody", view);
@@ -6678,6 +6678,25 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
         body.innerHTML = `<div class="vgrid" style="margin-top:14px">${list.map((v, i) => `<button class="vcell" data-i="${i}" type="button">${v.thumb_path ? `<img loading="lazy" src="${esc(vu(v.thumb_path))}" alt="">` : `<video muted preload="metadata" src="${esc(vu(v.video_path))}#t=0.5"></video>`}<span>▶ ${Number(v.views) || 0}</span></button>`).join("")}</div>`;
         $(".vgrid", body).addEventListener("click", (e) => { const c = e.target.closest(".vcell"); if (c) openVideo(list[+c.dataset.i].id); });
         body.appendChild(clearBtn(async () => { await sb.from("watch_history").delete().eq("user_id", LS.user.id); body.innerHTML = `<div class="sp-empty">Videos you watch will show here.</div>`; }));
+        return;
+      }
+      if (kind === "ads") { body.innerHTML = `<div class="sp-empty">No ads activity.<br><br>This app does not show ads.</div>`; return; }
+      if (kind === "reuse") { body.innerHTML = `<div class="sp-empty">No reused content yet.<br><br>When someone reuses your videos, or you reuse theirs, it will show here.</div>`; return; }
+      if (kind === "account") {
+        const u = LS.user, pr = LS.myProfile || {};
+        const d = (t) => (t ? new Date(t).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "—");
+        const row = (a, b) => `<div class="sp-u"><div style="flex:1"><b style="font-weight:500;display:block">${esc(a)}</b><em style="font-style:normal;color:#9a9aa3;font-size:14px">${esc(b)}</em></div></div>`;
+        body.innerHTML = `<div class="sp-card" style="margin-top:14px">${row("Account created", d(u.created_at))}${row("Last login", d(u.last_sign_in_at))}${row("Email", u.email || "—")}${row("Username", "@" + (pr.username || "—"))}${row("Display name", pr.display_name || "—")}</div>`;
+        return;
+      }
+      if (kind === "mentions") {
+        const me = (LS.myProfile && LS.myProfile.username) || "";
+        let rows = [];
+        if (me) { try { const { data } = await sb.from("video_comments").select("id,video_id,user_id,body,created_at").ilike("body", "%@" + me + "%").neq("user_id", LS.user.id).order("created_at", { ascending: false }).limit(100); rows = data || []; } catch (e) { /* ignore */ } }
+        if (dead) return;
+        if (!rows.length) { body.innerHTML = `<div class="sp-empty">When someone mentions you with @${esc(me || "username")} in a comment, it will show here.</div>`; return; }
+        body.innerHTML = `<div class="sp-card" style="margin-top:14px">${rows.map((r, i) => `<button class="sp-r" data-i="${i}" style="flex-direction:column;align-items:flex-start;gap:4px"><b style="font-weight:500;width:100%">${esc(r.body)}</b><em>${ago(r.created_at)} · tap to open the video</em></button>`).join("")}</div>`;
+        $(".sp-card", body).addEventListener("click", (e) => { const b = e.target.closest(".sp-r"); if (b) openVideo(rows[+b.dataset.i].video_id); });
         return;
       }
       /* comments */
@@ -6714,7 +6733,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     [/^\/studio$/, S.studio, "thread"],
     [/^\/qr$/, S.qr, "thread"],
     [/^\/activity$/, S.activity, "thread"],
-    [/^\/history\/(watch|comments|search)$/, S.history, "thread"],
+    [/^\/history\/(watch|comments|search|ads|mentions|account|reuse)$/, S.history, "thread"],
     [/^\/live-analytics$/, S.liveAnalytics, "thread"],
     [/^\/auth$/, S.auth, "profile"],
     [/^\/edit-profile$/, S.editProfile, "thread"],
