@@ -2523,7 +2523,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         <button class="dr-item" data-soon="Offline videos"><span class="dr-ic">⬇️</span><b>Offline videos</b><span class="dr-go">›</span></button>
         <button class="dr-item" data-soon="Your QR code"><span class="dr-ic">▣</span><b>Your QR code</b><span class="dr-go">›</span></button>
         <div class="dr-sec">Creation &amp; business tools</div>
-        <a class="dr-item" href="#/earnings"><span class="dr-ic">⭐</span><b>Live Studio</b><span class="dr-go">›</span></a>
+        <a class="dr-item" href="#/studio"><span class="dr-ic">⭐</span><b>Studio</b><span class="dr-go">›</span></a>
         <a class="dr-item" href="#/golive"><span class="dr-ic">🔴</span><b>Go Live</b><span class="dr-go">›</span></a>
         <button class="dr-item" data-soon="Promote"><span class="dr-ic">🔥</span><b>Promote</b><span class="dr-go">›</span></button>
         <div class="dr-line"></div>
@@ -5010,7 +5010,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["🎞", "Manage posts", "#/profile"], ["🎥", "Content preferences"], ["📺", "LIVE", "#/golive"],
       ["🔔", "Notifications"], ["⏳", "Time and well-being"], ["🏠", "Family Pairing"]]],
     ["Account", [
-      ["👤", "Account", "#/edit-profile"], ["🛡", "Security & permissions"], ["📈", "Analytics", "#/earnings"],
+      ["👤", "Account", "#/edit-profile"], ["🛡", "Security & permissions"], ["📈", "Analytics", "#/live-analytics"],
       ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"]]],
     ["Visibility", [
       ["🔒", "Private account"], ["🚫", "Blocked accounts", "#/blocked"]]],
@@ -5109,6 +5109,173 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
 })();
 </script>
   <script>
+/* Studio (Posts / LIVE) and LIVE Analytics. */
+(function () {
+  const LS = window.LS;
+  const S = LS.screens;
+  const sb = LS.sb;
+  const esc = LS.esc;
+  const $ = LS.$, $$ = LS.$$;
+  const st = document.createElement("style");
+  st.textContent = `
+  .stu .tabs{display:flex;border-bottom:1px solid #ffffff18}
+  .stu .tabs button{flex:1;background:none;border:0;color:#9a9aa3;font-size:17px;font-weight:700;padding:14px 0;border-bottom:2px solid transparent}
+  .stu .tabs button.on{color:#fff;border-color:#fff}
+  .stu .body{padding:16px 14px 120px}
+  .stu h2{font-size:26px;margin:6px 4px 10px}
+  .stu .card{background:#1f1f22;border-radius:16px;padding:16px;margin-bottom:14px}
+  .stu .card h3{margin:0 0 12px;font-size:19px}
+  .stu .stats{display:flex;gap:10px}
+  .stu .stats>div{flex:1}
+  .stu .stats small{display:block;color:#9a9aa3;font-size:14px}
+  .stu .stats b{font-size:28px}
+  .stu .link{display:flex;align-items:center;gap:12px;padding:14px 4px;color:#fff;text-decoration:none;font-size:16px;border-top:1px solid #ffffff12}
+  .stu .link:first-of-type{border-top:0}
+  .stu .link i{margin-left:auto;font-style:normal;color:#8a8a93;font-size:22px}
+  .stu .bar{position:fixed;left:0;right:0;bottom:0;padding:12px 14px 18px;background:linear-gradient(transparent,#000 35%);display:flex;gap:10px;z-index:5}
+  .stu .bar a{flex:1;text-align:center;padding:14px 8px;border-radius:26px;background:#25252a;color:#fff;text-decoration:none;font-weight:600;font-size:15px}
+  .stu .bar a.red{color:#ff4d6a}
+  .stu .bar a.pink{background:#fe2c55;color:#fff;font-size:17px}
+  .la .seg{display:flex;gap:8px;margin:12px 14px}
+  .la .seg button{background:#25252a;border:0;color:#cfcfd6;border-radius:18px;padding:8px 16px;font-size:15px;font-weight:600}
+  .la .seg button.on{background:#fff;color:#000}
+  .la .tiles{display:flex;gap:8px;margin-bottom:12px}
+  .la .tile{flex:1;border:1.5px solid #ffffff22;border-radius:14px;padding:12px 8px;background:none;color:#fff;text-align:left}
+  .la .tile.on{border-color:#3b9cff;background:#16202c}
+  .la .tile b{display:block;font-size:24px}.la .tile small{color:#9a9aa3;font-size:13px}
+  .la svg{width:100%;height:150px;display:block}
+  .la .dh{color:#9a9aa3;margin:18px 6px 8px;font-size:15px;font-weight:600}
+  .la .si{display:flex;align-items:center;gap:12px;background:#1f1f22;border-radius:16px;padding:14px;margin-bottom:10px;color:#fff;text-decoration:none}
+  .la .si .th{width:64px;height:64px;border-radius:10px;overflow:hidden;flex:none;background:#333}
+  .la .si b{font-size:17px;display:block}.la .si small{color:#a9a9b2;display:block;margin-top:4px;font-size:13.5px}
+  `;
+  document.head.appendChild(st);
+
+  const fmt = (n) => { n = Number(n) || 0; return n >= 10000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "K" : n.toLocaleString("en-US"); };
+  const dur = (s) => { s = Math.max(0, Math.round(s)); if (s < 60) return s + (s === 1 ? " second" : " seconds"); const m = Math.round(s / 60); if (m < 60) return m + (m === 1 ? " min" : " mins"); const h = Math.floor(m / 60), r = m % 60; return h + "h" + (r ? " " + r + "m" : ""); };
+  const durShort = (s) => { s = Math.max(0, Math.round(s)); const m = Math.round(s / 60); if (m < 60) return m + "m"; const h = Math.floor(m / 60), r = m % 60; return h + "h" + (r ? " " + r + "m" : ""); };
+  const p2 = (n) => String(n).padStart(2, "0");
+  const hm = (d) => p2(d.getHours()) + ":" + p2(d.getMinutes());
+  const ymd = (d) => d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate());
+
+  async function myStreams() {
+    if (!sb || !LS.user) return [];
+    let rows = [];
+    try { const { data } = await sb.from("streams").select("id,title,created_at,last_seen,viewer_count,peak_viewers").eq("host_id", LS.user.id).order("created_at", { ascending: false }).limit(200); rows = data || []; } catch (e) { /* ignore */ }
+    const coins = {};
+    if (rows.length) {
+      try {
+        const { data } = await sb.from("gifts").select("stream_id,kind").in("stream_id", rows.map((r) => r.id));
+        (data || []).forEach((g) => { coins[g.stream_id] = (coins[g.stream_id] || 0) + (LS.GIFT_PRICE[g.kind] || 1); });
+      } catch (e) { /* ignore */ }
+    }
+    return rows.map((r) => {
+      const a = new Date(r.created_at), b = new Date(r.last_seen || r.created_at);
+      return { id: r.id, title: r.title, start: a, end: b, secs: Math.min(Math.max((b - a) / 1000, 0), 12 * 3600), viewers: Math.max(r.peak_viewers || 0, r.viewer_count || 0), coins: coins[r.id] || 0 };
+    });
+  }
+
+  /* ---------- Studio ---------- */
+  S.studio = function (view) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    const pr = LS.myProfile || {};
+    const name = pr.username || (LS.user.email || "you").split("@")[0];
+    let tab = "live", dead = false;
+    view.innerHTML = `<div class="sp stu">
+      <div class="sp-top"><button id="stb" aria-label="Back">←</button><div>Studio</div></div>
+      <div class="tabs"><button data-t="posts">Posts</button><button data-t="live">LIVE</button></div>
+      <div class="body" id="stbody"></div><div class="bar" id="stbar"></div></div>`;
+    $("#stb", view).addEventListener("click", () => { location.hash = "#/profile"; });
+    const body = $("#stbody", view), bar = $("#stbar", view);
+    async function paint() {
+      $$(".tabs button", view).forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
+      body.innerHTML = `<div class="sp-empty">Loading…</div>`;
+      if (tab === "posts") {
+        bar.innerHTML = `<a class="pink" href="#/upload-video">🎥 Start creating</a>`;
+        let vids = [];
+        try { const { data } = await sb.from("videos").select("views,likes_count,comments_count").eq("user_id", LS.user.id).limit(500); vids = data || []; } catch (e) { /* ignore */ }
+        if (dead || tab !== "posts") return;
+        const sum = (k) => vids.reduce((s, v) => s + (Number(v[k]) || 0), 0);
+        body.innerHTML = `<div class="card"><h3>Analytics</h3><div class="stats"><div><small>Videos</small><b>${fmt(vids.length)}</b></div><div><small>Views</small><b>${fmt(sum("views"))}</b></div><div><small>Likes</small><b>${fmt(sum("likes_count"))}</b></div></div></div>
+          <div class="card"><h3>Tools</h3>
+            <a class="link" href="#/upload-video">⬆️ Upload a video<i>›</i></a>
+            <a class="link" href="#/profile">▦ Manage posts<i>›</i></a>
+            <a class="link" href="#/earnings">💰 LIVE rewards<i>›</i></a>
+            <a class="link" href="#/settings">⚙️ Settings and privacy<i>›</i></a></div>`;
+        return;
+      }
+      bar.innerHTML = `<a class="red" href="#/golive">🔴 Go LIVE</a><a href="#/live-analytics">📈 LIVE Analytics</a><a href="#/earnings">💰 Earnings</a>`;
+      const all = await myStreams();
+      if (dead || tab !== "live") return;
+      const since = Date.now() - 7 * 864e5, wk = all.filter((s) => s.start.getTime() >= since);
+      const sum = (k) => wk.reduce((a, s) => a + s[k], 0);
+      body.innerHTML = `<h2>You're on a roll, ${esc(name)}!</h2>
+        <div class="card"><div class="stats"><div><small>Peak viewers</small><b>${fmt(sum("viewers"))}</b></div><div><small>LIVE duration</small><b>${durShort(sum("secs"))}</b></div><div><small>Gift coins</small><b>${fmt(sum("coins"))}</b></div></div><small style="color:#9a9aa3;display:block;margin-top:10px">Last 7 days · ${wk.length} LIVE${wk.length === 1 ? "" : "s"}</small></div>
+        <div class="card"><h3>LIVE rewards</h3><small style="color:#9a9aa3">Streamers earn 40% of the value of gifts. See your balance and withdraw in Earnings.</small></div>`;
+    }
+    view.querySelector(".tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (b && b.dataset.t !== tab) { tab = b.dataset.t; paint(); } });
+    paint();
+    return () => { dead = true; };
+  };
+
+  /* ---------- LIVE Analytics ---------- */
+  S.liveAnalytics = function (view) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    let tab = "ov", days = 28, metric = "viewers", sort = "recent", data = null, dead = false;
+    view.innerHTML = `<div class="sp stu la">
+      <div class="sp-top"><button id="lab" aria-label="Back">←</button><div>LIVE Analytics</div></div>
+      <div class="tabs"><button data-t="ov">Overview</button><button data-t="ls">LIVE streams</button></div>
+      <div id="labody" class="body" style="padding-bottom:40px"><div class="sp-empty">Loading…</div></div></div>`;
+    $("#lab", view).addEventListener("click", () => { history.length > 1 ? history.back() : (location.hash = "#/studio"); });
+    const body = $("#labody", view);
+    function chart(list) {
+      const end = new Date(); end.setHours(0, 0, 0, 0);
+      const pts = [];
+      for (let i = days - 1; i >= 0; i--) { const d = new Date(end.getTime() - i * 864e5); pts.push({ d, k: ymd(d), v: 0 }); }
+      const idx = new Map(pts.map((p, i) => [p.k, i]));
+      list.forEach((s) => { const i = idx.get(ymd(s.start)); if (i != null) pts[i].v += metric === "secs" ? s.secs / 60 : s[metric]; });
+      const max = Math.max(1, ...pts.map((p) => p.v)), W = 340, H = 150, L = 8, R = 30, T = 10, B = 24;
+      const x = (i) => L + (pts.length < 2 ? 0 : (i * (W - L - R)) / (pts.length - 1));
+      const y = (v) => T + (H - T - B) * (1 - v / max);
+      const line = pts.map((p, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(p.v).toFixed(1)).join(" ");
+      const grid = [0, 1, 2, 3].map((g) => { const yy = T + ((H - T - B) * g) / 3; const lab = Math.round(max * (1 - g / 3)); return `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#ffffff22" stroke-dasharray="4 4"/><text x="${W - R + 4}" y="${yy + 4}" fill="#9a9aa3" font-size="11">${fmt(lab)}</text>`; }).join("");
+      const fd = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      return `<svg viewBox="0 0 ${W} ${H}">${grid}<path d="${line}" fill="none" stroke="#3b9cff" stroke-width="2.5" stroke-linejoin="round"/><text x="${L}" y="${H - 6}" fill="#9a9aa3" font-size="11">${fd(pts[0].d)}</text><text x="${W - R}" y="${H - 6}" fill="#9a9aa3" font-size="11" text-anchor="end">${fd(pts[pts.length - 1].d)}</text></svg>`;
+    }
+    function paint() {
+      $$(".tabs button", view).forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
+      if (!data) return;
+      if (tab === "ov") {
+        const from = Date.now() - days * 864e5, list = data.filter((s) => s.start.getTime() >= from);
+        const sum = (k) => list.reduce((a, s) => a + s[k], 0);
+        const tile = (k, v, lab) => `<button class="tile ${metric === k ? "on" : ""}" data-m="${k}"><b>${v}</b><small>${lab}</small></button>`;
+        body.innerHTML = `<div class="seg" style="margin:0 0 12px"><button data-d="7" class="${days === 7 ? "on" : ""}">7 days</button><button data-d="28" class="${days === 28 ? "on" : ""}">28 days</button></div>
+          <div class="card"><div class="tiles">${tile("viewers", fmt(sum("viewers")), "Peak viewers")}${tile("coins", fmt(sum("coins")), "Gift coins")}${tile("secs", durShort(sum("secs")), "LIVE duration")}</div>${chart(list)}</div>
+          <div class="card"><h3>Viewers</h3><small style="color:#9a9aa3">Detailed audience data appears after more people watch your LIVEs.</small></div>`;
+      } else {
+        const list = data.slice();
+        if (sort === "coins") list.sort((a, b) => b.coins - a.coins); else if (sort === "views") list.sort((a, b) => b.viewers - a.viewers);
+        let last = "";
+        const rows = list.map((s) => {
+          const dk = s.start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+          const head = sort === "recent" && dk !== last ? `<div class="dh">${dk}</div>` : "";
+          last = dk;
+          return head + `<a class="si" href="#/live-analytics"><span class="th" style="background:hsl(${(s.start.getDate() * 47) % 360} 60% 35%)"></span><div><b>${esc(s.title || "Untitled LIVE")}</b><small>${ymd(s.start)} ${hm(s.start)} - ${hm(s.end)}</small><small>${dur(s.secs)} | ${fmt(s.viewers)} viewers | ${fmt(s.coins)} coins</small></div></a>`;
+        }).join("");
+        body.innerHTML = `<div class="seg" style="margin:0 0 4px"><button data-s="recent" class="${sort === "recent" ? "on" : ""}">Most recent</button><button data-s="coins" class="${sort === "coins" ? "on" : ""}">Most coins</button><button data-s="views" class="${sort === "views" ? "on" : ""}">Most viewed</button></div>${rows || `<div class="sp-empty">No LIVEs yet.<br><br><a class="btn" href="#/golive">Go LIVE</a></div>`}`;
+      }
+    }
+    view.querySelector(".tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (b) { tab = b.dataset.t; paint(); } });
+    body.addEventListener("click", (e) => {
+      const d = e.target.closest("[data-d]"), m = e.target.closest("[data-m]"), s = e.target.closest("[data-s]");
+      if (d) { days = +d.dataset.d; paint(); } else if (m) { metric = m.dataset.m; paint(); } else if (s) { sort = s.dataset.s; paint(); }
+    });
+    myStreams().then((r) => { if (dead) return; data = r; paint(); });
+    return () => { dead = true; };
+  };
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
@@ -5127,6 +5294,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     [/^\/profile$/, S.profile, "profile"],
     [/^\/settings$/, S.settings, "thread"],
     [/^\/blocked$/, S.blocked, "thread"],
+    [/^\/studio$/, S.studio, "thread"],
+    [/^\/live-analytics$/, S.liveAnalytics, "thread"],
     [/^\/auth$/, S.auth, "profile"],
     [/^\/edit-profile$/, S.editProfile, "thread"],
     [/^\/recharge$/, S.recharge, "thread"],
