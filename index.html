@@ -2519,7 +2519,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         <div class="dr-sec">Assets</div>
         <a class="dr-item" href="#/recharge"><span class="dr-ic">👛</span><b>Balance</b><span class="dr-go">›</span></a>
         <div class="dr-sec">Personal tools</div>
-        <a class="dr-item" href="#/inbox"><span class="dr-ic">🕒</span><b>Activity center</b><span class="dr-go">›</span></a>
+        <a class="dr-item" href="#/activity"><span class="dr-ic">🕒</span><b>Activity center</b><span class="dr-go">›</span></a>
         <button class="dr-item" data-soon="Offline videos"><span class="dr-ic">⬇️</span><b>Offline videos</b><span class="dr-go">›</span></button>
         <a class="dr-item" href="#/qr"><span class="dr-ic">▣</span><b>Your QR code</b><span class="dr-go">›</span></a>
         <div class="dr-sec">Creation &amp; business tools</div>
@@ -4130,6 +4130,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   }
 
   /* ---- player ---- */
+  LS.openPlayer = (...a) => openPlayer(...a);
   function openPlayer(v, mine, onChange) {
     const box = document.createElement("div");
     box.className = "vplayer";
@@ -5018,7 +5019,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["💬", "Comments"], ["@", "Mentions"], ["✉️", "Direct messages"], ["🎬", "Reuse of content"],
       ["⬇️", "Downloads", null, "On"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
     ["Content & Display", [
-      ["🎵", "Music"], ["📥", "Inbox & Messaging"], ["🕒", "Activity center", "#/inbox"], ["👪", "Audience control"],
+      ["🎵", "Music"], ["📥", "Inbox & Messaging"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control"],
       ["📣", "Plan and ads"], ["▶️", "Playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language"],
       ["♿", "Accessibility"], ["👁", "Amplify"], ["📍", "Contacts and location"]]],
     ["Cache & Cellular", [
@@ -6593,6 +6594,105 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
 })();
 </script>
   <script>
+/* Activity center + history screens. */
+(function () {
+  const LS = window.LS;
+  const S = LS.screens;
+  const sb = LS.sb;
+  const esc = LS.esc;
+  const $ = LS.$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
+  const SK = "ls.searches";
+  const getS = () => { try { return JSON.parse(localStorage.getItem(SK) || "[]").filter((x) => typeof x === "string"); } catch (e) { return []; } };
+  const setS = (a) => { try { localStorage.setItem(SK, JSON.stringify(a.slice(0, 30))); } catch (e) { /* ignore */ } };
+  function addSearch(t) { t = String(t || "").trim().slice(0, 60); if (t.length < 2) return; setS([t].concat(getS().filter((x) => x.toLowerCase() !== t.toLowerCase()))); }
+
+  /* remember what was searched on the Discover screen */
+  const oldDiscover = S.discover;
+  S.discover = function (view) {
+    const c = oldDiscover.apply(this, arguments);
+    const q = $("#q", view);
+    if (q) {
+      q.addEventListener("keydown", (e) => { if (e.key === "Enter") addSearch(q.value); });
+      q.addEventListener("search", () => addSearch(q.value));
+      q.addEventListener("change", () => addSearch(q.value));
+    }
+    return c;
+  };
+
+  const ROWS = [
+    ["▶", "Watch history", "#/history/watch"], ["💬", "Comment history", "#/history/comments"], ["🔍", "Search history", "#/history/search"],
+    ["AD", "Ads activity history"], ["@", "Mention history"], ["👤", "Account history"], ["🎬", "Reuse of content history"]];
+
+  S.activity = function (view) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    view.innerHTML = `<div class="sp"><div class="sp-top"><button id="acb" aria-label="Back">←</button><div>Activity center</div></div>
+      <div class="sp-card" style="margin-top:14px">${ROWS.map((r, i) => `<button class="sp-r" data-i="${i}"><span class="ic">${r[0]}</span><b>${esc(r[1])}</b><i>›</i></button>`).join("")}</div></div>`;
+    $("#acb", view).addEventListener("click", () => { location.hash = "#/profile"; });
+    $(".sp", view).addEventListener("click", (e) => {
+      const b = e.target.closest(".sp-r"); if (!b) return;
+      const r = ROWS[+b.dataset.i];
+      if (r[2]) location.hash = r[2]; else toast(r[1] + " is coming soon.");
+    });
+  };
+
+  const ago = (t) => {
+    const s = (Date.now() - new Date(t).getTime()) / 1000;
+    if (s < 60) return "just now"; if (s < 3600) return Math.floor(s / 60) + " min ago"; if (s < 86400) return Math.floor(s / 3600) + " h ago";
+    return new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
+
+  S.history = function (view, kind) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    const titles = { watch: "Watch history", comments: "Comment history", search: "Search history" };
+    view.innerHTML = `<div class="sp"><div class="sp-top"><button id="hb" aria-label="Back">←</button><div>${titles[kind]}</div></div><div id="hbody"><div class="sp-empty">Loading…</div></div></div>`;
+    $("#hb", view).addEventListener("click", () => { location.hash = "#/activity"; });
+    const body = $("#hbody", view);
+    let dead = false;
+    const clearBtn = (fn) => { const b = document.createElement("button"); b.className = "sp-r"; b.style.cssText = "color:#ff4d6a;justify-content:center;margin:14px 14px 0;width:calc(100% - 28px);background:#1f1f22;border-radius:14px"; b.textContent = "Clear all"; b.addEventListener("click", () => { if (confirm("Clear all " + titles[kind].toLowerCase() + "?")) fn(); }); return b; };
+    async function openVideo(id) {
+      try { const { data } = await sb.from("videos").select("*").eq("id", id).maybeSingle(); if (data && LS.openPlayer) LS.openPlayer(data, data.user_id === LS.user.id, () => {}); else toast("This video is no longer available."); } catch (e) { toast("Could not open it."); }
+    }
+    (async () => {
+      if (kind === "search") {
+        const draw = () => {
+          const a = getS();
+          if (!a.length) { body.innerHTML = `<div class="sp-empty">No searches yet.</div>`; return; }
+          body.innerHTML = `<div class="sp-card" style="margin-top:14px">${a.map((t, i) => `<div class="sp-u"><b style="font-weight:500">🔍 ${esc(t)}</b><button type="button" data-i="${i}">Remove</button></div>`).join("")}</div>`;
+          body.appendChild(clearBtn(() => { setS([]); draw(); }));
+          $(".sp-card", body).addEventListener("click", (e) => { const b = e.target.closest("button[data-i]"); if (!b) return; const x = getS(); x.splice(+b.dataset.i, 1); setS(x); draw(); });
+        };
+        draw(); return;
+      }
+      if (kind === "watch") {
+        let ids = [];
+        try { const { data } = await sb.from("watch_history").select("video_id,watched_at").eq("user_id", LS.user.id).order("watched_at", { ascending: false }).limit(100); ids = data || []; } catch (e) { /* ignore */ }
+        if (dead) return;
+        if (!ids.length) { body.innerHTML = `<div class="sp-empty">Videos you watch will show here.</div>`; return; }
+        let vids = [];
+        try { const { data } = await sb.from("videos").select("*").in("id", ids.map((r) => r.video_id)); vids = data || []; } catch (e) { /* ignore */ }
+        if (dead) return;
+        const by = new Map(vids.map((v) => [v.id, v]));
+        const list = ids.map((r) => by.get(r.video_id)).filter(Boolean);
+        const vu = (p) => (sb && p ? sb.storage.from("videos").getPublicUrl(p).data.publicUrl : "");
+        body.innerHTML = `<div class="vgrid" style="margin-top:14px">${list.map((v, i) => `<button class="vcell" data-i="${i}" type="button">${v.thumb_path ? `<img loading="lazy" src="${esc(vu(v.thumb_path))}" alt="">` : `<video muted preload="metadata" src="${esc(vu(v.video_path))}#t=0.5"></video>`}<span>▶ ${Number(v.views) || 0}</span></button>`).join("")}</div>`;
+        $(".vgrid", body).addEventListener("click", (e) => { const c = e.target.closest(".vcell"); if (c) openVideo(list[+c.dataset.i].id); });
+        body.appendChild(clearBtn(async () => { await sb.from("watch_history").delete().eq("user_id", LS.user.id); body.innerHTML = `<div class="sp-empty">Videos you watch will show here.</div>`; }));
+        return;
+      }
+      /* comments */
+      let rows = [];
+      try { const { data } = await sb.from("video_comments").select("id,video_id,body,created_at").eq("user_id", LS.user.id).order("created_at", { ascending: false }).limit(100); rows = data || []; } catch (e) { /* ignore */ }
+      if (dead) return;
+      if (!rows.length) { body.innerHTML = `<div class="sp-empty">Comments you write will show here.</div>`; return; }
+      body.innerHTML = `<div class="sp-card" style="margin-top:14px">${rows.map((r, i) => `<button class="sp-r" data-i="${i}" style="flex-direction:column;align-items:flex-start;gap:4px"><b style="font-weight:500;width:100%">${esc(r.body)}</b><em>${ago(r.created_at)} · tap to open the video</em></button>`).join("")}</div>`;
+      $(".sp-card", body).addEventListener("click", (e) => { const b = e.target.closest(".sp-r"); if (b) openVideo(rows[+b.dataset.i].video_id); });
+    })();
+    return () => { dead = true; };
+  };
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
@@ -6613,6 +6713,8 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     [/^\/blocked$/, S.blocked, "thread"],
     [/^\/studio$/, S.studio, "thread"],
     [/^\/qr$/, S.qr, "thread"],
+    [/^\/activity$/, S.activity, "thread"],
+    [/^\/history\/(watch|comments|search)$/, S.history, "thread"],
     [/^\/live-analytics$/, S.liveAnalytics, "thread"],
     [/^\/auth$/, S.auth, "profile"],
     [/^\/edit-profile$/, S.editProfile, "thread"],
