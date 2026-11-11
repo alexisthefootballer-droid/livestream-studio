@@ -1940,7 +1940,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       loopVid.src = objectUrl;
       play();
     }
-    function setStream(stream) {
+    function setStream(stream, plain) {
+      camVid.style.transform = plain ? "none" : "";
       if (stream) {
         camVid.srcObject = stream;
         camVid.classList.remove("hidden");
@@ -2334,6 +2335,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           feedEl: $("#hostfeed", view),
           seatsEl: $("#seatbox", view),
           guestsEl: $("#hostslots", view),
+          stage,
           onSlotTap: () => $("#seatsheet", view).classList.remove("hidden"),
           reqApi,
           onPending: drawReqs,
@@ -3021,12 +3023,12 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       const wrap = document.createElement("div");
       const v = document.createElement("video");
       v.autoplay = true; v.muted = true; v.setAttribute("playsinline", "");
-      v.srcObject = new MediaStream([info.track.mediaStreamTrack || info.track]);
-      const l = document.createElement("span"); l.textContent = info.local ? "You" : (names[id] || "Guest");
+      v.srcObject = info.override || info.ms;
+      const l = document.createElement("span"); l.textContent = info.override ? "Host" : info.local ? "You" : (names[id] || "Guest");
       wrap.appendChild(v); wrap.appendChild(l);
-      if (!info.local) ensureNames([id]).then(() => { l.textContent = names[id] || "Guest"; });
+      if (!info.local) ensureNames([id]).then(() => { if (!(tr.get(id) || {}).override) l.textContent = names[id] || "Guest"; });
       const pr = v.play(); if (pr && pr.catch) pr.catch(() => {});
-      t = { wrap, v };
+      t = { wrap, v, l };
       els.set(id, t);
       return t;
     }
@@ -3049,22 +3051,52 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         }
       });
     }
-    return {
+    const api = {
+      onChange: null,
+      has(id) { return tr.has(id); },
+      streamOf(id) { const i = tr.get(id); return i ? i.ms : null; },
+      setOverride(id, stream) {
+        const i = tr.get(id); if (!i) return;
+        const want = stream || null;
+        if ((i.override || null) === want) return;
+        i.override = want;
+        const t = els.get(id);
+        if (t) { t.v.srcObject = want || i.ms; t.l.textContent = want ? "Host" : i.local ? "You" : (names[id] || "Guest"); const pr = t.v.play(); if (pr && pr.catch) pr.catch(() => {}); }
+      },
       setCount(nn, onTap, onGuestTap) { n = nn; tap = onTap || null; if (onGuestTap) gtap = onGuestTap; paint(); },
       add(id, track, local, slot) {
         tr.delete(id); els.delete(id);
-        tr.set(id, { track, local });
+        tr.set(id, { track, local, ms: new MediaStream([track.mediaStreamTrack || track]), override: null });
         if (slot != null) pos.set(id, slot);
         paint();
+        if (api.onChange) api.onChange();
       },
-      remove(id) { if (!tr.has(id)) return; tr.delete(id); els.delete(id); pos.delete(id); paint(); },
+      remove(id) { if (!tr.has(id)) return; tr.delete(id); els.delete(id); pos.delete(id); paint(); if (api.onChange) api.onChange(); },
       setSlots(map) {
         let changed = false;
         Object.keys(map).forEach((id) => { if (map[id] != null && pos.get(id) !== map[id]) { pos.set(id, map[id]); changed = true; } });
         if (changed) { Array.from(pos.keys()).forEach((id) => { if (!(id in map) && !tr.has(id)) pos.delete(id); }); paint(); }
       },
-      clear() { slotEls.forEach((el) => el.remove()); slotEls.length = 0; tr.clear(); els.clear(); pos.clear(); },
+      clear() { slotEls.forEach((el) => el.remove()); slotEls.length = 0; tr.clear(); els.clear(); pos.clear(); if (api.onChange) api.onChange(); },
     };
+    return api;
+  }
+
+  /* swaps the host's video with one guest's video (main stage <-> guest box) */
+  function swapper(stage, tiles, dropMissing) {
+    let host = null, want = null, shown;
+    let applied = null;
+    function run() {
+      if (dropMissing && want && !tiles.has(want)) want = null;
+      const ok = !!(want && host && tiles.has(want));
+      const key = ok ? want : null;
+      if (applied && applied !== key) { tiles.setOverride(applied, null); applied = null; }
+      let target = host;
+      if (ok) { target = tiles.streamOf(want); tiles.setOverride(want, host); applied = want; }
+      if (target !== shown) { shown = target; stage.setStream(target, ok); }
+    }
+    tiles.onChange = run;
+    return { setHost(s2) { host = s2; run(); }, setWant(u) { want = u || null; run(); }, get want() { return want; } };
   }
 
 
@@ -3338,6 +3370,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       const seatsOpt = Array.from({ length: Math.max(open, 1) }, (_, i) => `<option value="${i}" ${i === slot ? "selected" : ""}>Seat ${i + 1}</option>`).join("");
       menu.innerHTML = `<div class="gmenu"><div class="gm-h"><b>${esc(names[uid] || "Guest")}</b><button type="button" data-g="x" aria-label="Close">✕</button></div>
         <label class="gm-row"><span>🔀 Switch to</span><select id="gmslot">${seatsOpt}</select></label>
+        <button type="button" class="gm-row" data-g="swap">${hooks.swapGet && hooks.swapGet() === uid ? "↩️ Swap back" : "🔄 Swap with me"}</button>
         <button type="button" class="gm-row" data-g="mic">🔇 Mute microphone</button>
         <button type="button" class="gm-row" data-g="cam">🙈 Hide camera</button>
         <button type="button" class="gm-row" data-g="rem">🚪 Remove from seat</button>
@@ -3355,6 +3388,14 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           gm("Working…");
           sb.functions.invoke("livekit-token", { body: { roomName, action: "mute", identity: uid, kind: g } }).then(() => gm(g === "mic" ? "Microphone muted." : "Camera hidden."), () => gm("Could not do that."));
           return;
+        }
+        if (g === "swap") {
+          const on = !(hooks.swapGet && hooks.swapGet() === uid);
+          gm("Working…");
+          const { error } = await sb.rpc("host_swap", { p_stream: streamId, p_user: on ? uid : null });
+          if (error) { gm("Could not swap. Try again."); return; }
+          if (hooks.swapSet) hooks.swapSet(on ? uid : null);
+          closeMenu(); return;
         }
         if (g === "rem") { if (row) await act("rem", row.id, uid); closeMenu(); return; }
         if (g === "block") {
@@ -3500,7 +3541,9 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     });
     room.on(LK.RoomEvent.ParticipantConnected, () => { upd(); setTimeout(sendFx, 800); });
     room.on(LK.RoomEvent.ParticipantDisconnected, (p) => { if (gtiles) gtiles.remove(p.identity); upd(); });
-    const stopSeats = o.seatsEl ? seatsPanel(o.seatsEl, row.id, roomName, { gt: gtiles, onSlotTap: o.onSlotTap, onRequests: o.onRequests, onPending: o.onPending, onCfg: o.onCfg, api: o.reqApi }) : null;
+    const sw = gtiles && o.stage ? swapper(o.stage, gtiles, true) : null;
+    if (sw) sw.setHost(o.stream);
+    const stopSeats = o.seatsEl ? seatsPanel(o.seatsEl, row.id, roomName, { gt: gtiles, swapGet: () => (sw ? sw.want : null), swapSet: (u) => { if (sw) sw.setWant(u); }, onSlotTap: o.onSlotTap, onRequests: o.onRequests, onPending: o.onPending, onCfg: o.onCfg, api: o.reqApi }) : null;
     upd();
     const beat = setInterval(async () => {
       try { await sb.from("streams").update({ last_seen: new Date().toISOString(), viewer_count: count() }).eq("id", row.id); } catch (e) { /* ignore */ }
@@ -3661,13 +3704,15 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           const roomDiv = fxRoom();
           const guestsBox = document.createElement("div"); guestsBox.className = "guests lay-" + (st.seat_layout || "panel"); roomDiv.appendChild(guestsBox);
           const tiles = guestTiles(guestsBox);
+          const sw = swapper(stage, tiles, false);
+          sw.setWant(st.swap_uid);
           const joinBtn = document.createElement("button"); joinBtn.className = "join-btn hidden"; joinBtn.type = "button"; roomDiv.appendChild(joinBtn);
           let mySeat = null, seatCount = st.seat_count || 0, onStage = false, localStream = null, seatCam = st.seat_cam !== false;
           const count = () => { const n = roomEl.remoteParticipants ? roomEl.remoteParticipants.size : 0; if (vc) vc.textContent = "👁 " + fmtN(n); };
           const onTrack = (track, p) => {
             const id = p && p.identity;
             if (track.kind === "video") {
-              if (id === st.host_id) stage.setStream(new MediaStream([track.mediaStreamTrack]));
+              if (id === st.host_id) sw.setHost(new MediaStream([track.mediaStreamTrack]));
               else if (id !== myId) tiles.add(id, track);
             } else if (track.kind === "audio") {
               const el = track.attach(); el.setAttribute("playsinline", ""); audioBox.appendChild(el);
@@ -3676,7 +3721,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           };
           roomEl.on(LK.RoomEvent.TrackSubscribed, (track, pub, p) => onTrack(track, p));
           roomEl.on(LK.RoomEvent.TrackUnsubscribed, (track, pub, p) => {
-            if (track.kind === "video") { if (p && p.identity === st.host_id) stage.setStream(null); else if (p) tiles.remove(p.identity); }
+            if (track.kind === "video") { if (p && p.identity === st.host_id) sw.setHost(null); else if (p) tiles.remove(p.identity); }
             else try { track.detach().forEach((e) => e.remove()); } catch (e) { /* ignore */ }
           });
           roomEl.on(LK.RoomEvent.ParticipantConnected, count);
@@ -3749,7 +3794,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           async function checkSeat() {
             try {
               const [{ data: sr }, { data: me }] = await Promise.all([
-                sb.from("streams").select("is_live,last_seen,effect,seat_count,seat_layout,seat_cam").eq("id", st.id).maybeSingle(),
+                sb.from("streams").select("is_live,last_seen,effect,seat_count,seat_layout,seat_cam,swap_uid").eq("id", st.id).maybeSingle(),
                 sb.from("seat_requests").select("status").eq("stream_id", st.id).eq("user_id", myId).maybeSingle(),
               ]);
               if (dead) return { sr };
@@ -3758,7 +3803,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
                 const m = {}; (sl || []).forEach((x) => { m[x.user_id] = x.slot; });
                 tiles.setSlots(m);
               } catch (e) { /* ignore */ }
-              if (sr) { seatCount = sr.seat_count || 0; seatCam = sr.seat_cam !== false; guestsBox.className = "guests lay-" + (sr.seat_layout || "panel"); }
+              if (sr) { sw.setWant(sr.swap_uid); seatCount = sr.seat_count || 0; seatCam = sr.seat_cam !== false; guestsBox.className = "guests lay-" + (sr.seat_layout || "panel"); }
               const prev = mySeat;
               const now = me ? me.status : null;
               if (now === "accepted") { mySeat = "accepted"; if (!onStage && !busy) goOnStage(); }
@@ -4923,6 +4968,147 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
 })();
 </script>
   <script>
+/* Settings and privacy (full list) + Blocked accounts. */
+(function () {
+  const LS = window.LS;
+  const S = LS.screens;
+  const sb = LS.sb;
+  const esc = LS.esc;
+  const $ = LS.$;
+  const st = document.createElement("style");
+  st.textContent = `
+  .sp{padding:0 0 40px;background:#000;min-height:100%;color:#fff}
+  .sp-h{font-size:30px;font-weight:800;margin:6px 18px 10px}
+  .sp-s{font-size:14px;color:#9a9aa3;margin:22px 20px 8px;font-weight:600}
+  .sp-card{background:#1f1f22;border-radius:16px;margin:0 14px;overflow:hidden}
+  .sp-r{display:flex;align-items:center;gap:14px;width:100%;padding:15px 16px;background:none;border:0;color:#fff;font-size:17px;text-align:left}
+  .sp-r .ic{width:26px;text-align:center;font-size:20px;opacity:.75}
+  .sp-r b{font-weight:500;flex:1}
+  .sp-r em{font-style:normal;color:#9a9aa3;font-size:15px}
+  .sp-r i{font-style:normal;color:#8a8a93;font-size:22px}
+  .sp-ver{text-align:center;color:#6f6f78;font-size:14px;margin:26px 0 10px}
+  .sp-top{display:flex;align-items:center;padding:8px 10px}
+  .sp-top button{background:none;border:0;color:#fff;font-size:26px;padding:6px 10px}
+  .sp-top div{flex:1;text-align:center;font-weight:700;font-size:18px;margin-right:44px}
+  .sp-u{display:flex;align-items:center;gap:12px;padding:12px 16px}
+  .sp-u .av{width:44px;height:44px;border-radius:50%;overflow:hidden;display:block;flex:none}
+  .sp-u b{flex:1;font-size:16px}
+  .sp-u button{background:#ffffff1f;border:0;color:#fff;border-radius:8px;padding:8px 14px;font-size:14px;font-weight:600}
+  .sp-empty{text-align:center;color:#9a9aa3;padding:40px 20px}
+  .sp-sw{display:flex;align-items:center;gap:12px;padding:15px 16px}
+  .sp-sw div{flex:1}.sp-sw small{display:block;color:#9a9aa3;margin-top:3px}
+  .sp-sw select{background:#2b2b30;color:#fff;border:0;border-radius:8px;padding:8px}
+  .sp-toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:#000d;color:#fff;padding:10px 16px;border-radius:20px;z-index:220;font-size:14px}
+  `;
+  document.head.appendChild(st);
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
+
+  /* [icon, label, action, right-hand text]
+     action: "#/route" = open, "fn:name" = run, otherwise coming soon */
+  const SECTIONS = [
+    ["Activity", [
+      ["🎞", "Manage posts", "#/profile"], ["🎥", "Content preferences"], ["📺", "LIVE", "#/golive"],
+      ["🔔", "Notifications"], ["⏳", "Time and well-being"], ["🏠", "Family Pairing"]]],
+    ["Account", [
+      ["👤", "Account", "#/edit-profile"], ["🛡", "Security & permissions"], ["📈", "Analytics", "#/earnings"],
+      ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"]]],
+    ["Visibility", [
+      ["🔒", "Private account"], ["🚫", "Blocked accounts", "#/blocked"]]],
+    ["Interactions", [
+      ["💬", "Comments"], ["@", "Mentions"], ["✉️", "Direct messages"], ["🎬", "Reuse of content"],
+      ["⬇️", "Downloads", null, "On"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
+    ["Content & Display", [
+      ["🎵", "Music"], ["📥", "Inbox & Messaging"], ["🕒", "Activity center", "#/inbox"], ["👪", "Audience control"],
+      ["📣", "Plan and ads"], ["▶️", "Playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language"],
+      ["♿", "Accessibility"], ["👁", "Amplify"], ["📍", "Contacts and location"]]],
+    ["Cache & Cellular", [
+      ["☁️", "Offline videos"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver"], ["🖼", "Wallpaper"]]],
+    ["Support & About", [
+      ["🎧", "Help Center"], ["🔐", "Privacy Center"], ["ℹ️", "Terms and Policies"]]],
+    ["Login", [
+      ["🔁", "Switch account", "fn:logout"], ["🚪", "Log out", "fn:logout"]]],
+  ];
+
+  S.settings = function (view) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    let n = 0;
+    view.innerHTML = `<div class="sp">
+      <div class="sp-top"><button id="spb" aria-label="Back">←</button></div>
+      <div class="sp-h">Settings and privacy</div>
+      ${SECTIONS.map(([title, rows]) => `<div class="sp-s">${esc(title)}</div><div class="sp-card">${rows.map((r) => { const k = n++; return `<button class="sp-r" data-k="${k}"><span class="ic">${r[0]}</span><b>${esc(r[1])}</b>${r[3] ? `<em>${esc(r[3])}</em>` : ""}<i>›</i></button>`; }).join("")}</div>`).join("")}
+      <div class="sp-ver">v1.0</div></div>`;
+    const flat = [].concat(...SECTIONS.map((s) => s[1]));
+    $("#spb", view).addEventListener("click", () => { location.hash = "#/profile"; });
+    $(".sp", view).addEventListener("click", async (e) => {
+      const b = e.target.closest(".sp-r");
+      if (!b) return;
+      const r = flat[+b.dataset.k], a = r[2];
+      if (a && a[0] === "#") { location.hash = a; return; }
+      if (a === "fn:share") {
+        const pr = LS.myProfile || {};
+        const url = location.origin + "/#/u/" + (pr.username || "");
+        try { if (navigator.share) { await navigator.share({ title: "My profile", url }); return; } } catch (er) { return; }
+        try { await navigator.clipboard.writeText(url); toast("Profile link copied"); } catch (er) { toast(url); }
+        return;
+      }
+      if (a === "fn:free") {
+        try { if (window.caches) { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } } catch (er) { /* ignore */ }
+        try { sessionStorage.clear(); } catch (er) { /* ignore */ }
+        toast("Space freed up"); return;
+      }
+      if (a === "fn:logout") { await sb.auth.signOut(); location.hash = "#/auth"; return; }
+      if (a === "fn:display") { openDisplay(view); return; }
+      toast(r[1] + " is coming soon.");
+    });
+  };
+
+  function openDisplay(view) {
+    const defFx = LS.store.get("effect", "fireworks");
+    const fxOn = localStorage.getItem("ls.fx") !== "0";
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="db" aria-label="Back">←</button><div>Display</div></div>
+      <div class="sp-card" style="margin-top:14px">
+        <label class="sp-sw"><div><b>Background effects</b><small>Turn off to save battery</small></div><input type="checkbox" class="switch" id="fxsw" ${fxOn ? "checked" : ""}></label>
+        <label class="sp-sw"><div><b>Default effect</b><small>Used when you go live</small></div><select id="fxsel">${["none"].concat(LS.EFFECT_NAMES).map((nm) => `<option value="${nm}" ${nm === defFx ? "selected" : ""}>${esc(LS.effectInfo(nm).label)}</option>`).join("")}</select></label>
+      </div></div>`;
+    document.body.appendChild(ov);
+    $("#db", ov).addEventListener("click", () => ov.remove());
+    $("#fxsw", ov).addEventListener("change", (e) => localStorage.setItem("ls.fx", e.target.checked ? "1" : "0"));
+    $("#fxsel", ov).addEventListener("change", (e) => LS.store.set("effect", e.target.value));
+  }
+
+  S.blocked = function (view) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    view.innerHTML = `<div class="sp"><div class="sp-top"><button id="bb" aria-label="Back">←</button><div>Blocked accounts</div></div><div id="bl"><div class="sp-empty">Loading…</div></div></div>`;
+    $("#bb", view).addEventListener("click", () => { location.hash = "#/settings"; });
+    let dead = false;
+    (async () => {
+      const ids = Array.from(await LS.myBlocks(true));
+      if (dead) return;
+      const box = $("#bl", view);
+      if (!ids.length) { box.innerHTML = `<div class="sp-empty">You have not blocked anyone.</div>`; return; }
+      let rows = [];
+      try { const { data } = await sb.from("profiles").select("*").in("id", ids); rows = data || []; } catch (e) { /* ignore */ }
+      if (dead) return;
+      box.innerHTML = `<div class="sp-card" style="margin-top:10px">${rows.map((p) => `<div class="sp-u" data-id="${p.id}"><span class="av">${LS.photo(p, 44)}</span><b>${esc(p.display_name || p.username || "user")}</b><button type="button">Unblock</button></div>`).join("")}</div>`;
+      box.addEventListener("click", async (e) => {
+        const btn = e.target.closest("button");
+        const row = btn && btn.closest(".sp-u");
+        if (!row) return;
+        btn.disabled = true;
+        const r = await sb.from("user_blocks").delete().eq("blocker_id", LS.user.id).eq("blocked_id", row.dataset.id);
+        if (r.error) { btn.disabled = false; toast("Could not unblock. Try again."); return; }
+        await LS.myBlocks(true);
+        row.remove();
+        if (!box.querySelector(".sp-u")) box.innerHTML = `<div class="sp-empty">You have not blocked anyone.</div>`;
+      });
+    })();
+    return () => { dead = true; };
+  };
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
@@ -4940,6 +5126,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     [/^\/inbox\/([\w-]+)$/, S.thread, "thread"],
     [/^\/profile$/, S.profile, "profile"],
     [/^\/settings$/, S.settings, "thread"],
+    [/^\/blocked$/, S.blocked, "thread"],
     [/^\/auth$/, S.auth, "profile"],
     [/^\/edit-profile$/, S.editProfile, "thread"],
     [/^\/recharge$/, S.recharge, "thread"],
