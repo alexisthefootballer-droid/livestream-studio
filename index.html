@@ -4572,7 +4572,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (!rows.length) { l.innerHTML = `<div class="cm-empty">No comments yet. Be the first!</div>`; return; }
       l.innerHTML = rows.map((r) => {
         const pr = P[r.user_id] || {};
-        return `<div class="cm-row" data-id="${r.id}"><a href="#/u/${esc(pr.username || "")}" class="ring" style="--h:${hueOf(r.user_id)}">${LS.photo(pr, 36)}</a><div><b>@${esc(pr.username || "user")}</b><small>${ago(new Date(r.created_at).getTime())}</small><p>${esc(r.body)}</p></div>${myId && (myId === r.user_id || myId === v.user_id) ? `<button type="button" class="cm-del" data-del="${r.id}" aria-label="Delete">🗑</button>` : ""}</div>`;
+        return `<div class="cm-row" data-id="${r.id}"><a href="#/u/${esc(pr.username || "")}" class="ring" style="--h:${hueOf(r.user_id)}">${LS.photo(pr, 36)}</a><div><b>@${esc(pr.username || "user")}</b><small>${ago(new Date(r.created_at).getTime())}</small><p>${LS.mentionHtml ? LS.mentionHtml(r.body) : esc(r.body)}</p></div>${myId && (myId === r.user_id || myId === v.user_id) ? `<button type="button" class="cm-del" data-del="${r.id}" aria-label="Delete">🗑</button>` : ""}</div>`;
       }).join("");
     };
     async function load() {
@@ -4602,7 +4602,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         const m = await LS.moderate(text, "comment");
         if (m && m.allowed === false) { msg.textContent = m.message || "That comment is not allowed."; return; }
         const { error } = await sb.from("video_comments").insert({ video_id: v.id, user_id: LS.user.id, body: text.slice(0, 300) });
-        if (error) { const em = String(error.message || ""); msg.textContent = em.indexOf("comments_off") >= 0 ? "The creator turned off comments." : em.indexOf("comments_friends") >= 0 ? "Only friends can comment on this video." : "Could not post. Try again."; return; }
+        if (error) { const em = String(error.message || ""); msg.textContent = em.indexOf("comments_off") >= 0 ? "The creator turned off comments." : em.indexOf("comments_friends") >= 0 ? "Only friends can comment on this video." : /mention_(off|friends):/.test(em) ? "You can not mention @" + em.split(/mention_(?:off|friends):/)[1].split(/\s/)[0] + "." : "Could not post. Try again."; return; }
         inp.value = ""; v.comments_count = (v.comments_count || 0) + 1;
         await load();
       } catch (e) { msg.textContent = "Something went wrong."; } finally { busy = false; }
@@ -5022,7 +5022,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     ["Visibility", [
       ["🔒", "Private account", "fn:private"], ["🚫", "Blocked accounts", "#/blocked"]]],
     ["Interactions", [
-      ["💬", "Comments", "fn:comments"], ["@", "Mentions"], ["✉️", "Direct messages"], ["🎬", "Reuse of content"],
+      ["💬", "Comments", "fn:comments"], ["@", "Mentions", "fn:mentions"], ["✉️", "Direct messages"], ["🎬", "Reuse of content"],
       ["⬇️", "Downloads", null, "On"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
     ["Content & Display", [
       ["🎵", "Music"], ["📥", "Inbox & Messaging"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control"],
@@ -5063,6 +5063,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:mentions") { LS.openMentionsSetting(); return; }
       if (a === "fn:content") { LS.openContentPrefs(); return; }
       if (a === "fn:family") { LS.openFamily(); return; }
       if (a === "fn:wellbeing") { LS.openWellbeing(); return; }
@@ -6857,7 +6858,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   const sb = LS.sb;
   const esc = LS.esc;
   const $ = LS.$;
-  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [] };
+  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone" };
   const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
   let cache = null, cacheUid = null;
   LS.getSettings = async function (force) {
@@ -6871,7 +6872,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   LS.saveSettings = async function (patch) {
     const cur = await LS.getSettings();
     const next = Object.assign({}, cur, patch);
-    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
     if (r && r.error) return false;
     cache = next; return true;
   };
@@ -7274,6 +7275,39 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
         }));
       };
       draw();
+    })();
+  };
+})();
+</script>
+  <script>
+/* Mentions: who can @mention you, and tappable @names in comments. */
+(function () {
+  const LS = window.LS;
+  const esc = LS.esc;
+  const $ = LS.$;
+  LS.mentionHtml = function (body) {
+    return esc(body).replace(/(^|[\s(])@([A-Za-z0-9_.]{2,30})/g, (m, a, u) => `${a}<a href="#/u/${u}" style="color:#6ab7ff;text-decoration:none">@${u}</a>`);
+  };
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
+  LS.openMentionsSetting = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="mb" aria-label="Back">←</button><div>Mentions</div></div><div id="mbody"></div></div>`;
+    document.body.appendChild(ov);
+    $("#mb", ov).addEventListener("click", () => ov.remove());
+    const box = $("#mbody", ov);
+    const OPTS = [["everyone", "Everyone", "Anyone can mention you with @username in comments"], ["friends", "Friends", "Only people you follow who follow you back"], ["none", "No one", "Nobody can mention you"]];
+    (async () => {
+      const s = await LS.getSettings(true);
+      const draw = (cur) => {
+        box.innerHTML = `<div class="sp-s">Who can @mention you</div><div class="sp-card">${OPTS.map((o) => `<button class="sp-r" data-k="${o[0]}"><div style="flex:1"><b style="display:block;font-weight:500">${o[1]}</b><em>${o[2]}</em></div><span style="width:24px;height:24px;border-radius:50%;border:2px solid ${cur === o[0] ? "#fe2c55" : "#666"};background:${cur === o[0] ? "radial-gradient(#fff 0 35%,#fe2c55 40%)" : "none"}"></span></button>`).join("")}</div>
+          <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">People you block can never mention you. Your mentions show in Activity center → Mention history.</p>`;
+        box.querySelector(".sp-card").addEventListener("click", async (e) => {
+          const b = e.target.closest("[data-k]"); if (!b) return;
+          if (await LS.saveSettings({ mentions_who: b.dataset.k })) { draw(b.dataset.k); toast("Saved"); } else toast("Could not save. Try again.");
+        });
+      };
+      draw(s.mentions_who || "everyone");
     })();
   };
 })();
