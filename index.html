@@ -5015,7 +5015,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   const SECTIONS = [
     ["Activity", [
       ["🎞", "Manage posts", "#/profile"], ["🎥", "Content preferences"], ["📺", "LIVE", "#/golive"],
-      ["🔔", "Notifications", "fn:notif"], ["⏳", "Time and well-being"], ["🏠", "Family Pairing"]]],
+      ["🔔", "Notifications", "fn:notif"], ["⏳", "Time and well-being", "fn:wellbeing"], ["🏠", "Family Pairing"]]],
     ["Account", [
       ["👤", "Account", "#/edit-profile"], ["🛡", "Security & permissions"], ["📈", "Analytics", "#/live-analytics"],
       ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"]]],
@@ -5063,6 +5063,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:wellbeing") { LS.openWellbeing(); return; }
       if (a === "fn:private") { LS.openPrivate(); return; }
       if (a === "fn:comments") { LS.openCommentsSetting(); return; }
       if (a === "fn:notif") { LS.openNotifSetting(); return; }
@@ -6966,6 +6967,133 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       } catch (e) { /* ignore */ }
     })();
     return c;
+  };
+})();
+</script>
+  <script>
+/* Time and well-being: screen time, daily limit, breaks, sleep reminder. */
+(function () {
+  const LS = window.LS;
+  const esc = LS.esc;
+  const $ = LS.$;
+  const st = document.createElement("style");
+  st.textContent = `
+  .wb-lock{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:400;display:flex;align-items:center;justify-content:center;padding:24px}
+  .wb-box{background:#1b1b20;color:#fff;border-radius:22px;padding:26px 22px;max-width:340px;width:100%;text-align:center}
+  .wb-box h3{margin:6px 0 8px;font-size:22px}.wb-box p{color:#b5b5be;margin:0 0 18px;line-height:1.4}
+  .wb-box button{display:block;width:100%;border:0;border-radius:24px;padding:14px;font-size:17px;font-weight:700;margin-top:10px;background:#fe2c55;color:#fff}
+  .wb-box button.alt{background:#2b2b30}
+  .wb-box input{width:100%;box-sizing:border-box;text-align:center;font-size:26px;letter-spacing:10px;padding:12px;border-radius:12px;border:1px solid #444;background:#111;color:#fff}
+  .wb-bars{display:flex;align-items:flex-end;gap:8px;height:120px;padding:14px 8px 0}
+  .wb-bars div{flex:1;text-align:center;font-size:12px;color:#9a9aa3;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+  .wb-bars i{display:block;background:#3b9cff;border-radius:5px 5px 0 0;min-height:3px;margin-bottom:6px}
+  .wb-bars div.today i{background:#fe2c55}
+  `;
+  document.head.appendChild(st);
+
+  const CK = "ls.wb";
+  const DEFW = { limit: 0, pass: "", breakEvery: 0, sleep: false, sleepAt: "23:00" };
+  const getW = () => { try { return Object.assign({}, DEFW, JSON.parse(localStorage.getItem(CK) || "{}")); } catch (e) { return Object.assign({}, DEFW); } };
+  const setW = (p) => { try { localStorage.setItem(CK, JSON.stringify(Object.assign(getW(), p))); } catch (e) { /* ignore */ } };
+  const dkey = (d) => { d = d || new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  const getSecs = (k) => { try { return Number(localStorage.getItem("ls.sct." + k)) || 0; } catch (e) { return 0; } };
+  const addSecs = (n) => { try { const k = "ls.sct." + dkey(); localStorage.setItem(k, String(getSecs(dkey()) + n)); } catch (e) { /* ignore */ } };
+  const fmtT = (s) => { const m = Math.round(s / 60); if (m < 60) return m + "m"; return Math.floor(m / 60) + "h " + (m % 60 ? (m % 60) + "m" : "").trim(); };
+  async function sha(t) { try { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("ls:" + t)); return Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, "0")).join(""); } catch (e) { return "p:" + t; } }
+
+  /* ---- tracker ---- */
+  let snoozeUntil = 0, sessionSecs = 0, lockOpen = false, shownSleep = "";
+  function modal(html, bind) {
+    const o = document.createElement("div"); o.className = "wb-lock"; o.innerHTML = `<div class="wb-box">${html}</div>`;
+    document.body.appendChild(o); bind(o, () => o.remove()); return o;
+  }
+  function limitModal() {
+    if (lockOpen) return; lockOpen = true;
+    const w = getW();
+    modal(`<div style="font-size:40px">⏳</div><h3>Daily limit reached</h3><p>You have used ${fmtT(getSecs(dkey()))} today. Time for a break!</p>
+      ${w.pass ? `<input id="wbp" type="password" inputmode="numeric" maxlength="4" placeholder="••••"><button id="wbok">Enter passcode to continue</button><div id="wbe" style="color:#ff4d6a;min-height:20px;margin-top:8px"></div>` : `<button id="wbok">Continue for 10 more minutes</button>`}
+      <button class="alt" id="wbcl">Close</button>`, (o, close) => {
+      $("#wbcl", o).addEventListener("click", () => { close(); lockOpen = false; snoozeUntil = Date.now() + 60000; });
+      $("#wbok", o).addEventListener("click", async () => {
+        if (w.pass) { const v = $("#wbp", o).value; if ((await sha(v)) !== w.pass) { $("#wbe", o).textContent = "Wrong passcode"; return; } }
+        snoozeUntil = Date.now() + 10 * 60000; close(); lockOpen = false;
+      });
+    });
+  }
+  function breakModal() {
+    modal(`<div style="font-size:40px">☕</div><h3>Time for a break?</h3><p>You have been scrolling for a while. Rest your eyes and stretch.</p><button id="wbd">OK, I'll continue</button>`, (o, close) => $("#wbd", o).addEventListener("click", close));
+  }
+  function sleepModal() {
+    modal(`<div style="font-size:40px">🌙</div><h3>Sleep reminder</h3><p>It is late. Getting enough sleep helps you feel better tomorrow.</p><button id="wbd">OK</button>`, (o, close) => $("#wbd", o).addEventListener("click", close));
+  }
+  setInterval(() => {
+    if (document.hidden) return;
+    addSecs(10); sessionSecs += 10;
+    const w = getW(), used = getSecs(dkey());
+    if (w.limit > 0 && used >= w.limit * 60 && Date.now() > snoozeUntil && !lockOpen) limitModal();
+    if (w.breakEvery > 0 && sessionSecs >= w.breakEvery * 60) { sessionSecs = 0; breakModal(); }
+    if (w.sleep) {
+      const n = new Date(), hh = n.getHours() * 60 + n.getMinutes(), [sh, sm] = String(w.sleepAt).split(":").map(Number), at = sh * 60 + (sm || 0);
+      if (hh >= at || hh < 300) {
+        const night = dkey(hh < 300 ? new Date(Date.now() - 864e5) : n);
+        if (shownSleep !== night && localStorage.getItem("ls.sleepShown") !== night) { shownSleep = night; try { localStorage.setItem("ls.sleepShown", night); } catch (e) { /* ignore */ } sleepModal(); }
+      }
+    }
+  }, 10000);
+
+  /* ---- settings screen ---- */
+  function overlay(title, build) {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:160;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="ovb" aria-label="Back">←</button><div>${esc(title)}</div></div><div id="ovbody"></div></div>`;
+    document.body.appendChild(ov);
+    $("#ovb", ov).addEventListener("click", () => ov.remove());
+    build($("#ovbody", ov), ov); return ov;
+  }
+  function pick(title, opts, cur, cb) {
+    overlay(title, (box, ov) => {
+      box.innerHTML = `<div class="sp-card" style="margin-top:14px">${opts.map((o) => `<button class="sp-r" data-v="${esc(String(o[0]))}"><b style="font-weight:500">${esc(o[1])}</b><span style="width:24px;height:24px;border-radius:50%;border:2px solid ${String(o[0]) === String(cur) ? "#fe2c55" : "#666"};background:${String(o[0]) === String(cur) ? "radial-gradient(#fff 0 35%,#fe2c55 40%)" : "none"}"></span></button>`).join("")}</div>`;
+      box.querySelector(".sp-card").addEventListener("click", (e) => { const b = e.target.closest("[data-v]"); if (!b) return; cb(b.dataset.v); ov.remove(); });
+    });
+  }
+  LS.openWellbeing = function () {
+    const ov = overlay("Time and well-being", (box) => {
+      const draw = () => {
+        const w = getW(), today = getSecs(dkey());
+        const days = []; for (let i = 6; i >= 0; i--) { const d = new Date(Date.now() - i * 864e5); days.push({ k: dkey(d), s: getSecs(dkey(d)), l: d.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 2), t: i === 0 }); }
+        const mx = Math.max(60, ...days.map((d) => d.s));
+        const avg = days.reduce((a, d) => a + d.s, 0) / 7;
+        box.innerHTML = `<div class="sp-s">Screen time</div><div class="sp-card" style="padding:16px"><div style="font-size:30px;font-weight:800">${fmtT(today)}</div><small style="color:#9a9aa3">Today · daily average ${fmtT(avg)}</small>
+          <div class="wb-bars">${days.map((d) => `<div class="${d.t ? "today" : ""}"><i style="height:${Math.max(3, Math.round((d.s / mx) * 90))}px"></i>${d.l}</div>`).join("")}</div></div>
+          <div class="sp-s">Manage your time</div><div class="sp-card">
+          <button class="sp-r" data-a="limit"><b>Daily screen time limit</b><em>${w.limit ? w.limit + " min" : "Off"}</em><i>›</i></button>
+          <button class="sp-r" data-a="pass"><b>Passcode</b><em>${w.pass ? "On" : "Off"}</em><i>›</i></button>
+          <button class="sp-r" data-a="brk"><b>Screen time breaks</b><em>${w.breakEvery ? "Every " + w.breakEvery + " min" : "Off"}</em><i>›</i></button>
+          <button class="sp-r" data-a="slp"><b>Sleep reminders</b><em>${w.sleep ? "From " + w.sleepAt : "Off"}</em><i>›</i></button></div>
+          <p style="color:#9a9aa3;margin:12px 20px;font-size:14px">Screen time is counted on this phone while the app is open.</p>`;
+      };
+      draw();
+      box.addEventListener("click", async (e) => {
+        const b = e.target.closest("[data-a]"); if (!b) return; const a = b.dataset.a;
+        if (a === "limit") pick("Daily screen time limit", [[0, "Off"], [30, "30 minutes"], [60, "1 hour"], [90, "1.5 hours"], [120, "2 hours"], [180, "3 hours"]], getW().limit, (v) => { setW({ limit: +v }); draw(); });
+        if (a === "brk") pick("Screen time breaks", [[0, "Off"], [30, "Every 30 minutes"], [60, "Every hour"], [90, "Every 1.5 hours"]], getW().breakEvery, (v) => { setW({ breakEvery: +v }); sessionSecs = 0; draw(); });
+        if (a === "slp") overlay("Sleep reminders", (bx, o2) => {
+          const w = getW();
+          bx.innerHTML = `<div class="sp-card" style="margin-top:14px"><label class="sp-sw"><div><b>Sleep reminders</b><small>Remind me to rest at night</small></div><input type="checkbox" class="switch" id="slsw" ${w.sleep ? "checked" : ""}></label><label class="sp-sw"><div><b>Remind me at</b></div><input type="time" id="slt" value="${esc(w.sleepAt)}" style="background:#2b2b30;color:#fff;border:0;border-radius:8px;padding:8px"></label></div>`;
+          $("#slsw", bx).addEventListener("change", (ev) => { setW({ sleep: ev.target.checked }); draw(); });
+          $("#slt", bx).addEventListener("change", (ev) => { if (ev.target.value) { setW({ sleepAt: ev.target.value }); draw(); } });
+        });
+        if (a === "pass") {
+          const w = getW();
+          modal(w.pass ? `<h3>Passcode</h3><p>A 4-digit passcode is needed to continue after the daily limit.</p><button id="wbc">Turn passcode off</button><button class="alt" id="wbx">Cancel</button>` : `<h3>Set a passcode</h3><p>Choose 4 digits. You will need it to keep using the app after your daily limit.</p><input id="wbn" type="password" inputmode="numeric" maxlength="4" placeholder="••••"><button id="wbs">Save passcode</button><button class="alt" id="wbx">Cancel</button>`, (o, close) => {
+            $("#wbx", o).addEventListener("click", close);
+            const c = $("#wbc", o); if (c) c.addEventListener("click", () => { setW({ pass: "" }); close(); draw(); });
+            const s = $("#wbs", o); if (s) s.addEventListener("click", async () => { const v = $("#wbn", o).value; if (!/^\d{4}$/.test(v)) return; setW({ pass: await sha(v) }); close(); draw(); });
+          });
+        }
+      });
+    });
+    return ov;
   };
 })();
 </script>
