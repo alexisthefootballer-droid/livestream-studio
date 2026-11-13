@@ -3655,7 +3655,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
             view.innerHTML = `<div class="pad" style="padding-top:90px;text-align:center"><h3>Followers only</h3><p>${esc(names[st.host_id] || "The host")} lets only followers watch this live.</p><button class="btn big" id="gatefollow" type="button">Follow and watch</button><p><a href="#/live">← Back</a></p></div>`;
             $("#gatefollow", view).addEventListener("click", async (e) => {
               e.target.disabled = true;
-              if (await LS.setFollow(st.host_id, true)) resolve(); else { e.target.disabled = false; e.target.textContent = "Could not follow. Try again."; }
+              const fr = await LS.setFollow(st.host_id, true); if (fr === true) resolve(); else if (fr === "requested") { e.target.textContent = "Request sent. You can watch once approved."; } else { e.target.disabled = false; e.target.textContent = "Could not follow. Try again."; }
             });
           });
           if (dead) return;
@@ -3683,7 +3683,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
               fb.addEventListener("click", async () => {
                 fb.disabled = true;
                 const ok = await LS.setFollow(st.host_id, !on);
-                if (ok) { on = !on; paint(); if (on) addChat("system", "You followed " + hostName + ".", "sys"); }
+                if (ok === "requested") addChat("system", "Follow request sent.", "sys"); else if (ok) { on = !on; paint(); if (on) addChat("system", "You followed " + hostName + ".", "sys"); }
                 fb.disabled = false;
               });
             }
@@ -3924,8 +3924,9 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   LS.setFollow = async function (uid, on) {
     if (!sb || !LS.user) return false;
     try {
-      const { error } = await sb.rpc(on ? "follow_user" : "unfollow_user", { p_user: uid });
-      return !error;
+      const { data, error } = await sb.rpc(on ? "follow_user" : "unfollow_user", { p_user: uid });
+      if (error) return false;
+      return on && data === "requested" ? "requested" : true;
     } catch (e) { return false; }
   };
 
@@ -3990,7 +3991,10 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         let cur = on;
         fb.addEventListener("click", async () => {
           fb.disabled = true;
-          if (await LS.setFollow(data.id, !cur)) {
+          if (fb.dataset.req === "1") { await LS.setFollow(data.id, false); fb.dataset.req = ""; fb.textContent = "Follow"; fb.disabled = false; return; }
+          const fr = await LS.setFollow(data.id, !cur);
+          if (fr === "requested") { fb.dataset.req = "1"; fb.textContent = "Requested"; fb.disabled = false; return; }
+          if (fr) {
             cur = !cur; fb.textContent = cur ? "Following" : "Follow"; fb.classList.toggle("on", cur);
             const n = await LS.followCounts(data.id); $("#ufers", body).textContent = fmtN(n.followers);
           }
@@ -4033,7 +4037,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (!b) return;
       const on = b.classList.contains("on");
       b.disabled = true;
-      if (await LS.setFollow(b.dataset.uid, !on)) { b.classList.toggle("on", !on); b.textContent = !on ? "Following" : "Follow"; }
+      const fr = await LS.setFollow(b.dataset.uid, !on); if (fr === "requested") { b.textContent = "Requested"; } else if (fr) { b.classList.toggle("on", !on); b.textContent = !on ? "Following" : "Follow"; }
       b.disabled = false;
     };
     view.addEventListener("click", onFollowClick);
@@ -4598,7 +4602,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         const m = await LS.moderate(text, "comment");
         if (m && m.allowed === false) { msg.textContent = m.message || "That comment is not allowed."; return; }
         const { error } = await sb.from("video_comments").insert({ video_id: v.id, user_id: LS.user.id, body: text.slice(0, 300) });
-        if (error) { msg.textContent = "Could not post. Try again."; return; }
+        if (error) { const em = String(error.message || ""); msg.textContent = em.indexOf("comments_off") >= 0 ? "The creator turned off comments." : em.indexOf("comments_friends") >= 0 ? "Only friends can comment on this video." : "Could not post. Try again."; return; }
         inp.value = ""; v.comments_count = (v.comments_count || 0) + 1;
         await load();
       } catch (e) { msg.textContent = "Something went wrong."; } finally { busy = false; }
@@ -4768,7 +4772,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       }
       scroll.onclick = async (e) => {
         const f = e.target.closest(".fy-fol");
-        if (f) { e.preventDefault(); e.stopPropagation(); f.disabled = true; if (await LS.setFollow(f.dataset.uid, true)) f.remove(); else f.disabled = false; return; }
+        if (f) { e.preventDefault(); e.stopPropagation(); f.disabled = true; const fr = await LS.setFollow(f.dataset.uid, true); if (fr === true) f.remove(); else if (fr === "requested") { f.textContent = "Requested"; } else f.disabled = false; return; }
         const lk = e.target.closest(".fy-like");
         if (lk) { toggleLike(lk, null); return; }
         const mo = e.target.closest("[data-more]");
@@ -4869,6 +4873,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     if (busy || !sb || !LS.user) return;
     busy = true;
     try {
+      { const ss = LS.getSettings ? await LS.getSettings() : null; if (ss && ss.notif_live === false) return; }
       const fset = await LS.myFollows();
       if (!fset.size) return;
       const rows = (await liveRows()).filter((r) => fset.has(r.host_id) && r.host_id !== LS.user.id && !seen.has(r.id));
@@ -5010,14 +5015,14 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   const SECTIONS = [
     ["Activity", [
       ["🎞", "Manage posts", "#/profile"], ["🎥", "Content preferences"], ["📺", "LIVE", "#/golive"],
-      ["🔔", "Notifications"], ["⏳", "Time and well-being"], ["🏠", "Family Pairing"]]],
+      ["🔔", "Notifications", "fn:notif"], ["⏳", "Time and well-being"], ["🏠", "Family Pairing"]]],
     ["Account", [
       ["👤", "Account", "#/edit-profile"], ["🛡", "Security & permissions"], ["📈", "Analytics", "#/live-analytics"],
       ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"]]],
     ["Visibility", [
-      ["🔒", "Private account"], ["🚫", "Blocked accounts", "#/blocked"]]],
+      ["🔒", "Private account", "fn:private"], ["🚫", "Blocked accounts", "#/blocked"]]],
     ["Interactions", [
-      ["💬", "Comments"], ["@", "Mentions"], ["✉️", "Direct messages"], ["🎬", "Reuse of content"],
+      ["💬", "Comments", "fn:comments"], ["@", "Mentions"], ["✉️", "Direct messages"], ["🎬", "Reuse of content"],
       ["⬇️", "Downloads", null, "On"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
     ["Content & Display", [
       ["🎵", "Music"], ["📥", "Inbox & Messaging"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control"],
@@ -5058,6 +5063,9 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:private") { LS.openPrivate(); return; }
+      if (a === "fn:comments") { LS.openCommentsSetting(); return; }
+      if (a === "fn:notif") { LS.openNotifSetting(); return; }
       if (a === "fn:offline") { if (LS.offlineSheet) LS.offlineSheet(); return; }
       if (a === "fn:logout") { await sb.auth.signOut(); location.hash = "#/auth"; return; }
       if (a === "fn:display") { openDisplay(view); return; }
@@ -6835,6 +6843,129 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     }
     main();
     document.body.appendChild(ov);
+  };
+})();
+</script>
+  <script>
+/* Privacy settings: Private account, Comments, Notifications. */
+(function () {
+  const LS = window.LS;
+  const S = LS.screens;
+  const sb = LS.sb;
+  const esc = LS.esc;
+  const $ = LS.$;
+  const DEF = { private_account: false, comments_who: "everyone", notif_live: true };
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
+  let cache = null, cacheUid = null;
+  LS.getSettings = async function (force) {
+    if (!sb || !LS.user) return Object.assign({}, DEF);
+    if (cache && cacheUid === LS.user.id && !force) return cache;
+    let row = null;
+    try { const r = await sb.from("user_settings").select("*").eq("user_id", LS.user.id).maybeSingle(); row = r && r.data; } catch (e) { /* ignore */ }
+    cache = Object.assign({}, DEF, row || {}); cacheUid = LS.user.id;
+    return cache;
+  };
+  LS.saveSettings = async function (patch) {
+    const cur = await LS.getSettings();
+    const next = Object.assign({}, cur, patch);
+    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    if (r && r.error) return false;
+    cache = next; return true;
+  };
+
+  function overlay(title, build) {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="ovb" aria-label="Back">←</button><div>${esc(title)}</div></div><div id="ovbody"></div></div>`;
+    document.body.appendChild(ov);
+    $("#ovb", ov).addEventListener("click", () => ov.remove());
+    build($("#ovbody", ov), ov);
+    return ov;
+  }
+  const note = (t) => `<p style="color:#9a9aa3;margin:10px 20px;font-size:14.5px;line-height:1.4">${t}</p>`;
+
+  LS.openPrivate = function () {
+    overlay("Private account", async (box) => {
+      const s = await LS.getSettings(true);
+      box.innerHTML = `<div class="sp-card" style="margin-top:14px"><label class="sp-sw"><div><b>Private account</b><small>Only people you approve can follow you and see your videos</small></div><input type="checkbox" class="switch" id="pvsw" ${s.private_account ? "checked" : ""}></label></div>
+        ${note("When your account is private, new followers must send a request and you approve it below. People who already follow you keep watching. Your LIVEs stay visible to everyone.")}
+        <div class="sp-s">Follow requests</div><div id="pvreq"><div class="sp-empty">Loading…</div></div>`;
+      $("#pvsw", box).addEventListener("change", async (e) => {
+        const ok = await LS.saveSettings({ private_account: e.target.checked });
+        if (!ok) { e.target.checked = !e.target.checked; toast("Could not save. Try again."); } else toast(e.target.checked ? "Your account is private" : "Your account is public");
+        loadReq();
+      });
+      async function loadReq() {
+        const hold = $("#pvreq", box);
+        let rows = [];
+        try { const r = await sb.from("follow_requests").select("requester_id,created_at").eq("target_id", LS.user.id).order("created_at", { ascending: false }).limit(100); rows = (r && r.data) || []; } catch (e) { /* ignore */ }
+        if (!rows.length) { hold.innerHTML = `<div class="sp-empty">No follow requests.</div>`; return; }
+        let profs = [];
+        try { const r = await sb.from("profiles").select("*").in("id", rows.map((x) => x.requester_id)); profs = (r && r.data) || []; } catch (e) { /* ignore */ }
+        const by = new Map(profs.map((p) => [p.id, p]));
+        hold.innerHTML = `<div class="sp-card">${rows.map((x) => { const p = by.get(x.requester_id) || { username: "user" }; return `<div class="sp-u" data-id="${x.requester_id}"><span class="av">${LS.photo(p, 44)}</span><b>${esc(p.display_name || p.username)}</b><button type="button" data-a="1" style="background:#fe2c55">Accept</button><button type="button" data-a="0">Decline</button></div>`; }).join("")}</div>`;
+        hold.querySelector(".sp-card").addEventListener("click", async (e) => {
+          const b = e.target.closest("button[data-a]"); if (!b) return;
+          const row = b.closest(".sp-u"); row.querySelectorAll("button").forEach((x) => (x.disabled = true));
+          const r = await sb.rpc("respond_follow_request", { p_requester: row.dataset.id, p_accept: b.dataset.a === "1" });
+          if (r && r.error) { row.querySelectorAll("button").forEach((x) => (x.disabled = false)); toast("Could not do that."); return; }
+          row.remove(); if (!hold.querySelector(".sp-u")) hold.innerHTML = `<div class="sp-empty">No follow requests.</div>`;
+        });
+      }
+      loadReq();
+    });
+  };
+
+  LS.openCommentsSetting = function () {
+    overlay("Comments", async (box) => {
+      const s = await LS.getSettings(true);
+      const OPTS = [["everyone", "Everyone", "Anyone can comment on your videos"], ["friends", "Friends", "Only people you follow who follow you back"], ["none", "No one", "Comments are turned off on your videos"]];
+      const draw = (cur) => {
+        box.innerHTML = `<div class="sp-s">Who can comment on your videos</div><div class="sp-card">${OPTS.map((o) => `<button class="sp-r" data-k="${o[0]}"><div style="flex:1"><b style="display:block;font-weight:500">${o[1]}</b><em>${o[2]}</em></div><span style="width:24px;height:24px;border-radius:50%;border:2px solid ${cur === o[0] ? "#fe2c55" : "#666"};background:${cur === o[0] ? "radial-gradient(#fff 0 35%,#fe2c55 40%)" : "none"}"></span></button>`).join("")}</div>`;
+        box.querySelector(".sp-card").addEventListener("click", async (e) => {
+          const b = e.target.closest("[data-k]"); if (!b) return;
+          const ok = await LS.saveSettings({ comments_who: b.dataset.k });
+          if (ok) { draw(b.dataset.k); toast("Saved"); } else toast("Could not save. Try again.");
+        });
+      };
+      draw(s.comments_who);
+    });
+  };
+
+  LS.openNotifSetting = function () {
+    overlay("Notifications", async (box) => {
+      const s = await LS.getSettings(true);
+      box.innerHTML = `<div class="sp-s">Push notifications</div><div class="sp-card"><label class="sp-sw"><div><b>LIVE alerts</b><small>Get an alert when someone you follow goes LIVE</small></div><input type="checkbox" class="switch" id="nlsw" ${s.notif_live ? "checked" : ""}></label></div>
+        ${note("More alert types, like comments and likes, will be added later.")}`;
+      $("#nlsw", box).addEventListener("change", async (e) => {
+        const ok = await LS.saveSettings({ notif_live: e.target.checked });
+        if (!ok) { e.target.checked = !e.target.checked; toast("Could not save. Try again."); } else toast(e.target.checked ? "LIVE alerts on" : "LIVE alerts off");
+      });
+    });
+  };
+
+  /* someone else's profile: show Requested and a private notice */
+  const prevUser = S.userProfile;
+  S.userProfile = function (view, uname) {
+    const c = prevUser.apply(this, arguments);
+    (async () => {
+      try {
+        if (!sb || !LS.user) return;
+        const { data: p } = await sb.from("profiles").select("id").eq("username", uname).maybeSingle();
+        if (!p || p.id === LS.user.id) return;
+        const { data: st } = await sb.rpc("account_status", { p_user: p.id });
+        if (!st) return;
+        for (let i = 0; i < 24 && !$("#pbio", view); i++) await new Promise((r) => setTimeout(r, 250));
+        const fb = $(".fbtn", view), body = $("#ubody", view);
+        if (fb && st.state === "requested") { fb.dataset.req = "1"; fb.textContent = "Requested"; }
+        if (body && st.private && (st.state === "none" || st.state === "requested")) {
+          const d = document.createElement("div"); d.className = "sp-empty"; d.style.color = "#9a9aa3";
+          d.innerHTML = `🔒<br><b style="color:#fff">This account is private</b><br>Follow this account to see their videos.`;
+          body.appendChild(d);
+        }
+      } catch (e) { /* ignore */ }
+    })();
+    return c;
   };
 })();
 </script>
