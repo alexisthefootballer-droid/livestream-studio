@@ -5015,7 +5015,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   const SECTIONS = [
     ["Activity", [
       ["🎞", "Manage posts", "#/profile"], ["🎥", "Content preferences"], ["📺", "LIVE", "#/golive"],
-      ["🔔", "Notifications", "fn:notif"], ["⏳", "Time and well-being", "fn:wellbeing"], ["🏠", "Family Pairing"]]],
+      ["🔔", "Notifications", "fn:notif"], ["⏳", "Time and well-being", "fn:wellbeing"], ["🏠", "Family Pairing", "fn:family"]]],
     ["Account", [
       ["👤", "Account", "#/edit-profile"], ["🛡", "Security & permissions"], ["📈", "Analytics", "#/live-analytics"],
       ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"]]],
@@ -5063,6 +5063,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:family") { LS.openFamily(); return; }
       if (a === "fn:wellbeing") { LS.openWellbeing(); return; }
       if (a === "fn:private") { LS.openPrivate(); return; }
       if (a === "fn:comments") { LS.openCommentsSetting(); return; }
@@ -7009,12 +7010,12 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   }
   function limitModal() {
     if (lockOpen) return; lockOpen = true;
-    const w = getW();
+    const w = getW(), fam = LS.familyLimit > 0;
     modal(`<div style="font-size:40px">⏳</div><h3>Daily limit reached</h3><p>You have used ${fmtT(getSecs(dkey()))} today. Time for a break!</p>
-      ${w.pass ? `<input id="wbp" type="password" inputmode="numeric" maxlength="4" placeholder="••••"><button id="wbok">Enter passcode to continue</button><div id="wbe" style="color:#ff4d6a;min-height:20px;margin-top:8px"></div>` : `<button id="wbok">Continue for 10 more minutes</button>`}
+      ${fam ? `<p style="margin-top:-6px">Your parent set this limit.</p>` : w.pass ? `<input id="wbp" type="password" inputmode="numeric" maxlength="4" placeholder="••••"><button id="wbok">Enter passcode to continue</button><div id="wbe" style="color:#ff4d6a;min-height:20px;margin-top:8px"></div>` : `<button id="wbok">Continue for 10 more minutes</button>`}
       <button class="alt" id="wbcl">Close</button>`, (o, close) => {
       $("#wbcl", o).addEventListener("click", () => { close(); lockOpen = false; snoozeUntil = Date.now() + 60000; });
-      $("#wbok", o).addEventListener("click", async () => {
+      if ($("#wbok", o)) $("#wbok", o).addEventListener("click", async () => {
         if (w.pass) { const v = $("#wbp", o).value; if ((await sha(v)) !== w.pass) { $("#wbe", o).textContent = "Wrong passcode"; return; } }
         snoozeUntil = Date.now() + 10 * 60000; close(); lockOpen = false;
       });
@@ -7030,7 +7031,8 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     if (document.hidden) return;
     addSecs(10); sessionSecs += 10;
     const w = getW(), used = getSecs(dkey());
-    if (w.limit > 0 && used >= w.limit * 60 && Date.now() > snoozeUntil && !lockOpen) limitModal();
+    const lim = LS.familyLimit > 0 ? LS.familyLimit : w.limit;
+    if (lim > 0 && used >= lim * 60 && Date.now() > snoozeUntil && !lockOpen) limitModal();
     if (w.breakEvery > 0 && sessionSecs >= w.breakEvery * 60) { sessionSecs = 0; breakModal(); }
     if (w.sleep) {
       const n = new Date(), hh = n.getHours() * 60 + n.getMinutes(), [sh, sm] = String(w.sleepAt).split(":").map(Number), at = sh * 60 + (sm || 0);
@@ -7094,6 +7096,103 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       });
     });
     return ov;
+  };
+})();
+</script>
+  <script>
+/* Family Pairing: link a parent and a teen account. The parent sets the teen's daily limit. */
+(function () {
+  const LS = window.LS;
+  const sb = LS.sb;
+  const esc = LS.esc;
+  const $ = LS.$;
+  LS.family = { role: "none" };
+  LS.familyLimit = 0;
+  LS.loadFamily = async function () {
+    if (!sb || !LS.user) { LS.family = { role: "none" }; LS.familyLimit = 0; return LS.family; }
+    try { const { data } = await sb.rpc("family_status"); LS.family = data || { role: "none" }; } catch (e) { /* keep old */ }
+    LS.familyLimit = LS.family.role === "teen" ? Number(LS.family.limit) || 0 : 0;
+    return LS.family;
+  };
+  setTimeout(() => LS.loadFamily(), 4000);
+  setInterval(() => LS.loadFamily(), 5 * 60000);
+
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); };
+  const ERR = { bad_code: "That code is wrong or has expired.", own_code: "That is your own code.", already_linked: "That account is already linked.", is_parent: "That account is already a parent account.", you_are_managed: "Your account is managed by a parent, so it cannot link others.", not_signed_in: "Please log in first." };
+  const errText = (e) => { const m = String((e && e.message) || ""); for (const k in ERR) if (m.indexOf(k) >= 0) return ERR[k]; return "Something went wrong. Try again."; };
+  const LIMITS = [[0, "No limit"], [30, "30 minutes"], [60, "1 hour"], [90, "1.5 hours"], [120, "2 hours"], [180, "3 hours"]];
+
+  LS.openFamily = function () {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="fb" aria-label="Back">←</button><div>Family Pairing</div></div><div id="fbody"><div class="sp-empty">Loading…</div></div></div>`;
+    document.body.appendChild(ov);
+    $("#fb", ov).addEventListener("click", () => ov.remove());
+    const box = $("#fbody", ov);
+    const note = (t) => `<p style="color:#9a9aa3;margin:10px 20px;font-size:14.5px;line-height:1.4">${t}</p>`;
+    let timer = null;
+    const bigBtn = (id, t, sub) => `<button class="sp-r" id="${id}" style="flex-direction:column;align-items:flex-start;gap:4px"><b>${t}</b><em>${sub}</em></button>`;
+
+    async function paint() {
+      const f = await LS.loadFamily();
+      if (!ov.isConnected) return;
+      if (f.role === "teen") {
+        const p = f.parent || {};
+        box.innerHTML = `<div class="sp-card" style="margin-top:14px"><div class="sp-u"><div style="flex:1"><b style="display:block">Managed by @${esc(p.username || "parent")}</b><em style="font-style:normal;color:#9a9aa3;font-size:14px">Your parent can set your daily screen time.</em></div></div>
+          <div class="sp-u"><b style="font-weight:500">Daily screen time limit</b><em style="font-style:normal;color:#9a9aa3">${f.limit ? f.limit + " min" : "No limit"}</em></div></div>
+          ${note("Only your parent can change these controls or unlink the accounts.")}`;
+        return;
+      }
+      if (f.role === "parent") {
+        const teens = f.teens || [];
+        box.innerHTML = `<div class="sp-s">Linked teens</div><div class="sp-card">${teens.map((t) => `<div class="sp-u" data-id="${t.id}" style="flex-wrap:wrap"><div style="flex:1;min-width:140px"><b style="display:block">${esc(t.display_name || t.username)}</b><em style="font-style:normal;color:#9a9aa3;font-size:14px">@${esc(t.username)}</em></div>
+          <select class="fsel" style="background:#2b2b30;color:#fff;border:0;border-radius:8px;padding:8px">${LIMITS.map((l) => `<option value="${l[0]}" ${Number(t.limit) === l[0] ? "selected" : ""}>${l[1]}</option>`).join("")}</select>
+          <button type="button" class="funl">Unlink</button></div>`).join("")}</div>
+          ${note("The daily screen time limit is the most time your teen can spend in the app each day.")}
+          <div class="sp-card" style="margin-top:14px">${bigBtn("flink", "➕ Link another teen", "Enter the code shown on their phone")}</div>`;
+        box.querySelectorAll(".fsel").forEach((s) => s.addEventListener("change", async () => {
+          const id = s.closest(".sp-u").dataset.id;
+          const r = await sb.rpc("family_set", { p_teen: id, p_limit: +s.value });
+          toast(r.error ? "Could not save." : "Saved");
+        }));
+        box.querySelectorAll(".funl").forEach((b) => b.addEventListener("click", async () => {
+          if (!confirm("Unlink this account?")) return;
+          const r = await sb.rpc("family_unlink", { p_teen: b.closest(".sp-u").dataset.id });
+          if (r.error) toast("Could not unlink."); else paint();
+        }));
+        $("#flink", box).addEventListener("click", enterCode);
+        return;
+      }
+      box.innerHTML = `${note("Link a parent and a teen account so the parent can help manage the teen's time in the app.")}
+        <div class="sp-card">${bigBtn("fpar", "👨‍👩‍👧 I am a parent or guardian", "Link my teen's account with their code")}${bigBtn("ften", "🧒 This is a teen account", "Show a code for my parent")}</div>`;
+      $("#fpar", box).addEventListener("click", enterCode);
+      $("#ften", box).addEventListener("click", showCode);
+    }
+    function enterCode() {
+      box.innerHTML = `<p style="color:#cfcfd6;margin:16px 20px">On your teen's phone, open Family Pairing → <b>This is a teen account</b>. Enter the 6-digit code it shows.</p>
+        <div style="padding:0 20px"><input id="fcode" inputmode="numeric" maxlength="6" placeholder="000000" style="width:100%;box-sizing:border-box;text-align:center;font-size:30px;letter-spacing:8px;padding:14px;border-radius:12px;border:1px solid #444;background:#111;color:#fff"><div id="ferr" style="color:#ff4d6a;min-height:22px;margin:8px 0"></div>
+        <button class="of-go" id="fgo" style="display:block;width:100%;background:#fe2c55;border:0;color:#fff;border-radius:26px;padding:15px;font-size:17px;font-weight:700">Link account</button></div>`;
+      $("#fgo", box).addEventListener("click", async (e) => {
+        const code = $("#fcode", box).value.trim();
+        if (!/^\d{6}$/.test(code)) { $("#ferr", box).textContent = "Enter the 6-digit code."; return; }
+        e.target.disabled = true;
+        const r = await sb.rpc("family_link", { p_code: code });
+        if (r.error) { $("#ferr", box).textContent = errText(r.error); e.target.disabled = false; return; }
+        toast("Linked"); paint();
+      });
+    }
+    async function showCode() {
+      box.innerHTML = `<div class="sp-empty">Making your code…</div>`;
+      const r = await sb.rpc("family_create_code");
+      if (r.error) { box.innerHTML = `<div class="sp-empty">${esc(errText(r.error))}</div>`; return; }
+      box.innerHTML = `<p style="color:#cfcfd6;margin:16px 20px;text-align:center">Give this code to your parent. It works for 10 minutes.</p>
+        <div style="font-size:46px;font-weight:800;letter-spacing:10px;text-align:center;margin:20px 0">${esc(r.data)}</div>
+        <p style="color:#9a9aa3;text-align:center;margin:0 20px">Waiting for your parent…</p>`;
+      clearInterval(timer);
+      timer = setInterval(async () => { if (!ov.isConnected) { clearInterval(timer); return; } const f = await LS.loadFamily(); if (f.role === "teen") { clearInterval(timer); toast("Linked to your parent"); paint(); } }, 4000);
+    }
+    paint();
   };
 })();
 </script>
