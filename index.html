@@ -4650,7 +4650,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       let vids = [];
       try { const { data } = await sb.from("videos").select("*").order("created_at", { ascending: false }).limit(60); vids = data || []; } catch (e) { /* ignore */ }
       if (dead || tab !== "com") return;
-      { const bl = await LS.myBlocks(true); vids = vids.filter((v) => !bl.has(v.user_id)); }
+      { const bl = await LS.myBlocks(true); vids = vids.filter((v) => !bl.has(v.user_id)); vids = await LS.filterVideos(vids); }
       await profs(vids.map((v) => v.user_id));
       if (dead || tab !== "com") return;
       if (!vids.length) { scroll.innerHTML = `<div class="fy-empty"><div>No videos yet.<br><br>${LS.user ? `<a class="btn" href="#/upload-video">⬆️ Upload a video</a>` : `<a class="btn" href="#/auth">Log in</a>`}</div></div>`; return; }
@@ -4692,7 +4692,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         if (qy) { const { data } = await qy; vids = data || []; }
       } catch (e) { /* ignore */ }
       if (dead) return;
-      { const bl = await LS.myBlocks(true); vids = vids.filter((v) => !bl.has(v.user_id)); }
+      { const bl = await LS.myBlocks(true); vids = vids.filter((v) => !bl.has(v.user_id)); vids = await LS.filterVideos(vids); }
       let jump = false;
       if (startVid) {
         const at = vids.findIndex((v) => v.id === startVid);
@@ -5014,7 +5014,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
      action: "#/route" = open, "fn:name" = run, otherwise coming soon */
   const SECTIONS = [
     ["Activity", [
-      ["🎞", "Manage posts", "#/profile"], ["🎥", "Content preferences"], ["📺", "LIVE", "#/golive"],
+      ["🎞", "Manage posts", "#/profile"], ["🎥", "Content preferences", "fn:content"], ["📺", "LIVE", "#/golive"],
       ["🔔", "Notifications", "fn:notif"], ["⏳", "Time and well-being", "fn:wellbeing"], ["🏠", "Family Pairing", "fn:family"]]],
     ["Account", [
       ["👤", "Account", "#/edit-profile"], ["🛡", "Security & permissions"], ["📈", "Analytics", "#/live-analytics"],
@@ -5063,6 +5063,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:content") { LS.openContentPrefs(); return; }
       if (a === "fn:family") { LS.openFamily(); return; }
       if (a === "fn:wellbeing") { LS.openWellbeing(); return; }
       if (a === "fn:private") { LS.openPrivate(); return; }
@@ -6856,7 +6857,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   const sb = LS.sb;
   const esc = LS.esc;
   const $ = LS.$;
-  const DEF = { private_account: false, comments_who: "everyone", notif_live: true };
+  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [] };
   const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
   let cache = null, cacheUid = null;
   LS.getSettings = async function (force) {
@@ -6870,7 +6871,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   LS.saveSettings = async function (patch) {
     const cur = await LS.getSettings();
     const next = Object.assign({}, cur, patch);
-    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
     if (r && r.error) return false;
     cache = next; return true;
   };
@@ -7112,6 +7113,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     if (!sb || !LS.user) { LS.family = { role: "none" }; LS.familyLimit = 0; return LS.family; }
     try { const { data } = await sb.rpc("family_status"); LS.family = data || { role: "none" }; } catch (e) { /* keep old */ }
     LS.familyLimit = LS.family.role === "teen" ? Number(LS.family.limit) || 0 : 0;
+    LS.familyRestricted = LS.family.role === "teen" && !!LS.family.restricted;
     return LS.family;
   };
   setTimeout(() => LS.loadFamily(), 4000);
@@ -7140,7 +7142,8 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       if (f.role === "teen") {
         const p = f.parent || {};
         box.innerHTML = `<div class="sp-card" style="margin-top:14px"><div class="sp-u"><div style="flex:1"><b style="display:block">Managed by @${esc(p.username || "parent")}</b><em style="font-style:normal;color:#9a9aa3;font-size:14px">Your parent can set your daily screen time.</em></div></div>
-          <div class="sp-u"><b style="font-weight:500">Daily screen time limit</b><em style="font-style:normal;color:#9a9aa3">${f.limit ? f.limit + " min" : "No limit"}</em></div></div>
+          <div class="sp-u"><b style="font-weight:500">Daily screen time limit</b><em style="font-style:normal;color:#9a9aa3">${f.limit ? f.limit + " min" : "No limit"}</em></div>
+          <div class="sp-u"><b style="font-weight:500">Restricted mode</b><em style="font-style:normal;color:#9a9aa3">${f.restricted ? "On" : "Off"}</em></div></div>
           ${note("Only your parent can change these controls or unlink the accounts.")}`;
         return;
       }
@@ -7148,13 +7151,18 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
         const teens = f.teens || [];
         box.innerHTML = `<div class="sp-s">Linked teens</div><div class="sp-card">${teens.map((t) => `<div class="sp-u" data-id="${t.id}" style="flex-wrap:wrap"><div style="flex:1;min-width:140px"><b style="display:block">${esc(t.display_name || t.username)}</b><em style="font-style:normal;color:#9a9aa3;font-size:14px">@${esc(t.username)}</em></div>
           <select class="fsel" style="background:#2b2b30;color:#fff;border:0;border-radius:8px;padding:8px">${LIMITS.map((l) => `<option value="${l[0]}" ${Number(t.limit) === l[0] ? "selected" : ""}>${l[1]}</option>`).join("")}</select>
-          <button type="button" class="funl">Unlink</button></div>`).join("")}</div>
-          ${note("The daily screen time limit is the most time your teen can spend in the app each day.")}
+          <button type="button" class="funl">Unlink</button>
+          <label style="display:flex;gap:10px;align-items:center;width:100%;margin-top:6px;color:#cfcfd6;font-size:15px"><input type="checkbox" class="switch frs" ${t.restricted ? "checked" : ""}> Restricted mode</label></div>`).join("")}</div>
+          ${note("The daily screen time limit is the most time your teen can spend in the app each day. Restricted mode hides videos that people reported as sensitive.")}
           <div class="sp-card" style="margin-top:14px">${bigBtn("flink", "➕ Link another teen", "Enter the code shown on their phone")}</div>`;
         box.querySelectorAll(".fsel").forEach((s) => s.addEventListener("change", async () => {
           const id = s.closest(".sp-u").dataset.id;
           const r = await sb.rpc("family_set", { p_teen: id, p_limit: +s.value });
           toast(r.error ? "Could not save." : "Saved");
+        }));
+        box.querySelectorAll(".frs").forEach((c) => c.addEventListener("change", async () => {
+          const r = await sb.rpc("family_set_restricted", { p_teen: c.closest(".sp-u").dataset.id, p_on: c.checked });
+          if (r.error) { c.checked = !c.checked; toast("Could not save."); } else toast("Saved");
         }));
         box.querySelectorAll(".funl").forEach((b) => b.addEventListener("click", async () => {
           if (!confirm("Unlink this account?")) return;
@@ -7193,6 +7201,80 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       timer = setInterval(async () => { if (!ov.isConnected) { clearInterval(timer); return; } const f = await LS.loadFamily(); if (f.role === "teen") { clearInterval(timer); toast("Linked to your parent"); paint(); } }, 4000);
     }
     paint();
+  };
+})();
+</script>
+  <script>
+/* Content preferences: Restricted mode and keyword filter. */
+(function () {
+  const LS = window.LS;
+  const sb = LS.sb;
+  const esc = LS.esc;
+  const $ = LS.$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
+  let flagged = null, flaggedAt = 0;
+  async function getFlagged() {
+    if (flagged && Date.now() - flaggedAt < 5 * 60000) return flagged;
+    let ids = [];
+    try { const { data } = await sb.rpc("flagged_videos"); ids = Array.isArray(data) ? data : []; } catch (e) { /* ignore */ }
+    flagged = new Set(ids); flaggedAt = Date.now(); return flagged;
+  }
+  LS.filterVideos = async function (vids) {
+    if (!sb || !LS.user || !vids || !vids.length) return vids;
+    let s = {};
+    try { s = await LS.getSettings(); } catch (e) { /* ignore */ }
+    const strict = !!s.restricted_mode || !!LS.familyRestricted;
+    const words = (s.filter_words || []).map((w) => String(w).toLowerCase()).filter(Boolean);
+    if (!strict && !words.length) return vids;
+    const bad = strict ? await getFlagged() : new Set();
+    return vids.filter((v) => {
+      if (v.user_id === LS.user.id) return true;
+      if (bad.has(v.id)) return false;
+      if (words.length) { const c = String(v.caption || "").toLowerCase(); if (words.some((w) => c.indexOf(w) >= 0)) return false; }
+      return true;
+    });
+  };
+
+  LS.openContentPrefs = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="cpb" aria-label="Back">←</button><div>Content preferences</div></div><div id="cpbody"><div class="sp-empty">Loading…</div></div></div>`;
+    document.body.appendChild(ov);
+    $("#cpb", ov).addEventListener("click", () => ov.remove());
+    const box = $("#cpbody", ov);
+    (async () => {
+      const s = await LS.getSettings(true);
+      let words = (s.filter_words || []).slice();
+      const forced = !!LS.familyRestricted;
+      const draw = () => {
+        box.innerHTML = `<div class="sp-card" style="margin-top:14px"><label class="sp-sw"><div><b>Restricted mode</b><small>${forced ? "Turned on by your parent" : "Hides videos that people have reported as sensitive"}</small></div><input type="checkbox" class="switch" id="rmsw" ${s.restricted_mode || forced ? "checked" : ""} ${forced ? "disabled" : ""}></label></div>
+          <div class="sp-s">Filter video keywords</div>
+          <div class="sp-card" style="padding:14px 16px">
+            <p style="margin:0 0 10px;color:#9a9aa3;font-size:14.5px;line-height:1.4">Videos with these words in the caption will not show in your feeds.</p>
+            <div style="display:flex;gap:8px"><input id="kwi" maxlength="30" placeholder="Add a word" style="flex:1;background:#2b2b30;border:0;color:#fff;border-radius:10px;padding:12px;font-size:16px"><button id="kwa" type="button" style="background:#fe2c55;border:0;color:#fff;border-radius:10px;padding:0 18px;font-weight:700">Add</button></div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">${words.map((w, i) => `<span style="background:#2b2b30;border-radius:16px;padding:7px 12px;font-size:15px">${esc(w)} <b data-i="${i}" style="margin-left:6px;cursor:pointer;color:#ff4d6a">✕</b></span>`).join("") || `<small style="color:#6f6f78">No words yet</small>`}</div>
+          </div>`;
+        const rm = $("#rmsw", box);
+        if (rm && !forced) rm.addEventListener("change", async (e) => {
+          const ok = await LS.saveSettings({ restricted_mode: e.target.checked });
+          if (!ok) { e.target.checked = !e.target.checked; toast("Could not save."); } else { s.restricted_mode = e.target.checked; toast(e.target.checked ? "Restricted mode on" : "Restricted mode off"); }
+        });
+        const add = async () => {
+          const v = $("#kwi", box).value.trim().toLowerCase();
+          if (v.length < 2) return;
+          if (words.indexOf(v) >= 0 || words.length >= 20) { $("#kwi", box).value = ""; return; }
+          const next = words.concat(v);
+          if (await LS.saveSettings({ filter_words: next })) { words = next; draw(); } else toast("Could not save.");
+        };
+        $("#kwa", box).addEventListener("click", add);
+        $("#kwi", box).addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+        box.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", async () => {
+          const next = words.filter((_, i) => i !== +b.dataset.i);
+          if (await LS.saveSettings({ filter_words: next })) { words = next; draw(); } else toast("Could not save.");
+        }));
+      };
+      draw();
+    })();
   };
 })();
 </script>
