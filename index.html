@@ -5027,7 +5027,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["💬", "Comments", "fn:comments"], ["@", "Mentions", "fn:mentions"], ["✉️", "Direct messages", "fn:dm"], ["🎬", "Reuse of content", "fn:reuse"],
       ["⬇️", "Downloads", null, "On"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
     ["Content & Display", [
-      ["🎵", "Music", "fn:music"], ["📥", "Inbox & Messaging"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control"],
+      ["🎵", "Music", "fn:music"], ["📥", "Inbox & Messaging", "fn:inbox"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control"],
       ["📣", "Plan and ads"], ["▶️", "Playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language"],
       ["♿", "Accessibility"], ["👁", "Amplify"], ["📍", "Contacts and location"]]],
     ["Cache & Cellular", [
@@ -5065,6 +5065,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:inbox") { LS.openInboxSettings(); return; }
       if (a === "fn:music") { LS.openMusic(); return; }
       if (a === "fn:reuse") { LS.openReuseSetting(); return; }
       if (a === "fn:dm") { LS.openDmSetting(); return; }
@@ -7345,6 +7346,10 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     if (!sb || !LS.user) return;
     let n = 0;
     try { const { data } = await sb.rpc("my_threads"); (data || []).forEach((t) => { n += Number(t.unread) || 0; }); } catch (e) { return; }
+    const ip = LS.inboxPrefs ? LS.inboxPrefs() : { badge: true, vibrate: false };
+    if (n > (window.__lastDm || 0) && window.__lastDm != null && ip.vibrate) { try { navigator.vibrate && navigator.vibrate(200); } catch (e) { /* ignore */ } }
+    window.__lastDm = n;
+    if (!ip.badge) n = 0;
     $$('a[data-tab="inbox"]').forEach((a) => { let b = a.querySelector(".nb"); if (!n) { if (b) b.remove(); return; } if (!b) { b = document.createElement("b"); b.className = "nb"; a.appendChild(b); } b.textContent = n > 99 ? "99+" : String(n); });
   }
   LS.refreshDmBadge = refreshBadge;
@@ -7620,6 +7625,33 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     $("#mb", ov).addEventListener("click", () => ov.remove());
     $("#mm", ov).addEventListener("change", (e) => { put(Object.assign(get(), { mute: e.target.checked })); LS.applyMusic(); if (!e.target.checked) document.querySelectorAll(".fyp video, .vplayer video").forEach((v) => { try { v.muted = false; } catch (x) { /* ignore */ } }); });
     $("#mr", ov).addEventListener("input", (e) => { const n = Number(e.target.value) / 100; $("#mv", ov).textContent = e.target.value + "%"; put(Object.assign(get(), { vol: n })); LS.applyMusic(); });
+  };
+})();
+</script>
+  <script>
+/* Inbox & Messaging settings. */
+(function () {
+  const LS = window.LS, $ = LS.$;
+  const KEY = "ls.inbox";
+  const get = () => { try { const o = JSON.parse(localStorage.getItem(KEY) || "{}"); return { badge: o.badge !== false, vibrate: !!o.vibrate }; } catch (e) { return { badge: true, vibrate: false }; } };
+  const put = (o) => { try { localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) { /* ignore */ } };
+  LS.inboxPrefs = get;
+  LS.openInboxSettings = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    const m = get();
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="ib" aria-label="Back">←</button><div>Inbox & Messaging</div></div>
+      <div class="sp-s">Messages</div>
+      <div class="sp-card">
+        <button class="sp-r" id="iw"><div style="flex:1"><b style="display:block;font-weight:500">Who can message you</b><em>Everyone, friends or no one</em></div><span style="color:#9a9aa3">›</span></button>
+        <label class="sp-r" style="cursor:pointer"><div style="flex:1"><b style="display:block;font-weight:500">Unread count on Inbox</b><em>Show a red number for new messages</em></div><input type="checkbox" class="switch" id="ibg" ${m.badge ? "checked" : ""}></label>
+        <label class="sp-r" style="cursor:pointer"><div style="flex:1"><b style="display:block;font-weight:500">Vibrate on new message</b><em>Works while the app is open</em></div><input type="checkbox" class="switch" id="ivb" ${m.vibrate ? "checked" : ""}></label>
+      </div></div>`;
+    document.body.appendChild(ov);
+    $("#ib", ov).addEventListener("click", () => ov.remove());
+    $("#iw", ov).addEventListener("click", () => LS.openDmSetting());
+    $("#ibg", ov).addEventListener("change", (e) => { put(Object.assign(get(), { badge: e.target.checked })); if (LS.refreshDmBadge) LS.refreshDmBadge(); });
+    $("#ivb", ov).addEventListener("change", (e) => { put(Object.assign(get(), { vibrate: e.target.checked })); if (e.target.checked) { try { navigator.vibrate && navigator.vibrate(150); } catch (x) { /* ignore */ } } });
   };
 })();
 </script>
