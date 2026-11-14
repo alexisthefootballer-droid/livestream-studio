@@ -5027,7 +5027,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["💬", "Comments", "fn:comments"], ["@", "Mentions", "fn:mentions"], ["✉️", "Direct messages", "fn:dm"], ["🎬", "Reuse of content", "fn:reuse"],
       ["⬇️", "Downloads", null, "On"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
     ["Content & Display", [
-      ["🎵", "Music"], ["📥", "Inbox & Messaging"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control"],
+      ["🎵", "Music", "fn:music"], ["📥", "Inbox & Messaging"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control"],
       ["📣", "Plan and ads"], ["▶️", "Playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language"],
       ["♿", "Accessibility"], ["👁", "Amplify"], ["📍", "Contacts and location"]]],
     ["Cache & Cellular", [
@@ -5065,6 +5065,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:music") { LS.openMusic(); return; }
       if (a === "fn:reuse") { LS.openReuseSetting(); return; }
       if (a === "fn:dm") { LS.openDmSetting(); return; }
       if (a === "fn:mentions") { LS.openMentionsSetting(); return; }
@@ -7584,6 +7585,41 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       };
       draw(s.reuse_who || "everyone");
     })();
+  };
+})();
+</script>
+  <script>
+/* Music settings: video volume and mute-all. */
+(function () {
+  const LS = window.LS, $ = LS.$;
+  const KEY = "ls.music";
+  const get = () => { try { const o = JSON.parse(localStorage.getItem(KEY) || "{}"); return { vol: typeof o.vol === "number" ? Math.min(1, Math.max(0, o.vol)) : 1, mute: !!o.mute }; } catch (e) { return { vol: 1, mute: false }; } };
+  const put = (o) => { try { localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) { /* ignore */ } };
+  LS.musicPrefs = get;
+  const isFeed = (v) => !!(v.closest && v.closest(".fyp, .vplayer, .pl"));
+  function apply(v) {
+    if (!v || v.tagName !== "VIDEO" || !isFeed(v)) return;
+    const m = get();
+    try { if (Math.abs(v.volume - m.vol) > 0.001) v.volume = m.vol; if (m.mute && !v.muted) v.muted = true; } catch (e) { /* ignore */ }
+  }
+  ["play", "loadedmetadata", "volumechange"].forEach((ev) => document.addEventListener(ev, (e) => apply(e.target), true));
+  new MutationObserver((list) => list.forEach((r) => r.addedNodes.forEach((n) => { if (n.nodeType === 1) { if (n.tagName === "VIDEO") apply(n); else if (n.querySelectorAll) n.querySelectorAll("video").forEach(apply); } }))).observe(document.body, { childList: true, subtree: true });
+  LS.applyMusic = () => document.querySelectorAll("video").forEach(apply);
+  LS.openMusic = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    const m = get();
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="mb" aria-label="Back">←</button><div>Music</div></div>
+      <div class="sp-s">Video sound</div>
+      <div class="sp-card">
+        <label class="sp-r" style="cursor:pointer"><div style="flex:1"><b style="display:block;font-weight:500">Mute all videos</b><em>Videos and their music stay silent</em></div><input type="checkbox" class="switch" id="mm" ${m.mute ? "checked" : ""}></label>
+        <div class="sp-r" style="display:block"><b style="display:block;font-weight:500;margin-bottom:8px">Volume <span id="mv" style="color:#9a9aa3;font-weight:400">${Math.round(m.vol * 100)}%</span></b><input type="range" id="mr" min="0" max="100" step="5" value="${Math.round(m.vol * 100)}" style="width:100%;accent-color:#fe2c55"></div>
+      </div>
+      <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">Applies to the For You page and the video player. Your phone volume buttons still work too.</p></div>`;
+    document.body.appendChild(ov);
+    $("#mb", ov).addEventListener("click", () => ov.remove());
+    $("#mm", ov).addEventListener("change", (e) => { put(Object.assign(get(), { mute: e.target.checked })); LS.applyMusic(); if (!e.target.checked) document.querySelectorAll(".fyp video, .vplayer video").forEach((v) => { try { v.muted = false; } catch (x) { /* ignore */ } }); });
+    $("#mr", ov).addEventListener("input", (e) => { const n = Number(e.target.value) / 100; $("#mv", ov).textContent = e.target.value + "%"; put(Object.assign(get(), { vol: n })); LS.applyMusic(); });
   };
 })();
 </script>
