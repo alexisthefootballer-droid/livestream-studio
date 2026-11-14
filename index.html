@@ -5053,7 +5053,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     ["Cache & Cellular", [
       ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver", "fn:datasaver"], ["🖼", "Wallpaper", "fn:wallpaper"]]],
     ["Support & About", [
-      ["🎧", "Help Center", "fn:help"], ["🔐", "Privacy Center", "fn:privacy"], ["ℹ️", "Terms and Policies"]]],
+      ["🎧", "Help Center", "fn:help"], ["🔐", "Privacy Center", "fn:privacy"], ["ℹ️", "Terms and Policies", "fn:terms"]]],
     ["Login", [
       ["🔁", "Switch account", "fn:logout"], ["🚪", "Log out", "fn:logout"]]],
   ];
@@ -5085,6 +5085,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:terms") { LS.openTerms(); return; }
       if (a === "fn:privacy") { LS.openPrivacyCenter(); return; }
       if (a === "fn:help") { LS.openHelp(); return; }
       if (a === "fn:wallpaper") { LS.openWallpaper(); return; }
@@ -8452,6 +8453,64 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       const { error } = await sb.from("support_tickets").insert({ user_id: LS.user.id, topic: "Account deletion", body: "Please delete my account and all my data. Email: " + (LS.user.email || "") });
       toast(error ? (/too_many/.test(error.message) ? "You already sent requests today." : "Could not send. Try again.") : "Request sent ✓ We will process it and reply in Help Center.");
     });
+  };
+})();
+</script>
+  <script>
+/* Terms and Policies. */
+(function () {
+  const LS = window.LS, esc = LS.esc, $ = LS.$;
+  const UPDATED = "November 14, 2026";
+  const DOCS = [
+    ["📄", "Terms of Service", [
+      ["Using the app", "LiveStream Studio lets you watch, post and stream videos. You must be at least 13 years old, or older if the law where you live requires it. If you are under 18, a parent or guardian should agree to these terms for you."],
+      ["Your account", "You are responsible for your account and password. Give us true information and do not share your login. Tell us right away if someone else uses your account."],
+      ["What you post", "You own what you post. When you post, you let us store it and show it in the app so other people can watch it. Only post things you have the right to share."],
+      ["What is not allowed", "No hate, bullying, threats, nudity or sexual content, violence, scams, spam, illegal activity, or content that harms children. Do not copy other people's work, hack the app or pretend to be someone else."],
+      ["Our rights", "We can remove content, limit features, or suspend or close accounts that break these terms or the Community Guidelines. We may update the app and these terms. If you keep using the app after a change, you accept it."],
+      ["Liability", "The app is provided as it is. We try to keep it safe and working, but we can not promise it will always be available or error free. We are not responsible for what other users post."]]],
+    ["🤝", "Community Guidelines", [
+      ["Be kind", "Treat people with respect. Disagree without insulting. No harassment, bullying or hate based on race, religion, gender, nationality, disability or any other trait."],
+      ["Keep it safe", "No violence, dangerous acts, self-harm content, or help with illegal things. Never share other people's private information."],
+      ["Keep it appropriate", "No nudity or sexual content. Nothing that targets or exposes children. Keep LIVE streams suitable for a general audience."],
+      ["Be honest", "No scams, fake giveaways, fake accounts or tricking people into sending coins or money."],
+      ["Reports and penalties", "Tap ⋯ on a video or profile to report or block. Breaking the rules can lead to removed content, a muted chat, a ban from LIVE, or a closed account."]]],
+    ["🔐", "Privacy Policy", [
+      ["What we collect", "Your email, username, name, photo and bio; the videos, comments, likes, saves and follows you make; your messages; videos you watched; and your privacy settings."],
+      ["How we use it", "To run the app: show your content, deliver messages, suggest videos, keep people safe and handle payments. We do not sell your data and we do not show ads."],
+      ["Who can see it", "That depends on your settings. See Settings → Privacy Center to control who sees your videos, comments, messages, liked videos and following list."],
+      ["Your choices", "You can download your data, change your privacy settings, block people, delete your videos, or ask us to delete your account from Settings → Privacy Center."],
+      ["Keeping data safe", "Your data is stored with secure cloud services and protected by access rules. No system is perfect, so use a strong password and log out on shared devices."],
+      ["Children", "The app is not for children under 13. If you think a child is using it, contact us from Help Center."]]],
+    ["💰", "Coins, Gifts and Payments", [
+      ["Buying coins", "Coins are bought in Wallet. 1 coin costs $0.0155. Coins have no cash value outside the app and can not be turned back into money."],
+      ["Sending gifts", "Viewers send gifts with coins during LIVE. Gifts can not be taken back once sent."],
+      ["Creator earnings", "The streamer receives 40% of the value of gifts they get. The rest covers payment fees, running costs and the platform."],
+      ["Withdrawals", "You can ask to withdraw from $10. Withdrawals are checked and paid manually, so they can take some time. We may refuse or hold payments linked to fraud or broken rules."],
+      ["Refunds", "Coin purchases are final unless the law says otherwise or something went wrong with your payment. Contact us from Help Center."]]],
+    ["©️", "Copyright", [
+      ["Your work", "Post only videos and music you created or have permission to use."],
+      ["If your work was copied", "If someone posted your work without permission, send a request from Help Center with a link to the video and proof that it is yours. We will review it and may remove the video."],
+      ["Repeat copying", "Accounts that repeatedly copy other people's work can be closed."]]]
+  ];
+  LS.openTerms = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    const list = () => {
+      ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="tb" aria-label="Back">←</button><div>Terms and Policies</div></div>
+        <div class="sp-card" style="margin-top:12px">${DOCS.map((d, i) => `<button class="sp-r" data-i="${i}"><span class="ic">${d[0]}</span><b style="flex:1;font-weight:500">${d[1]}</b><span style="color:#9a9aa3">›</span></button>`).join("")}</div>
+        <p style="color:#9a9aa3;margin:14px 20px;font-size:14px;line-height:1.4">Last updated ${UPDATED}. Questions? Ask in Help Center.</p></div>`;
+      $("#tb", ov).addEventListener("click", () => ov.remove());
+      ov.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => doc(+b.dataset.i)));
+    };
+    const doc = (i) => {
+      const d = DOCS[i];
+      ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="tb" aria-label="Back">←</button><div>${esc(d[1])}</div></div>
+        <div style="padding:6px 20px 40px"><small style="color:#9a9aa3">Last updated ${UPDATED}</small>${d[2].map((x, n) => `<h3 style="margin:22px 0 6px;font-size:17px">${n + 1}. ${esc(x[0])}</h3><p style="margin:0;color:#cfcfd6;font-size:16px;line-height:1.55">${esc(x[1])}</p>`).join("")}</div></div>`;
+      $("#tb", ov).addEventListener("click", list);
+      ov.scrollTop = 0;
+    };
+    document.body.appendChild(ov); list();
   };
 })();
 </script>
