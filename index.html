@@ -5045,7 +5045,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["🔒", "Private account", "fn:private"], ["🚫", "Blocked accounts", "#/blocked"]]],
     ["Interactions", [
       ["💬", "Comments", "fn:comments"], ["@", "Mentions", "fn:mentions"], ["✉️", "Direct messages", "fn:dm"], ["🎬", "Reuse of content", "fn:reuse"],
-      ["⬇️", "Downloads", null, "On"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
+      ["⬇️", "Downloads", "fn:downloads"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
     ["Content & Display", [
       ["🎵", "Music", "fn:music"], ["📥", "Inbox & Messaging", "fn:inbox"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control", "fn:audience"],
       ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback", "fn:playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language", "fn:lang"],
@@ -5085,6 +5085,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:downloads") { LS.openDownloads(); return; }
       if (a === "fn:security") { LS.openSecurity(); return; }
       if (a === "fn:contacts") { LS.openContacts(); return; }
       if (a === "fn:amplify") { LS.openAmplify(); return; }
@@ -6892,7 +6893,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   const sb = LS.sb;
   const esc = LS.esc;
   const $ = LS.$;
-  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone", dm_who: "everyone", reuse_who: "everyone", videos_who: "everyone", find_by_contacts: false };
+  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone", dm_who: "everyone", reuse_who: "everyone", videos_who: "everyone", find_by_contacts: false, downloads_on: true };
   const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
   let cache = null, cacheUid = null;
   LS.getSettings = async function (force) {
@@ -6906,7 +6907,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   LS.saveSettings = async function (patch) {
     const cur = await LS.getSettings();
     const next = Object.assign({}, cur, patch);
-    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, dm_who: next.dm_who, reuse_who: next.reuse_who, videos_who: next.videos_who, find_by_contacts: next.find_by_contacts, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, dm_who: next.dm_who, reuse_who: next.reuse_who, videos_who: next.videos_who, find_by_contacts: next.find_by_contacts, downloads_on: next.downloads_on, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
     if (r && r.error) return false;
     cache = next; return true;
   };
@@ -8053,6 +8054,64 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       }));
     }
     draw();
+  };
+})();
+</script>
+  <script>
+/* Downloads: allow others to download your videos + a download button. */
+(function () {
+  const LS = window.LS, sb = LS.sb, $ = LS.$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 3000); };
+  const MSG = { download_off: "This person does not allow downloads.", blocked: "You can not download this video.", gone: "This video is no longer available.", not_signed_in: "Please log in first." };
+  const vurl = (p) => sb.storage.from("videos").getPublicUrl(p).data.publicUrl;
+  LS.downloadVideo = async function (v, uname) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    let r = "ok";
+    try { const x = await sb.rpc("can_download", { p_video: v.id }); r = x.data || "ok"; } catch (e) { /* ignore */ }
+    if (r !== "ok") { toast(MSG[r] || "Download is not allowed."); return; }
+    toast("Downloading…");
+    const url = vurl(v.video_path), ext = (v.video_path.split(".").pop() || "mp4").toLowerCase();
+    const name = (uname ? uname + "-" : "video-") + String(v.id).slice(0, 8) + "." + ext;
+    try {
+      const res = await fetch(url); if (!res.ok) throw new Error("x");
+      const blob = await res.blob(), u = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(u), 15000); toast("Saved to your downloads ✓");
+    } catch (e) {
+      const a = document.createElement("a"); a.href = url; a.download = name; a.target = "_blank"; document.body.appendChild(a); a.click(); a.remove();
+    }
+  };
+  /* button in the video player */
+  const prevOpen = LS.openPlayer;
+  LS.openPlayer = function (v, mine, onChange) {
+    const r = prevOpen.apply(this, arguments);
+    const box = document.querySelector(".vplayer:last-of-type") || document.querySelector(".vplayer");
+    const side = box && box.querySelector(".vp-side");
+    if (side && !side.querySelector(".vp-dl")) {
+      const b = document.createElement("button"); b.className = "vp-like vp-dl"; b.type = "button"; b.setAttribute("aria-label", "Download"); b.textContent = "⬇"; b.style.fontSize = "24px";
+      side.insertBefore(b, side.querySelector(".vp-del, .vp-ru, .vp-mr"));
+      b.addEventListener("click", async () => {
+        let un = "";
+        try { const { data } = await sb.from("profiles").select("username").eq("id", v.user_id).maybeSingle(); if (data) un = data.username; } catch (e) { /* ignore */ }
+        LS.downloadVideo(v, un);
+      });
+    }
+    return r;
+  };
+  /* setting */
+  LS.openDownloads = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="wb" aria-label="Back">←</button><div>Downloads</div></div><div id="wbody"></div></div>`;
+    document.body.appendChild(ov);
+    $("#wb", ov).addEventListener("click", () => ov.remove());
+    (async () => {
+      const s = await LS.getSettings(true);
+      const on = s.downloads_on !== false;
+      $("#wbody", ov).innerHTML = `<div class="sp-s">Your videos</div><div class="sp-card"><label class="sp-r" style="cursor:pointer"><div style="flex:1"><b style="display:block;font-weight:500">Allow downloads</b><em>People can save your videos to their phone</em></div><input type="checkbox" class="switch" id="dlt" ${on ? "checked" : ""}></label></div>
+        <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">Tap the ⬇ button on a video to download it. When this is off, the download button shows a message instead. You can always download your own videos.</p>`;
+      $("#dlt", ov).addEventListener("change", async (e) => { const v = e.target.checked; if (await LS.saveSettings({ downloads_on: v })) toast("Saved"); else { e.target.checked = !v; toast("Could not save. Try again."); } });
+    })();
   };
 })();
 </script>
