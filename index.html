@@ -5022,7 +5022,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     ["Visibility", [
       ["🔒", "Private account", "fn:private"], ["🚫", "Blocked accounts", "#/blocked"]]],
     ["Interactions", [
-      ["💬", "Comments", "fn:comments"], ["@", "Mentions", "fn:mentions"], ["✉️", "Direct messages"], ["🎬", "Reuse of content"],
+      ["💬", "Comments", "fn:comments"], ["@", "Mentions", "fn:mentions"], ["✉️", "Direct messages", "fn:dm"], ["🎬", "Reuse of content"],
       ["⬇️", "Downloads", null, "On"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
     ["Content & Display", [
       ["🎵", "Music"], ["📥", "Inbox & Messaging"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control"],
@@ -5063,6 +5063,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:dm") { LS.openDmSetting(); return; }
       if (a === "fn:mentions") { LS.openMentionsSetting(); return; }
       if (a === "fn:content") { LS.openContentPrefs(); return; }
       if (a === "fn:family") { LS.openFamily(); return; }
@@ -6858,7 +6859,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   const sb = LS.sb;
   const esc = LS.esc;
   const $ = LS.$;
-  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone" };
+  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone", dm_who: "everyone" };
   const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
   let cache = null, cacheUid = null;
   LS.getSettings = async function (force) {
@@ -6872,7 +6873,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   LS.saveSettings = async function (patch) {
     const cur = await LS.getSettings();
     const next = Object.assign({}, cur, patch);
-    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, dm_who: next.dm_who, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
     if (r && r.error) return false;
     cache = next; return true;
   };
@@ -7144,7 +7145,8 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
         const p = f.parent || {};
         box.innerHTML = `<div class="sp-card" style="margin-top:14px"><div class="sp-u"><div style="flex:1"><b style="display:block">Managed by @${esc(p.username || "parent")}</b><em style="font-style:normal;color:#9a9aa3;font-size:14px">Your parent can set your daily screen time.</em></div></div>
           <div class="sp-u"><b style="font-weight:500">Daily screen time limit</b><em style="font-style:normal;color:#9a9aa3">${f.limit ? f.limit + " min" : "No limit"}</em></div>
-          <div class="sp-u"><b style="font-weight:500">Restricted mode</b><em style="font-style:normal;color:#9a9aa3">${f.restricted ? "On" : "Off"}</em></div></div>
+          <div class="sp-u"><b style="font-weight:500">Restricted mode</b><em style="font-style:normal;color:#9a9aa3">${f.restricted ? "On" : "Off"}</em></div>
+          <div class="sp-u"><b style="font-weight:500">Direct messages</b><em style="font-style:normal;color:#9a9aa3">${f.dm_off ? "Off" : "On"}</em></div></div>
           ${note("Only your parent can change these controls or unlink the accounts.")}`;
         return;
       }
@@ -7153,7 +7155,8 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
         box.innerHTML = `<div class="sp-s">Linked teens</div><div class="sp-card">${teens.map((t) => `<div class="sp-u" data-id="${t.id}" style="flex-wrap:wrap"><div style="flex:1;min-width:140px"><b style="display:block">${esc(t.display_name || t.username)}</b><em style="font-style:normal;color:#9a9aa3;font-size:14px">@${esc(t.username)}</em></div>
           <select class="fsel" style="background:#2b2b30;color:#fff;border:0;border-radius:8px;padding:8px">${LIMITS.map((l) => `<option value="${l[0]}" ${Number(t.limit) === l[0] ? "selected" : ""}>${l[1]}</option>`).join("")}</select>
           <button type="button" class="funl">Unlink</button>
-          <label style="display:flex;gap:10px;align-items:center;width:100%;margin-top:6px;color:#cfcfd6;font-size:15px"><input type="checkbox" class="switch frs" ${t.restricted ? "checked" : ""}> Restricted mode</label></div>`).join("")}</div>
+          <label style="display:flex;gap:10px;align-items:center;width:100%;margin-top:6px;color:#cfcfd6;font-size:15px"><input type="checkbox" class="switch frs" ${t.restricted ? "checked" : ""}> Restricted mode</label>
+          <label style="display:flex;gap:10px;align-items:center;width:100%;margin-top:6px;color:#cfcfd6;font-size:15px"><input type="checkbox" class="switch fdm" ${t.dm_off ? "checked" : ""}> Turn off direct messages</label></div>`).join("")}</div>
           ${note("The daily screen time limit is the most time your teen can spend in the app each day. Restricted mode hides videos that people reported as sensitive.")}
           <div class="sp-card" style="margin-top:14px">${bigBtn("flink", "➕ Link another teen", "Enter the code shown on their phone")}</div>`;
         box.querySelectorAll(".fsel").forEach((s) => s.addEventListener("change", async () => {
@@ -7163,6 +7166,10 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
         }));
         box.querySelectorAll(".frs").forEach((c) => c.addEventListener("change", async () => {
           const r = await sb.rpc("family_set_restricted", { p_teen: c.closest(".sp-u").dataset.id, p_on: c.checked });
+          if (r.error) { c.checked = !c.checked; toast("Could not save."); } else toast("Saved");
+        }));
+        box.querySelectorAll(".fdm").forEach((c) => c.addEventListener("change", async () => {
+          const r = await sb.rpc("family_set_dm", { p_teen: c.closest(".sp-u").dataset.id, p_off: c.checked });
           if (r.error) { c.checked = !c.checked; toast("Could not save."); } else toast("Saved");
         }));
         box.querySelectorAll(".funl").forEach((b) => b.addEventListener("click", async () => {
@@ -7313,6 +7320,171 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
 })();
 </script>
   <script>
+/* Direct messages: real inbox and chat. */
+(function () {
+  const LS = window.LS;
+  const S = LS.screens;
+  const sb = LS.sb;
+  const esc = LS.esc;
+  const $ = LS.$, $$ = LS.$$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); };
+  const ERR = { dm_off: "This person is not accepting messages.", dm_friends: "Only friends can message this person.", dm_blocked: "You can not message this person.", dm_family: "Messages are turned off by a parent on one of these accounts.", slow_down: "You are sending too fast. Wait a moment.", not_signed_in: "Please log in first." };
+  const errText = (e) => { const m = String((e && e.message) || ""); for (const k in ERR) if (m.indexOf(k) >= 0) return ERR[k]; return "Could not send. Try again."; };
+  const ago = (t) => { const s = (Date.now() - new Date(t).getTime()) / 1000; if (s < 60) return "now"; if (s < 3600) return Math.floor(s / 60) + "m"; if (s < 86400) return Math.floor(s / 3600) + "h"; return new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
+
+  /* unread badge on the Inbox tab */
+  const st = document.createElement("style");
+  st.textContent = `.nb{position:absolute;top:2px;right:calc(50% - 22px);background:#fe2c55;color:#fff;border-radius:9px;min-width:17px;height:17px;font-size:11px;line-height:17px;text-align:center;font-weight:700;padding:0 4px}
+  .nav a[data-tab="inbox"],#tabbar a[data-tab="inbox"]{position:relative}`;
+  document.head.appendChild(st);
+  async function refreshBadge() {
+    if (!sb || !LS.user) return;
+    let n = 0;
+    try { const { data } = await sb.rpc("my_threads"); (data || []).forEach((t) => { n += Number(t.unread) || 0; }); } catch (e) { return; }
+    $$('a[data-tab="inbox"]').forEach((a) => { let b = a.querySelector(".nb"); if (!n) { if (b) b.remove(); return; } if (!b) { b = document.createElement("b"); b.className = "nb"; a.appendChild(b); } b.textContent = n > 99 ? "99+" : String(n); });
+  }
+  LS.refreshDmBadge = refreshBadge;
+  setTimeout(refreshBadge, 4000); setInterval(refreshBadge, 30000);
+  if (sb) { try { sb.channel("dm-badge-" + Math.random().toString(36).slice(2, 7)).on("postgres_changes", { event: "INSERT", schema: "public", table: "dm_messages" }, () => setTimeout(refreshBadge, 500)).subscribe(); } catch (e) { /* ignore */ } }
+
+  /* ---- inbox ---- */
+  S.inbox = function (view) {
+    let tab = "messages", dead = false, ch = null;
+    view.innerHTML = `
+      <header class="topbar"><div class="logo">Inbox</div></header>
+      <div class="seg wide" id="tabs"><button class="on" data-t="messages">Messages</button><button data-t="activity">Activity</button></div>
+      <div class="list" id="list"></div><div class="spacer"></div>`;
+    const list = $("#list", view);
+    async function render() {
+      if (tab === "activity") {
+        list.innerHTML = (LS.ACTIVITY || []).map((a) => `<div class="row-item"><span class="act">${a.icon}</span><div class="grow"><b>${esc(a.text)}</b></div><small>${a.time}</small></div>`).join("") || `<div class="cm-empty" style="padding:30px;text-align:center;color:#9a9aa3">No activity yet.</div>`;
+        return;
+      }
+      if (!LS.user) { list.innerHTML = `<div style="padding:40px 20px;text-align:center;color:#9a9aa3">Log in to see your messages.<br><br><a class="btn" href="#/auth">Log in</a></div>`; return; }
+      let rows = [];
+      try { const { data } = await sb.rpc("my_threads"); rows = data || []; } catch (e) { /* ignore */ }
+      if (dead || tab !== "messages") return;
+      if (!rows.length) { list.innerHTML = `<div style="padding:50px 24px;text-align:center;color:#9a9aa3;line-height:1.5">No messages yet.<br>Open someone's profile and tap <b>✉️ Message</b> to start a chat.</div>`; return; }
+      list.innerHTML = rows.map((t) => { const p = t.profile || {}; return `<a class="row-item" href="#/chat/${esc(p.username || "")}">
+        <span class="ring" style="--h:260">${LS.photo(p, 50)}</span>
+        <div class="grow"><b>${esc(p.display_name || p.username || "user")}</b><small>${t.mine ? "You: " : ""}${esc(String(t.body).slice(0, 60))}</small></div>
+        <div class="right"><small>${ago(t.at)}</small>${t.unread ? `<span class="dot">${t.unread}</span>` : ""}</div></a>`; }).join("");
+    }
+    render();
+    $("#tabs", view).addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (!b) return; tab = b.dataset.t; $$("#tabs button", view).forEach((x) => x.classList.toggle("on", x === b)); render(); });
+    try { ch = sb.channel("dm-inbox-" + Math.random().toString(36).slice(2, 7)).on("postgres_changes", { event: "INSERT", schema: "public", table: "dm_messages" }, () => { if (tab === "messages") render(); }).subscribe(); } catch (e) { /* ignore */ }
+    const poll = setInterval(() => { if (tab === "messages") render(); }, 15000);
+    return () => { dead = true; clearInterval(poll); try { if (ch) sb.removeChannel(ch); } catch (e) { /* ignore */ } };
+  };
+
+  /* ---- chat ---- */
+  S.chat = function (view, uname) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    let dead = false, ch = null, poll = null, other = null;
+    const seen = new Set();
+    view.innerHTML = `<div class="thread"><header class="topbar"><a class="icon-btn" href="#/inbox" aria-label="Back">←</a><div class="host-line" id="chh"><b>@${esc(uname)}</b></div><span></span></header>
+      <div class="bubbles" id="bubbles"><div style="text-align:center;color:#9a9aa3;padding:20px">Loading…</div></div>
+      <div class="composer"><input id="m" placeholder="Message…" autocomplete="off" maxlength="1000"><button class="btn" id="send">Send</button></div></div>`;
+    const box = $("#bubbles", view);
+    function add(m) {
+      if (seen.has(m.id)) return; seen.add(m.id);
+      const b = document.createElement("div");
+      b.className = "bubble " + (m.sender_id === LS.user.id ? "me" : "them");
+      b.textContent = m.body; box.appendChild(b); box.scrollTop = box.scrollHeight;
+    }
+    function note(t) { const d = document.createElement("div"); d.style.cssText = "text-align:center;color:#ff8a9c;font-size:13.5px;padding:6px 12px"; d.textContent = t; box.appendChild(d); box.scrollTop = box.scrollHeight; setTimeout(() => d.remove(), 5000); }
+    async function load() {
+      const me = LS.user.id, o = other.id;
+      const { data } = await sb.from("dm_messages").select("*").or(`and(sender_id.eq.${me},recipient_id.eq.${o}),and(sender_id.eq.${o},recipient_id.eq.${me})`).order("created_at", { ascending: false }).limit(100);
+      if (dead) return;
+      const rows = (data || []).slice().reverse();
+      if (!seen.size) box.innerHTML = rows.length ? "" : `<div style="text-align:center;color:#9a9aa3;padding:30px">Say hi 👋</div>`;
+      if (rows.length && !seen.size) box.innerHTML = "";
+      rows.forEach(add);
+      if (rows.some((r) => r.recipient_id === me && !r.read_at)) sb.rpc("dm_mark_read", { p_other: o }).then(() => refreshBadge(), () => {});
+    }
+    (async () => {
+      let p = null;
+      try { const r = await sb.from("profiles").select("*").eq("username", uname).maybeSingle(); p = r && r.data; } catch (e) { /* ignore */ }
+      if (dead) return;
+      if (!p) { box.innerHTML = `<div style="text-align:center;color:#9a9aa3;padding:30px">User not found.</div>`; return; }
+      if (p.id === LS.user.id) { box.innerHTML = `<div style="text-align:center;color:#9a9aa3;padding:30px">You can not message yourself.</div>`; return; }
+      other = p;
+      $("#chh", view).innerHTML = `<a href="#/u/${esc(p.username)}" style="display:flex;align-items:center;gap:8px;color:inherit;text-decoration:none"><span class="ring" style="--h:260">${LS.photo(p, 34)}</span><b>${esc(p.display_name || p.username)}</b></a>`;
+      await load();
+      try {
+        ch = sb.channel("dm-chat-" + Math.random().toString(36).slice(2, 7)).on("postgres_changes", { event: "INSERT", schema: "public", table: "dm_messages" }, (pl) => {
+          const m = pl.new; if (!m || dead) return;
+          if ((m.sender_id === other.id && m.recipient_id === LS.user.id) || (m.sender_id === LS.user.id && m.recipient_id === other.id)) {
+            if (box.firstElementChild && !box.querySelector(".bubble")) box.innerHTML = "";
+            add(m); if (m.sender_id === other.id) sb.rpc("dm_mark_read", { p_other: other.id }).then(() => refreshBadge(), () => {});
+          }
+        }).subscribe();
+      } catch (e) { /* ignore */ }
+      poll = setInterval(() => { if (!dead) load(); }, 10000);
+    })();
+    let busy = false;
+    async function send() {
+      const inp = $("#m", view), v = inp.value.trim();
+      if (!v || busy || !other) return;
+      busy = true;
+      try {
+        const mod = await LS.moderate(v, "dm");
+        if (mod && mod.allowed === false) { note("Message not sent. " + (mod.message || "It breaks the chat rules.")); return; }
+        const r = await sb.rpc("send_dm", { p_to: other.id, p_body: v });
+        if (r.error) { note(errText(r.error)); return; }
+        inp.value = "";
+        if (box.firstElementChild && !box.querySelector(".bubble")) box.innerHTML = "";
+        add({ id: r.data, sender_id: LS.user.id, body: v });
+      } catch (e) { note("Could not send. Try again."); } finally { busy = false; }
+    }
+    $("#send", view).addEventListener("click", send);
+    $("#m", view).addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    return () => { dead = true; clearInterval(poll); try { if (ch) sb.removeChannel(ch); } catch (e) { /* ignore */ } };
+  };
+
+  /* ---- Message button on profiles ---- */
+  const prevUser = S.userProfile;
+  S.userProfile = function (view, uname) {
+    const c = prevUser.apply(this, arguments);
+    (async () => {
+      try {
+        if (!LS.user) return;
+        for (let i = 0; i < 24 && !$("#pbio", view); i++) await new Promise((r) => setTimeout(r, 250));
+        const row = $(".pf-btns", view);
+        if (!row || $("#umsg", view) || $('a[href="#/edit-profile"]', row)) return;
+        const a = document.createElement("a"); a.className = "pf-btn"; a.id = "umsg"; a.href = "#/chat/" + uname; a.textContent = "✉️ Message";
+        row.insertBefore(a, row.children[1] || null);
+      } catch (e) { /* ignore */ }
+    })();
+    return c;
+  };
+
+  /* ---- setting: who can message you ---- */
+  LS.openDmSetting = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="db" aria-label="Back">←</button><div>Direct messages</div></div><div id="dbody"></div></div>`;
+    document.body.appendChild(ov);
+    $("#db", ov).addEventListener("click", () => ov.remove());
+    const box = $("#dbody", ov);
+    const OPTS = [["everyone", "Everyone", "Anyone can send you a message"], ["friends", "Friends", "Only people you follow who follow you back"], ["none", "No one", "Nobody can message you"]];
+    (async () => {
+      const s = await LS.getSettings(true);
+      const draw = (cur) => {
+        box.innerHTML = `<div class="sp-s">Who can send you messages</div><div class="sp-card">${OPTS.map((o) => `<button class="sp-r" data-k="${o[0]}"><div style="flex:1"><b style="display:block;font-weight:500">${o[1]}</b><em>${o[2]}</em></div><span style="width:24px;height:24px;border-radius:50%;border:2px solid ${cur === o[0] ? "#fe2c55" : "#666"};background:${cur === o[0] ? "radial-gradient(#fff 0 35%,#fe2c55 40%)" : "none"}"></span></button>`).join("")}</div>
+          <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">People you block can never message you. A parent can also turn messages off for a linked teen account.</p>`;
+        box.querySelector(".sp-card").addEventListener("click", async (e) => {
+          const b = e.target.closest("[data-k]"); if (!b) return;
+          if (await LS.saveSettings({ dm_who: b.dataset.k })) { draw(b.dataset.k); toast("Saved"); } else toast("Could not save. Try again.");
+        });
+      };
+      draw(s.dm_who || "everyone");
+    })();
+  };
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
@@ -7328,6 +7500,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     [/^\/golive$/, S.goLive, "golive"],
     [/^\/inbox$/, S.inbox, "inbox"],
     [/^\/inbox\/([\w-]+)$/, S.thread, "thread"],
+    [/^\/chat\/([\w]+)$/, S.chat, "thread"],
     [/^\/profile$/, S.profile, "profile"],
     [/^\/settings$/, S.settings, "thread"],
     [/^\/blocked$/, S.blocked, "thread"],
