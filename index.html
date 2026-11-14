@@ -5039,7 +5039,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["🎞", "Manage posts", "#/profile"], ["🎥", "Content preferences", "fn:content"], ["📺", "LIVE", "#/golive"],
       ["🔔", "Notifications", "fn:notif"], ["⏳", "Time and well-being", "fn:wellbeing"], ["🏠", "Family Pairing", "fn:family"]]],
     ["Account", [
-      ["👤", "Account", "#/edit-profile"], ["🛡", "Security & permissions", "fn:security"], ["📈", "Analytics", "#/live-analytics"],
+      ["👤", "Account", "#/edit-profile"], ["🗑", "Delete account", "fn:deleteacct"], ["🛡", "Security & permissions", "fn:security"], ["📈", "Analytics", "#/live-analytics"],
       ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"]]],
     ["Visibility", [
       ["🔒", "Private account", "fn:private"], ["🚫", "Blocked accounts", "#/blocked"]]],
@@ -5085,6 +5085,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:deleteacct") { LS.openDeleteAccount(); return; }
       if (a === "fn:terms") { LS.openTerms(); return; }
       if (a === "fn:privacy") { LS.openPrivacyCenter(); return; }
       if (a === "fn:help") { LS.openHelp(); return; }
@@ -8431,7 +8432,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       <div class="sp-s">Your data</div>
       <div class="sp-card">
         <button class="sp-r" id="vdl"><span class="ic">📦</span><div style="flex:1"><b style="display:block;font-weight:500">Download my data</b><em>Get a file with your information</em></div><span style="color:#9a9aa3">›</span></button>
-        <button class="sp-r" id="vdel"><span class="ic">🗑</span><div style="flex:1"><b style="display:block;font-weight:500;color:#ff5c7a">Request account deletion</b><em>We delete your account and data</em></div><span style="color:#9a9aa3">›</span></button>
+        <button class="sp-r" id="vdel"><span class="ic">🗑</span><div style="flex:1"><b style="display:block;font-weight:500;color:#ff5c7a">Delete my account</b><em>Permanently delete your account and data</em></div><span style="color:#9a9aa3">›</span></button>
       </div><div style="height:30px"></div></div>`;
     $("#vb", ov).addEventListener("click", () => ov.remove());
     const GO = { private: "private", audience: "audience", comments: "comments", dm: "dm", mentions: "mentions", reuse: "reuse", downloads: "downloads", liked: "liked", following: "following", contacts: "contacts" };
@@ -8447,12 +8448,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       const u = URL.createObjectURL(blob), a = document.createElement("a"); a.href = u; a.download = "my-livestream-studio-data.json"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 10000);
       btn.disabled = false; toast("Your data file was saved ✓");
     });
-    $("#vdel", ov).addEventListener("click", async () => {
-      if (!LS.user) { location.hash = "#/auth"; return; }
-      if (!confirm("Request deletion of your account and all your data? This can not be undone once we process it.")) return;
-      const { error } = await sb.from("support_tickets").insert({ user_id: LS.user.id, topic: "Account deletion", body: "Please delete my account and all my data. Email: " + (LS.user.email || "") });
-      toast(error ? (/too_many/.test(error.message) ? "You already sent requests today." : "Could not send. Try again.") : "Request sent ✓ We will process it and reply in Help Center.");
-    });
+    $("#vdel", ov).addEventListener("click", () => LS.openDeleteAccount());
   };
 })();
 </script>
@@ -8511,6 +8507,64 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       ov.scrollTop = 0;
     };
     document.body.appendChild(ov); list();
+  };
+})();
+</script>
+  <script>
+/* Delete my account (real). */
+(function () {
+  const LS = window.LS, sb = LS.sb, $ = LS.$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 4000); };
+  const BLOCK = { pending_withdrawal: "You have a withdrawal waiting to be paid. Wait until it is paid, then try again.", has_earnings: "You have earnings of $10 or more. Withdraw them first (Settings → Wallet), then you can delete your account." };
+  async function wipeFiles(uid) {
+    for (const b of ["videos", "avatars"]) {
+      try {
+        for (let i = 0; i < 5; i++) {
+          const { data } = await sb.storage.from(b).list(uid, { limit: 1000 });
+          if (!data || !data.length) break;
+          await sb.storage.from(b).remove(data.map((f) => uid + "/" + f.name));
+          if (data.length < 1000) break;
+        }
+      } catch (e) { /* ignore */ }
+    }
+  }
+  LS.openDeleteAccount = function () {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:170;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="xb" aria-label="Back">←</button><div>Delete account</div></div>
+      <div style="padding:10px 20px">
+        <h2 style="margin:8px 0 10px;font-size:22px;color:#ff5c7a">Delete your account?</h2>
+        <p style="color:#cfcfd6;line-height:1.5;font-size:16px;margin:0 0 12px">This permanently deletes:</p>
+        <div style="color:#cfcfd6;line-height:1.7;font-size:16px">• Your profile, photo and bio<br>• All your videos, comments, likes and saves<br>• Your messages, followers and following<br>• Your coins and any earnings under $10<br>• Your settings and history</div>
+        <p style="color:#ff8a9c;line-height:1.5;font-size:15.5px;margin:14px 0">This can not be undone. Coins and earnings are lost and are not refunded.</p>
+        <p style="color:#9a9aa3;font-size:15px;margin:0 0 6px">Type <b style="color:#fff">DELETE</b> to confirm:</p>
+        <input id="xc" autocomplete="off" autocapitalize="characters" style="width:100%;box-sizing:border-box;background:#2a2a30;color:#fff;border:0;border-radius:10px;padding:13px;font-size:17px">
+        <button id="xgo" disabled style="width:100%;margin-top:16px;background:#ff2d55;opacity:.4;color:#fff;border:0;border-radius:12px;padding:15px;font-size:17px;font-weight:700">Delete my account forever</button>
+        <button id="xcancel" style="width:100%;margin-top:10px;background:#ffffff1f;color:#fff;border:0;border-radius:12px;padding:14px;font-size:16px">Keep my account</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    $("#xb", ov).addEventListener("click", close); $("#xcancel", ov).addEventListener("click", close);
+    const go = $("#xgo", ov);
+    $("#xc", ov).addEventListener("input", (e) => { const ok = e.target.value.trim() === "DELETE"; go.disabled = !ok; go.style.opacity = ok ? "1" : ".4"; });
+    go.addEventListener("click", async () => {
+      go.disabled = true; go.textContent = "Deleting…";
+      try {
+        const chk = await sb.rpc("account_delete_check");
+        if (chk.error) throw new Error("x");
+        if (chk.data !== "ok") { toast(BLOCK[chk.data] || "You can not delete your account right now."); go.textContent = "Delete my account forever"; go.disabled = false; return; }
+        const uid = LS.user.id;
+        await wipeFiles(uid);
+        const r = await sb.rpc("delete_my_account");
+        if (r.error) { toast(BLOCK[(r.error.message || "").trim()] || "Could not delete. Try again or contact support."); go.textContent = "Delete my account forever"; go.disabled = false; return; }
+        try { await sb.auth.signOut(); } catch (e) { /* ignore */ }
+        try { ["ls.wb", "ls.a11y", "ls.lang", "ls.gt", "ls.searches", "ls.offline", "ls.inbox", "ls.music", "ls.playback", "ls.amplify", "ls.datasaver", "ls.wall", "ls.wallimg"].forEach((k) => localStorage.removeItem(k)); } catch (e) { /* ignore */ }
+        document.querySelectorAll("body>div[style*='z-index:15'],body>div[style*='z-index:16'],body>div[style*='z-index:17']").forEach((n) => n.remove());
+        location.hash = "#/auth"; setTimeout(() => location.reload(), 300);
+        toast("Your account was deleted.");
+      } catch (e) { toast("Could not delete. Check your internet and try again."); go.textContent = "Delete my account forever"; go.disabled = false; }
+    });
   };
 })();
 </script>
