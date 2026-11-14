@@ -5028,7 +5028,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["⬇️", "Downloads", null, "On"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
     ["Content & Display", [
       ["🎵", "Music", "fn:music"], ["📥", "Inbox & Messaging", "fn:inbox"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control", "fn:audience"],
-      ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback", "fn:playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language"],
+      ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback", "fn:playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language", "fn:lang"],
       ["♿", "Accessibility"], ["👁", "Amplify"], ["📍", "Contacts and location"]]],
     ["Cache & Cellular", [
       ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver"], ["🖼", "Wallpaper"]]],
@@ -5065,6 +5065,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:lang") { LS.openLanguage(); return; }
       if (a === "fn:playback") { LS.openPlayback(); return; }
       if (a === "fn:plan") { LS.openPlan(); return; }
       if (a === "fn:audience") { LS.openAudience(); return; }
@@ -7750,6 +7751,62 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     $("#ysp", ov).addEventListener("change", (e) => { put(Object.assign(get(), { speed: Number(e.target.value) })); LS.applyPlayback(); });
     $("#ylp", ov).addEventListener("change", (e) => { put(Object.assign(get(), { loop: e.target.checked })); LS.applyPlayback(); });
     $("#yau", ov).addEventListener("change", (e) => { put(Object.assign(get(), { auto: e.target.checked })); LS.applyPlayback(); });
+  };
+})();
+</script>
+  <script>
+/* Language: English, French, Arabic, Spanish. Translates the main menus and labels. */
+(function () {
+  const LS = window.LS, $ = LS.$;
+  const KEY = "ls.lang";
+  const DICT = {"fr": {"Home": "Accueil", "Friends": "Amis", "Inbox": "Boîte de réception", "Profile": "Profil", "Settings and privacy": "Paramètres et confidentialité", "Activity": "Activité", "Account": "Compte", "Visibility": "Visibilité", "Interactions": "Interactions", "Content & Display": "Contenu et affichage", "Cache & Cellular": "Cache et données mobiles", "Support & About": "Assistance et infos", "Login": "Connexion", "Manage posts": "Gérer les publications", "Content preferences": "Préférences de contenu", "LIVE": "LIVE", "Notifications": "Notifications", "Time and well-being": "Temps et bien-être", "Family Pairing": "Jumelage familial", "Security & permissions": "Sécurité et autorisations", "Analytics": "Statistiques", "Share profile": "Partager le profil", "Wallet": "Portefeuille", "Private account": "Compte privé", "Blocked accounts": "Comptes bloqués", "Comments": "Commentaires", "Mentions": "Mentions", "Direct messages": "Messages privés", "Reuse of content": "Réutilisation du contenu", "Downloads": "Téléchargements", "Following list": "Liste d'abonnements", "Liked videos": "Vidéos aimées", "Music": "Musique", "Inbox & Messaging": "Boîte de réception et messagerie", "Activity center": "Centre d'activité", "Audience control": "Contrôle de l'audience", "Plan and ads": "Forfait et publicités", "Playback": "Lecture", "Display": "Affichage", "Language": "Langue", "Accessibility": "Accessibilité", "Amplify": "Amplifier", "Contacts and location": "Contacts et localisation", "Offline videos": "Vidéos hors ligne", "Free up space": "Libérer de l'espace", "Data Saver": "Économiseur de données", "Wallpaper": "Fond d'écran", "Help Center": "Centre d'aide", "Privacy Center": "Centre de confidentialité", "Terms and Policies": "Conditions et politiques", "Switch account": "Changer de compte", "Log out": "Se déconnecter", "Messages": "Messages", "Everyone": "Tout le monde", "No one": "Personne", "Only me": "Moi uniquement", "Back": "Retour", "Save": "Enregistrer", "Cancel": "Annuler", "Follow": "S'abonner", "Following": "Abonné", "Message": "Message", "Post": "Publier", "Send": "Envoyer", "Upload video": "Importer une vidéo", "Choose a video": "Choisir une vidéo", "Log in": "Se connecter", "Videos": "Vidéos", "Saved": "Enregistrées", "Likes": "J'aime", "Followers": "Abonnés", "Settings": "Paramètres"}, "ar": {"Home": "الرئيسية", "Friends": "الأصدقاء", "Inbox": "صندوق الوارد", "Profile": "الملف الشخصي", "Settings and privacy": "الإعدادات والخصوصية", "Activity": "النشاط", "Account": "الحساب", "Visibility": "الظهور", "Interactions": "التفاعلات", "Content & Display": "المحتوى والعرض", "Cache & Cellular": "الذاكرة المؤقتة والبيانات", "Support & About": "الدعم وحول", "Login": "تسجيل الدخول", "Manage posts": "إدارة المنشورات", "Content preferences": "تفضيلات المحتوى", "LIVE": "بث مباشر", "Notifications": "الإشعارات", "Time and well-being": "الوقت والرفاهية", "Family Pairing": "الاقتران العائلي", "Security & permissions": "الأمان والأذونات", "Analytics": "التحليلات", "Share profile": "مشاركة الملف الشخصي", "Wallet": "المحفظة", "Private account": "حساب خاص", "Blocked accounts": "الحسابات المحظورة", "Comments": "التعليقات", "Mentions": "الإشارات", "Direct messages": "الرسائل المباشرة", "Reuse of content": "إعادة استخدام المحتوى", "Downloads": "التنزيلات", "Following list": "قائمة المتابَعين", "Liked videos": "الفيديوهات المعجب بها", "Music": "الموسيقى", "Inbox & Messaging": "الوارد والمراسلة", "Activity center": "مركز النشاط", "Audience control": "التحكم بالجمهور", "Plan and ads": "الخطة والإعلانات", "Playback": "التشغيل", "Display": "العرض", "Language": "اللغة", "Accessibility": "سهولة الاستخدام", "Amplify": "التعزيز", "Contacts and location": "جهات الاتصال والموقع", "Offline videos": "فيديوهات بدون إنترنت", "Free up space": "تفريغ المساحة", "Data Saver": "توفير البيانات", "Wallpaper": "الخلفية", "Help Center": "مركز المساعدة", "Privacy Center": "مركز الخصوصية", "Terms and Policies": "الشروط والسياسات", "Switch account": "تبديل الحساب", "Log out": "تسجيل الخروج", "Messages": "الرسائل", "Everyone": "الجميع", "No one": "لا أحد", "Only me": "أنا فقط", "Back": "رجوع", "Save": "حفظ", "Cancel": "إلغاء", "Follow": "متابعة", "Following": "متابَع", "Message": "رسالة", "Post": "نشر", "Send": "إرسال", "Upload video": "رفع فيديو", "Choose a video": "اختيار فيديو", "Log in": "تسجيل الدخول", "Videos": "الفيديوهات", "Saved": "المحفوظة", "Likes": "الإعجابات", "Followers": "المتابِعون", "Settings": "الإعدادات"}, "es": {"Home": "Inicio", "Friends": "Amigos", "Inbox": "Bandeja de entrada", "Profile": "Perfil", "Settings and privacy": "Configuración y privacidad", "Activity": "Actividad", "Account": "Cuenta", "Visibility": "Visibilidad", "Interactions": "Interacciones", "Content & Display": "Contenido y pantalla", "Cache & Cellular": "Caché y datos móviles", "Support & About": "Soporte e información", "Login": "Inicio de sesión", "Manage posts": "Administrar publicaciones", "Content preferences": "Preferencias de contenido", "LIVE": "EN VIVO", "Notifications": "Notificaciones", "Time and well-being": "Tiempo y bienestar", "Family Pairing": "Emparejamiento familiar", "Security & permissions": "Seguridad y permisos", "Analytics": "Analíticas", "Share profile": "Compartir perfil", "Wallet": "Cartera", "Private account": "Cuenta privada", "Blocked accounts": "Cuentas bloqueadas", "Comments": "Comentarios", "Mentions": "Menciones", "Direct messages": "Mensajes directos", "Reuse of content": "Reutilización de contenido", "Downloads": "Descargas", "Following list": "Lista de seguidos", "Liked videos": "Videos que me gustan", "Music": "Música", "Inbox & Messaging": "Bandeja y mensajería", "Activity center": "Centro de actividad", "Audience control": "Control de audiencia", "Plan and ads": "Plan y anuncios", "Playback": "Reproducción", "Display": "Pantalla", "Language": "Idioma", "Accessibility": "Accesibilidad", "Amplify": "Amplificar", "Contacts and location": "Contactos y ubicación", "Offline videos": "Videos sin conexión", "Free up space": "Liberar espacio", "Data Saver": "Ahorro de datos", "Wallpaper": "Fondo de pantalla", "Help Center": "Centro de ayuda", "Privacy Center": "Centro de privacidad", "Terms and Policies": "Términos y políticas", "Switch account": "Cambiar de cuenta", "Log out": "Cerrar sesión", "Messages": "Mensajes", "Everyone": "Todos", "No one": "Nadie", "Only me": "Solo yo", "Back": "Atrás", "Save": "Guardar", "Cancel": "Cancelar", "Follow": "Seguir", "Following": "Siguiendo", "Message": "Mensaje", "Post": "Publicar", "Send": "Enviar", "Upload video": "Subir video", "Choose a video": "Elegir un video", "Log in": "Iniciar sesión", "Videos": "Videos", "Saved": "Guardados", "Likes": "Me gusta", "Followers": "Seguidores", "Settings": "Configuración"}};
+  const NAMES = [["en", "English"], ["fr", "Français"], ["ar", "العربية"], ["es", "Español"]];
+  const get = () => { try { const v = localStorage.getItem(KEY); return DICT[v] ? v : "en"; } catch (e) { return "en"; } };
+  const orig = new WeakMap();
+  LS.lang = get;
+  function tx(node, lang) {
+    const raw = orig.has(node) ? orig.get(node) : node.nodeValue;
+    const key = raw.trim();
+    if (!key || key.length > 40) return;
+    const hit = lang === "en" ? key : DICT[lang][key];
+    if (hit === undefined) { if (orig.has(node)) { node.nodeValue = orig.get(node); } return; }
+    if (!orig.has(node)) orig.set(node, raw);
+    const out = raw.replace(key, hit);
+    if (node.nodeValue !== out) node.nodeValue = out;
+  }
+  let busy = false;
+  function walk(root, lang) {
+    if (busy || !root) return; busy = true;
+    try {
+      const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => { const p = n.parentNode && n.parentNode.nodeName; return p === "SCRIPT" || p === "STYLE" || p === "TEXTAREA" ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT; } });
+      const arr = []; while (w.nextNode()) arr.push(w.currentNode);
+      arr.forEach((n) => tx(n, lang));
+    } finally { busy = false; }
+  }
+  function setPage(lang) {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  }
+  function run() { const l = get(); setPage(l); if (l !== "en" || true) walk(document.body, l); }
+  let t = 0;
+  new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => { if (!busy) walk(document.body, get()); }, 60); }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  setPage(get());
+  setTimeout(run, 300);
+  LS.setLang = (l) => { try { localStorage.setItem(KEY, l); } catch (e) { /* ignore */ } run(); };
+  LS.openLanguage = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="gb" aria-label="Back">←</button><div>Language</div></div><div id="gbody"></div></div>`;
+    document.body.appendChild(ov);
+    $("#gb", ov).addEventListener("click", () => ov.remove());
+    const box = $("#gbody", ov);
+    const draw = () => {
+      const cur = get();
+      box.innerHTML = `<div class="sp-s">App language</div><div class="sp-card">${NAMES.map((o) => `<button class="sp-r" data-k="${o[0]}"><b style="flex:1;font-weight:500">${o[1]}</b><span style="width:24px;height:24px;border-radius:50%;border:2px solid ${cur === o[0] ? "#fe2c55" : "#666"};background:${cur === o[0] ? "radial-gradient(#fff 0 35%,#fe2c55 40%)" : "none"}"></span></button>`).join("")}</div>
+        <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">Menus, settings and main buttons change language. Videos, comments and names stay as people wrote them.</p>`;
+      box.querySelector(".sp-card").addEventListener("click", (e) => { const b = e.target.closest("[data-k]"); if (!b) return; LS.setLang(b.dataset.k); draw(); });
+    };
+    draw();
   };
 })();
 </script>
