@@ -5051,7 +5051,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback", "fn:playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language", "fn:lang"],
       ["♿", "Accessibility", "fn:a11y"], ["👁", "Amplify", "fn:amplify"], ["📍", "Contacts and location", "fn:contacts"]]],
     ["Cache & Cellular", [
-      ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver"], ["🖼", "Wallpaper"]]],
+      ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver", "fn:datasaver"], ["🖼", "Wallpaper"]]],
     ["Support & About", [
       ["🎧", "Help Center"], ["🔐", "Privacy Center"], ["ℹ️", "Terms and Policies"]]],
     ["Login", [
@@ -5085,6 +5085,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:datasaver") { LS.openDataSaver(); return; }
       if (a === "fn:liked") { LS.openLikedSetting(); return; }
       if (a === "fn:following") { LS.openFollowingSetting(); return; }
       if (a === "fn:downloads") { LS.openDownloads(); return; }
@@ -8244,6 +8245,43 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       };
       draw(s.liked_who || "everyone");
     })();
+  };
+})();
+</script>
+  <script>
+/* Data Saver: stop videos from loading before you watch them. */
+(function () {
+  const LS = window.LS, $ = LS.$;
+  const KEY = "ls.datasaver";
+  const get = () => { try { const v = localStorage.getItem(KEY); return v === "on" || v === "cell" ? v : "off"; } catch (e) { return "off"; } };
+  const conn = () => navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+  function active() {
+    const m = get(), c = conn();
+    if (m === "on") return true;
+    if (m === "cell") return !!(c && (c.type === "cellular" || c.saveData));
+    return !!(c && c.saveData && m !== "off");
+  }
+  LS.dataSaverActive = active;
+  function tame(v) {
+    if (!v || v.tagName !== "VIDEO" || !active()) return;
+    if (v.closest && (v.closest(".fyp, .vgrid, .vplayer, .pl"))) { if (v.preload !== "none" && v.paused) v.preload = "none"; }
+  }
+  new MutationObserver((list) => list.forEach((r) => r.addedNodes.forEach((n) => { if (n.nodeType === 1) { if (n.tagName === "VIDEO") tame(n); else if (n.querySelectorAll) n.querySelectorAll("video").forEach(tame); } }))).observe(document.body, { childList: true, subtree: true });
+  LS.openDataSaver = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    const draw = () => {
+      const cur = get(), c = conn();
+      const net = c ? (c.type === "cellular" ? "mobile data" : c.type === "wifi" ? "Wi-Fi" : (c.effectiveType || "unknown")) : "unknown";
+      ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="db2" aria-label="Back">←</button><div>Data Saver</div></div>
+        <div class="sp-s">Use less data</div>
+        <div class="sp-card">${[["off", "Off", "Videos load ahead so they start fast"], ["cell", "On mobile data only", "Saves data when you are not on Wi-Fi"], ["on", "Always on", "Saves data on Wi-Fi too"]].map((o) => `<button class="sp-r" data-k="${o[0]}"><div style="flex:1"><b style="display:block;font-weight:500">${o[1]}</b><em>${o[2]}</em></div><span style="width:24px;height:24px;border-radius:50%;border:2px solid ${cur === o[0] ? "#fe2c55" : "#666"};background:${cur === o[0] ? "radial-gradient(#fff 0 35%,#fe2c55 40%)" : "none"}"></span></button>`).join("")}</div>
+        <div class="sp-card" style="margin-top:14px"><div class="sp-r" style="display:block"><b style="display:block;font-weight:500">Right now</b><em style="font-style:normal;color:#9a9aa3;font-size:14px">Connection: ${net} · Data Saver is ${active() ? "ON" : "OFF"}</em></div></div>
+        <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">When on, videos only download when you watch them. The next video may take a moment to start. Reload the app after changing this.</p></div>`;
+      $("#db2", ov).addEventListener("click", () => ov.remove());
+      ov.querySelectorAll("[data-k]").forEach((b) => b.addEventListener("click", () => { try { localStorage.setItem(KEY, b.dataset.k); } catch (e) { /* ignore */ } draw(); }));
+    };
+    document.body.appendChild(ov); draw();
   };
 })();
 </script>
