@@ -4,6 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b0b12">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon-192.png">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <script>if ("serviceWorker" in navigator && location.protocol === "https:") { window.addEventListener("load", function () { navigator.serviceWorker.register("/sw.js").catch(function () {}); }); }</script>
   <title>LiveStream Studio</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ff3d71'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23fff'/%3E%3C/svg%3E">
   <style>
@@ -5033,7 +5039,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["🎞", "Manage posts", "#/profile"], ["🎥", "Content preferences", "fn:content"], ["📺", "LIVE", "#/golive"],
       ["🔔", "Notifications", "fn:notif"], ["⏳", "Time and well-being", "fn:wellbeing"], ["🏠", "Family Pairing", "fn:family"]]],
     ["Account", [
-      ["👤", "Account", "#/edit-profile"], ["🛡", "Security & permissions"], ["📈", "Analytics", "#/live-analytics"],
+      ["👤", "Account", "#/edit-profile"], ["🛡", "Security & permissions", "fn:security"], ["📈", "Analytics", "#/live-analytics"],
       ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"]]],
     ["Visibility", [
       ["🔒", "Private account", "fn:private"], ["🚫", "Blocked accounts", "#/blocked"]]],
@@ -5079,6 +5085,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:security") { LS.openSecurity(); return; }
       if (a === "fn:contacts") { LS.openContacts(); return; }
       if (a === "fn:amplify") { LS.openAmplify(); return; }
       if (a === "fn:a11y") { LS.openAccessibility(); return; }
@@ -7990,6 +7997,62 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
         b.textContent = r === "requested" ? "Requested" : r ? "Following" : "Follow"; b.disabled = !!r;
       }));
     });
+  };
+})();
+</script>
+  <script>
+/* Security & permissions. */
+(function () {
+  const LS = window.LS, sb = LS.sb, esc = LS.esc, $ = LS.$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 3000); };
+  const inp = "width:100%;box-sizing:border-box;background:#2a2a30;color:#fff;border:0;border-radius:10px;padding:13px;font-size:16px;margin-top:8px";
+  async function perm(name) { try { return (await navigator.permissions.query({ name })).state; } catch (e) { return name === "notifications" && "Notification" in window ? ({ default: "prompt", granted: "granted", denied: "denied" })[Notification.permission] : "unknown"; } }
+  const LABEL = { granted: "Allowed", denied: "Blocked", prompt: "Not asked yet", unknown: "Unknown" };
+  LS.openSecurity = async function () {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    document.body.appendChild(ov);
+    async function draw() {
+      const ps = { notifications: await perm("notifications"), camera: await perm("camera"), microphone: await perm("microphone") };
+      const row = (k, ic, t) => `<div class="sp-r" style="gap:12px"><span class="ic">${ic}</span><div style="flex:1"><b style="display:block;font-weight:500">${t}</b><em>${LABEL[ps[k]] || "Unknown"}</em></div>${ps[k] === "granted" ? "" : ps[k] === "denied" ? `<button class="pm" data-k="${k}" style="background:#ffffff1f;border:0;color:#fff;border-radius:8px;padding:8px 12px">How to fix</button>` : `<button class="pm" data-k="${k}" style="background:#fe2c55;border:0;color:#fff;border-radius:8px;padding:8px 14px;font-weight:600">Allow</button>`}</div>`;
+      ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="sb" aria-label="Back">←</button><div>Security & permissions</div></div>
+        <div class="sp-s">Account</div>
+        <div class="sp-card"><div class="sp-r" style="display:block"><b style="display:block;font-weight:500">Login email</b><em>${esc(LS.user.email || "")}</em></div></div>
+        <div class="sp-s">Change password</div>
+        <div class="sp-card" style="padding:12px 16px 16px"><input id="pw1" type="password" autocomplete="new-password" placeholder="New password (8+ characters)" style="${inp}"><input id="pw2" type="password" autocomplete="new-password" placeholder="Repeat new password" style="${inp}"><button class="btn big" id="pwgo" style="margin-top:12px;width:100%">Change password</button></div>
+        <div class="sp-s">Devices</div>
+        <div class="sp-card"><button class="sp-r" id="allout"><div style="flex:1"><b style="display:block;font-weight:500">Log out of all devices</b><em>Use this if you lost your phone or shared your login</em></div><span style="color:#9a9aa3">›</span></button></div>
+        <div class="sp-s">App permissions</div>
+        <div class="sp-card">${row("notifications", "🔔", "Notifications")}${row("camera", "📷", "Camera")}${row("microphone", "🎤", "Microphone")}</div>
+        <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">Camera and microphone are used for going LIVE. Notifications tell you when people you follow go live.</p></div>`;
+      $("#sb", ov).addEventListener("click", () => ov.remove());
+      $("#pwgo", ov).addEventListener("click", async (e) => {
+        const a = $("#pw1", ov).value, b = $("#pw2", ov).value;
+        if (a.length < 8) { toast("Password must be at least 8 characters."); return; }
+        if (a !== b) { toast("The two passwords do not match."); return; }
+        e.target.disabled = true;
+        const { error } = await sb.auth.updateUser({ password: a });
+        e.target.disabled = false;
+        if (error) { toast(/same|different/i.test(error.message) ? "Choose a different password." : "Could not change password. Log in again and retry."); return; }
+        $("#pw1", ov).value = ""; $("#pw2", ov).value = ""; toast("Password changed ✓");
+      });
+      $("#allout", ov).addEventListener("click", async () => {
+        if (!confirm("Log out of all devices, including this one?")) return;
+        try { await sb.auth.signOut({ scope: "global" }); } catch (e) { await sb.auth.signOut(); }
+        ov.remove(); location.hash = "#/auth";
+      });
+      ov.querySelectorAll(".pm").forEach((b) => b.addEventListener("click", async () => {
+        const k = b.dataset.k;
+        if (ps[k] === "denied") { alert("This is blocked in Chrome.\n\nTap the lock icon (or ⋮ menu) next to the web address → Permissions → turn it on, then reload."); return; }
+        try {
+          if (k === "notifications") await Notification.requestPermission();
+          else { const st = await navigator.mediaDevices.getUserMedia(k === "camera" ? { video: true } : { audio: true }); st.getTracks().forEach((t) => t.stop()); }
+        } catch (e) { /* denied */ }
+        draw();
+      }));
+    }
+    draw();
   };
 })();
 </script>
