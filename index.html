@@ -5029,7 +5029,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     ["Content & Display", [
       ["🎵", "Music", "fn:music"], ["📥", "Inbox & Messaging", "fn:inbox"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control", "fn:audience"],
       ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback", "fn:playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language", "fn:lang"],
-      ["♿", "Accessibility", "fn:a11y"], ["👁", "Amplify", "fn:amplify"], ["📍", "Contacts and location"]]],
+      ["♿", "Accessibility", "fn:a11y"], ["👁", "Amplify", "fn:amplify"], ["📍", "Contacts and location", "fn:contacts"]]],
     ["Cache & Cellular", [
       ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver"], ["🖼", "Wallpaper"]]],
     ["Support & About", [
@@ -5065,6 +5065,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:contacts") { LS.openContacts(); return; }
       if (a === "fn:amplify") { LS.openAmplify(); return; }
       if (a === "fn:a11y") { LS.openAccessibility(); return; }
       if (a === "fn:lang") { LS.openLanguage(); return; }
@@ -6870,7 +6871,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   const sb = LS.sb;
   const esc = LS.esc;
   const $ = LS.$;
-  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone", dm_who: "everyone", reuse_who: "everyone", videos_who: "everyone" };
+  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone", dm_who: "everyone", reuse_who: "everyone", videos_who: "everyone", find_by_contacts: false };
   const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
   let cache = null, cacheUid = null;
   LS.getSettings = async function (force) {
@@ -6884,7 +6885,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   LS.saveSettings = async function (patch) {
     const cur = await LS.getSettings();
     const next = Object.assign({}, cur, patch);
-    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, dm_who: next.dm_who, reuse_who: next.reuse_who, videos_who: next.videos_who, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, dm_who: next.dm_who, reuse_who: next.reuse_who, videos_who: next.videos_who, find_by_contacts: next.find_by_contacts, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
     if (r && r.error) return false;
     cache = next; return true;
   };
@@ -7925,6 +7926,56 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       ov.querySelectorAll("[data-k]").forEach((b) => b.addEventListener("click", () => { try { localStorage.setItem(KEY, b.dataset.k); } catch (e) { /* ignore */ } apply(); draw(); }));
     };
     document.body.appendChild(ov); draw();
+  };
+})();
+</script>
+  <script>
+/* Contacts and location. */
+(function () {
+  const LS = window.LS, sb = LS.sb, esc = LS.esc, $ = LS.$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2800); };
+  LS.openContacts = async function () {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="cb" aria-label="Back">←</button><div>Contacts and location</div></div><div id="cbody"></div></div>`;
+    document.body.appendChild(ov);
+    $("#cb", ov).addEventListener("click", () => ov.remove());
+    const box = $("#cbody", ov);
+    const s = await LS.getSettings(true);
+    let on = !!s.find_by_contacts;
+    const supported = !!(navigator.contacts && navigator.contacts.select);
+    box.innerHTML = `<div class="sp-s">Contacts</div>
+      <div class="sp-card">
+        <label class="sp-r" style="cursor:pointer"><div style="flex:1"><b style="display:block;font-weight:500">Let contacts find me</b><em>People who have your email in their contacts can find your profile</em></div><input type="checkbox" class="switch" id="cfm" ${on ? "checked" : ""}></label>
+        <button class="sp-r" id="cfind"><div style="flex:1"><b style="display:block;font-weight:500">Find friends from contacts</b><em>${supported ? "Pick contacts to see who is on the app" : "Needs Chrome on Android"}</em></div><span style="color:#9a9aa3">›</span></button>
+      </div>
+      <div id="cres"></div>
+      <div class="sp-s">Location</div>
+      <div class="sp-card"><div class="sp-r" style="display:block"><b style="display:block;font-weight:500">Your location</b><em style="font-style:normal;color:#9a9aa3;font-size:14px">This app never reads or stores your location.</em></div></div>
+      <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">The contacts you pick are only used to search, and are not saved. Only people who turned on "Let contacts find me" can be found.</p>`;
+    $("#cfm", ov).addEventListener("change", async (e) => {
+      const v = e.target.checked;
+      if (await LS.saveSettings({ find_by_contacts: v })) { on = v; toast("Saved"); } else { e.target.checked = !v; toast("Could not save. Try again."); }
+    });
+    $("#cfind", ov).addEventListener("click", async () => {
+      const res = $("#cres", ov);
+      if (!supported) { toast("Your browser can not pick contacts. Use Chrome on Android."); return; }
+      let picked;
+      try { picked = await navigator.contacts.select(["email"], { multiple: true }); } catch (e) { return; }
+      const emails = []; (picked || []).forEach((c) => (c.email || []).forEach((m) => emails.push(String(m).toLowerCase())));
+      if (!emails.length) { res.innerHTML = `<div class="sp-empty">No emails in the contacts you picked.</div>`; return; }
+      res.innerHTML = `<div class="sp-empty">Searching…</div>`;
+      const { data, error } = await sb.rpc("find_by_emails", { p_emails: emails.slice(0, 300) });
+      if (error) { res.innerHTML = `<div class="sp-empty">Could not search. Try again.</div>`; return; }
+      if (!data || !data.length) { res.innerHTML = `<div class="sp-empty">None of those contacts were found.<br>They may not have joined or turned on "Let contacts find me".</div>`; return; }
+      res.innerHTML = `<div class="sp-s">People you may know</div><div class="sp-card">${data.map((p) => `<div class="sp-u"><a class="av" href="#/u/${esc(p.username)}">${LS.photo(p, 44)}</a><b>${esc(p.display_name || p.username)}<small style="display:block;color:#9a9aa3;font-weight:400">@${esc(p.username)}</small></b><button data-id="${p.id}">Follow</button></div>`).join("")}</div>`;
+      res.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => ov.remove()));
+      res.querySelectorAll("button[data-id]").forEach((b) => b.addEventListener("click", async () => {
+        b.disabled = true; const r = await LS.setFollow(b.dataset.id, true);
+        b.textContent = r === "requested" ? "Requested" : r ? "Following" : "Follow"; b.disabled = !!r;
+      }));
+    });
   };
 })();
 </script>
