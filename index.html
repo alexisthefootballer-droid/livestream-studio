@@ -5051,7 +5051,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback", "fn:playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language", "fn:lang"],
       ["♿", "Accessibility", "fn:a11y"], ["👁", "Amplify", "fn:amplify"], ["📍", "Contacts and location", "fn:contacts"]]],
     ["Cache & Cellular", [
-      ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver", "fn:datasaver"], ["🖼", "Wallpaper"]]],
+      ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver", "fn:datasaver"], ["🖼", "Wallpaper", "fn:wallpaper"]]],
     ["Support & About", [
       ["🎧", "Help Center"], ["🔐", "Privacy Center"], ["ℹ️", "Terms and Policies"]]],
     ["Login", [
@@ -5085,6 +5085,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:wallpaper") { LS.openWallpaper(); return; }
       if (a === "fn:datasaver") { LS.openDataSaver(); return; }
       if (a === "fn:liked") { LS.openLikedSetting(); return; }
       if (a === "fn:following") { LS.openFollowingSetting(); return; }
@@ -7423,7 +7424,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     if (!LS.user) { location.hash = "#/auth"; return; }
     let dead = false, ch = null, poll = null, other = null;
     const seen = new Set();
-    view.innerHTML = `<div class="thread"><header class="topbar"><a class="icon-btn" href="#/inbox" aria-label="Back">←</a><div class="host-line" id="chh"><b>@${esc(uname)}</b></div><span></span></header>
+    view.innerHTML = `<div class="thread dmchat"><header class="topbar"><a class="icon-btn" href="#/inbox" aria-label="Back">←</a><div class="host-line" id="chh"><b>@${esc(uname)}</b></div><span></span></header>
       <div class="bubbles" id="bubbles"><div style="text-align:center;color:#9a9aa3;padding:20px">Loading…</div></div>
       <div class="composer"><input id="m" placeholder="Message…" autocomplete="off" maxlength="1000"><button class="btn" id="send">Send</button></div></div>`;
     const box = $("#bubbles", view);
@@ -8280,6 +8281,54 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
         <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">When on, videos only download when you watch them. The next video may take a moment to start. Reload the app after changing this.</p></div>`;
       $("#db2", ov).addEventListener("click", () => ov.remove());
       ov.querySelectorAll("[data-k]").forEach((b) => b.addEventListener("click", () => { try { localStorage.setItem(KEY, b.dataset.k); } catch (e) { /* ignore */ } draw(); }));
+    };
+    document.body.appendChild(ov); draw();
+  };
+})();
+</script>
+  <script>
+/* Wallpaper: background of your chats. */
+(function () {
+  const LS = window.LS, $ = LS.$;
+  const KEY = "ls.wall", IMG = "ls.wallimg";
+  const PRE = { none: "", night: "linear-gradient(160deg,#0b0b12,#1a1a3a)", sunset: "linear-gradient(160deg,#3a1c4a,#b0414f 60%,#f0a35e)", ocean: "linear-gradient(160deg,#06202e,#0c5a74 70%,#2aa6a0)", forest: "linear-gradient(160deg,#0a1f14,#1f5a3a 70%,#7aa05a)", berry: "linear-gradient(160deg,#2a0b2a,#8a1f5a 70%,#e0507a)", gold: "linear-gradient(160deg,#1a1405,#6a4a10 70%,#d9a93a)" };
+  const get = () => { try { return localStorage.getItem(KEY) || "none"; } catch (e) { return "none"; } };
+  const st = document.createElement("style"); st.id = "wall-css"; document.head.appendChild(st);
+  function apply() {
+    const k = get(); let bg = "";
+    if (k === "photo") { try { const d = localStorage.getItem(IMG); if (d) bg = `url(${d}) center/cover no-repeat`; } catch (e) { /* ignore */ } }
+    else bg = PRE[k] || "";
+    st.textContent = bg ? `.dmchat .bubbles{background:${bg}!important}` : "";
+  }
+  apply();
+  function shrink(file) {
+    return new Promise((res, rej) => {
+      const im = new Image(), u = URL.createObjectURL(file);
+      im.onload = () => { const m = 900, r = Math.min(1, m / Math.max(im.width, im.height)); const c = document.createElement("canvas"); c.width = Math.round(im.width * r); c.height = Math.round(im.height * r); c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(u); res(c.toDataURL("image/jpeg", 0.75)); };
+      im.onerror = () => rej(new Error("img")); im.src = u;
+    });
+  }
+  LS.openWallpaper = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    const draw = () => {
+      const cur = get();
+      ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="wb2" aria-label="Back">←</button><div>Wallpaper</div></div>
+        <div class="sp-s">Chat wallpaper</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 14px">${Object.keys(PRE).map((k) => `<button data-k="${k}" style="height:96px;border-radius:14px;border:3px solid ${cur === k ? "#fe2c55" : "transparent"};background:${PRE[k] || "#1f1f22"};color:#fff;font-size:13px;display:flex;align-items:flex-end;justify-content:center;padding:6px">${k === "none" ? "Default" : k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div>
+        <div class="sp-card" style="margin-top:14px"><button class="sp-r" id="wpick"><div style="flex:1"><b style="display:block;font-weight:500">🖼 Use my own photo</b><em>${cur === "photo" ? "Your photo is on" : "Pick a picture from your phone"}</em></div><span style="color:#9a9aa3">›</span></button><input type="file" id="wfile" accept="image/*" hidden></div>
+        <div class="sp-s">Preview</div>
+        <div id="wprev" style="margin:0 14px;height:150px;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:10px;background:#111"><div style="align-self:flex-start;background:#2a2a30;border-radius:14px;padding:7px 12px;font-size:14px">Hi! 👋</div><div style="align-self:flex-end;background:#fe2c55;border-radius:14px;padding:7px 12px;font-size:14px">Hello!</div></div>
+        <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">The wallpaper shows behind your messages in Inbox chats. It is saved on this phone only.</p></div>`;
+      const pv = $("#wprev", ov); let bg = ""; if (cur === "photo") { try { const d = localStorage.getItem(IMG); if (d) bg = `url(${d}) center/cover`; } catch (e) { /* ignore */ } } else bg = PRE[cur] || ""; if (bg) pv.style.background = bg;
+      $("#wb2", ov).addEventListener("click", () => ov.remove());
+      ov.querySelectorAll("[data-k]").forEach((b) => b.addEventListener("click", () => { try { localStorage.setItem(KEY, b.dataset.k); } catch (e) { /* ignore */ } apply(); draw(); }));
+      $("#wpick", ov).addEventListener("click", () => $("#wfile", ov).click());
+      $("#wfile", ov).addEventListener("change", async (e) => {
+        const f = e.target.files && e.target.files[0]; if (!f) return;
+        try { const d = await shrink(f); localStorage.setItem(IMG, d); localStorage.setItem(KEY, "photo"); apply(); draw(); }
+        catch (x) { alert("Could not use that photo. Try another one."); }
+      });
     };
     document.body.appendChild(ov); draw();
   };
