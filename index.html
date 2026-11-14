@@ -5053,7 +5053,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     ["Cache & Cellular", [
       ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver", "fn:datasaver"], ["🖼", "Wallpaper", "fn:wallpaper"]]],
     ["Support & About", [
-      ["🎧", "Help Center"], ["🔐", "Privacy Center"], ["ℹ️", "Terms and Policies"]]],
+      ["🎧", "Help Center", "fn:help"], ["🔐", "Privacy Center"], ["ℹ️", "Terms and Policies"]]],
     ["Login", [
       ["🔁", "Switch account", "fn:logout"], ["🚪", "Log out", "fn:logout"]]],
   ];
@@ -5085,6 +5085,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:help") { LS.openHelp(); return; }
       if (a === "fn:wallpaper") { LS.openWallpaper(); return; }
       if (a === "fn:datasaver") { LS.openDataSaver(); return; }
       if (a === "fn:liked") { LS.openLikedSetting(); return; }
@@ -8331,6 +8332,68 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       });
     };
     document.body.appendChild(ov); draw();
+  };
+})();
+</script>
+  <script>
+/* Help Center: answers + contact support. */
+(function () {
+  const LS = window.LS, sb = LS.sb, esc = LS.esc, $ = LS.$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 3000); };
+  const FAQ = [
+    ["How do I go LIVE?", "Tap the + button in the middle of the bottom bar, then Go Live. Allow camera and microphone when asked. Your followers get an alert if they turned on live notifications."],
+    ["How do guests join my LIVE?", "Viewers tap Request to join. You accept them from the Requests list. You can have up to 8 guests on stage and you can mute or remove anyone."],
+    ["How do coins and gifts work?", "Coins are bought in Wallet (1 coin costs $0.0155). Viewers send gifts with coins, and the streamer receives 40% of the gift value."],
+    ["How do I withdraw my earnings?", "Open Settings → Plan and ads or Analytics to see your earnings. You can ask for a withdrawal from $10. Withdrawals are paid manually, so they take a little time."],
+    ["How do I upload a video?", "Go to your profile and tap Upload video. Choose an MP4, WebM or MOV video up to 50 MB, add a caption and tap Post."],
+    ["How do I delete my video?", "Open your video from your profile and tap the 🗑 button."],
+    ["How do I make my account private?", "Go to Settings → Private account. Then only people you approve can follow you and see your videos."],
+    ["How do I block or report someone?", "Tap the ⋯ button on their video or profile. Choose Report or Block. Blocked people can not message you, comment or see your videos."],
+    ["Someone is bothering me. What can I do?", "Block them, set Comments and Direct messages to Friends or No one in Settings, and send us a report from the form below."],
+    ["I forgot my password.", "On the login screen use Forgot password. If you are logged in, go to Settings → Security & permissions → Change password."],
+    ["The video has no sound.", "Tap the screen once. Your browser blocks sound until you touch the page. Also check Settings → Music, that Mute all videos is off."],
+    ["Can I use the app on my home screen?", "Yes. In Chrome tap ⋮ → Install app or Add to Home screen."]
+  ];
+  const TOPICS = ["Account", "LIVE", "Coins and payments", "Videos", "Safety or abuse", "Bug or problem", "Other"];
+  LS.openHelp = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="hb" aria-label="Back">←</button><div>Help Center</div></div>
+      <div style="padding:0 14px 6px"><input id="hs" placeholder="Search for help…" style="width:100%;box-sizing:border-box;background:#1f1f22;color:#fff;border:0;border-radius:12px;padding:13px 14px;font-size:16px"></div>
+      <div class="sp-s">Common questions</div><div class="sp-card" id="faq"></div>
+      <div class="sp-s">Still need help?</div>
+      <div class="sp-card" style="padding:12px 16px 16px">
+        <select id="ht" style="width:100%;background:#2a2a30;color:#fff;border:0;border-radius:10px;padding:13px;font-size:16px">${TOPICS.map((t) => `<option>${t}</option>`).join("")}</select>
+        <textarea id="hm" maxlength="2000" rows="4" placeholder="Describe your problem…" style="width:100%;box-sizing:border-box;background:#2a2a30;color:#fff;border:0;border-radius:10px;padding:13px;font-size:16px;margin-top:10px;resize:vertical"></textarea>
+        <button class="btn big" id="hsend" style="margin-top:10px;width:100%">Send to support</button></div>
+      <div class="sp-s">My requests</div><div class="sp-card" id="mine"><div class="sp-empty">Loading…</div></div><div style="height:30px"></div></div>`;
+    document.body.appendChild(ov);
+    $("#hb", ov).addEventListener("click", () => ov.remove());
+    const faq = $("#faq", ov);
+    const draw = (q) => {
+      const f = FAQ.filter((x) => !q || (x[0] + " " + x[1]).toLowerCase().indexOf(q) >= 0);
+      faq.innerHTML = f.map((x, i) => `<div class="fq" style="border-bottom:1px solid #2a2a30"><button class="sp-r" data-i="${i}" style="align-items:flex-start"><b style="flex:1;font-weight:500">${esc(x[0])}</b><span style="color:#9a9aa3">+</span></button><div class="fa" hidden style="padding:0 16px 14px;color:#cfcfd6;font-size:15.5px;line-height:1.45">${esc(x[1])}</div></div>`).join("") || `<div class="sp-empty">No answer found. Send us a message below.</div>`;
+    };
+    draw("");
+    $("#hs", ov).addEventListener("input", (e) => draw(e.target.value.trim().toLowerCase()));
+    faq.addEventListener("click", (e) => { const b = e.target.closest("button.sp-r"); if (!b) return; const a = b.parentElement.querySelector(".fa"); a.hidden = !a.hidden; b.lastElementChild.textContent = a.hidden ? "+" : "−"; });
+    async function loadMine() {
+      const box = $("#mine", ov);
+      if (!LS.user) { box.innerHTML = `<div class="sp-empty">Log in to send and see requests.</div>`; return; }
+      const { data } = await sb.from("support_tickets").select("*").eq("user_id", LS.user.id).order("created_at", { ascending: false }).limit(20);
+      box.innerHTML = (data || []).map((t) => `<div class="sp-r" style="display:block"><b style="display:block;font-weight:500">${esc(t.topic)} <span style="color:${t.status === "open" ? "#e0a030" : "#3ac07a"};font-size:13px">· ${t.status === "open" ? "Waiting" : t.status === "answered" ? "Answered" : "Closed"}</span></b><em style="font-style:normal;color:#9a9aa3;font-size:14px">${esc(String(t.body).slice(0, 90))}</em>${t.reply ? `<div style="margin-top:8px;background:#2a2a30;border-radius:10px;padding:10px;font-size:15px">💬 ${esc(t.reply)}</div>` : ""}</div>`).join("") || `<div class="sp-empty">No requests yet.</div>`;
+    }
+    loadMine();
+    $("#hsend", ov).addEventListener("click", async (e) => {
+      if (!LS.user) { ov.remove(); location.hash = "#/auth"; return; }
+      const body = $("#hm", ov).value.trim();
+      if (body.length < 5) { toast("Please write a little more."); return; }
+      e.target.disabled = true;
+      const { error } = await sb.from("support_tickets").insert({ user_id: LS.user.id, topic: $("#ht", ov).value, body });
+      e.target.disabled = false;
+      if (error) { toast(/too_many/.test(error.message) ? "You sent 5 requests today. Try again tomorrow." : "Could not send. Try again."); return; }
+      $("#hm", ov).value = ""; toast("Sent ✓ We will reply here."); loadMine();
+    });
   };
 })();
 </script>
