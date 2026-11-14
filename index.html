@@ -5045,7 +5045,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["🔒", "Private account", "fn:private"], ["🚫", "Blocked accounts", "#/blocked"]]],
     ["Interactions", [
       ["💬", "Comments", "fn:comments"], ["@", "Mentions", "fn:mentions"], ["✉️", "Direct messages", "fn:dm"], ["🎬", "Reuse of content", "fn:reuse"],
-      ["⬇️", "Downloads", "fn:downloads"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
+      ["⬇️", "Downloads", "fn:downloads"], ["👥", "Following list", "fn:following"], ["♥", "Liked videos", null, "Everyone"]]],
     ["Content & Display", [
       ["🎵", "Music", "fn:music"], ["📥", "Inbox & Messaging", "fn:inbox"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control", "fn:audience"],
       ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback", "fn:playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language", "fn:lang"],
@@ -5085,6 +5085,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:following") { LS.openFollowingSetting(); return; }
       if (a === "fn:downloads") { LS.openDownloads(); return; }
       if (a === "fn:security") { LS.openSecurity(); return; }
       if (a === "fn:contacts") { LS.openContacts(); return; }
@@ -6893,7 +6894,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   const sb = LS.sb;
   const esc = LS.esc;
   const $ = LS.$;
-  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone", dm_who: "everyone", reuse_who: "everyone", videos_who: "everyone", find_by_contacts: false, downloads_on: true };
+  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone", dm_who: "everyone", reuse_who: "everyone", videos_who: "everyone", find_by_contacts: false, downloads_on: true, following_who: "everyone" };
   const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
   let cache = null, cacheUid = null;
   LS.getSettings = async function (force) {
@@ -6907,7 +6908,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   LS.saveSettings = async function (patch) {
     const cur = await LS.getSettings();
     const next = Object.assign({}, cur, patch);
-    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, dm_who: next.dm_who, reuse_who: next.reuse_who, videos_who: next.videos_who, find_by_contacts: next.find_by_contacts, downloads_on: next.downloads_on, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, dm_who: next.dm_who, reuse_who: next.reuse_who, videos_who: next.videos_who, find_by_contacts: next.find_by_contacts, downloads_on: next.downloads_on, following_who: next.following_who, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
     if (r && r.error) return false;
     cache = next; return true;
   };
@@ -8116,6 +8117,69 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
 })();
 </script>
   <script>
+/* Following list: who can see who you follow. */
+(function () {
+  const LS = window.LS, S = LS.screens, sb = LS.sb, esc = LS.esc, $ = LS.$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); };
+  /* screen: someone else's following list */
+  S.userFollowing = function (view, uname) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    let dead = false;
+    view.innerHTML = `<header class="er-top"><button class="icon-btn" id="ufb" aria-label="Back">←</button><div class="er-title">@${esc(uname)} · Following</div><span style="width:40px"></span></header><div class="list" id="ufl"><div class="pad"><small>Loading…</small></div></div>`;
+    $("#ufb", view).addEventListener("click", () => { history.length > 1 ? history.back() : (location.hash = "#/u/" + uname); });
+    (async () => {
+      const list = $("#ufl", view);
+      let uid = null;
+      try { const r = await sb.from("profiles").select("id").eq("username", uname).maybeSingle(); uid = r.data && r.data.id; } catch (e) { /* ignore */ }
+      if (dead) return;
+      if (!uid) { list.innerHTML = `<div class="pf-empty">User not found.</div>`; return; }
+      const { data, error } = await sb.rpc("user_following", { p_user: uid });
+      if (dead) return;
+      if (error) { list.innerHTML = `<div class="pf-empty">${/following_hidden/.test(error.message) ? "🔒 This person's following list is private." : "Could not load. Try again."}</div>`; return; }
+      if (!data || !data.length) { list.innerHTML = `<div class="pf-empty">Not following anyone yet.</div>`; return; }
+      list.innerHTML = data.map((p) => `<div class="row-item"><a href="#/u/${esc(p.username)}" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;color:inherit;text-decoration:none"><span class="ring sm" style="--h:260">${LS.photo(p, 44)}</span><div class="grow"><b>${esc(p.display_name || p.username)}</b><small>@${esc(p.username)}</small></div></a></div>`).join("");
+    })();
+    return () => { dead = true; };
+  };
+  /* make "Following" on a profile open the list */
+  const prevUser = S.userProfile;
+  S.userProfile = function (view, uname) {
+    const c = prevUser.apply(this, arguments);
+    (async () => {
+      try {
+        for (let i = 0; i < 24 && !$("#ufing", view); i++) await new Promise((r) => setTimeout(r, 250));
+        const el = $("#ufing", view), box = el && el.parentElement;
+        if (!box || box.dataset.fl) return;
+        box.dataset.fl = "1"; box.style.cursor = "pointer";
+        box.addEventListener("click", () => { location.hash = "#/following/" + uname; });
+      } catch (e) { /* ignore */ }
+    })();
+    return c;
+  };
+  LS.openFollowingSetting = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="fb2" aria-label="Back">←</button><div>Following list</div></div><div id="fbody"></div></div>`;
+    document.body.appendChild(ov);
+    $("#fb2", ov).addEventListener("click", () => ov.remove());
+    const box = $("#fbody", ov);
+    const OPTS = [["everyone", "Everyone", "Anyone can see who you follow"], ["friends", "Friends", "Only people you follow who follow you back"], ["me", "Only me", "Nobody else can see who you follow"]];
+    (async () => {
+      const s = await LS.getSettings(true);
+      const draw = (cur) => {
+        box.innerHTML = `<div class="sp-s">Who can see your following list</div><div class="sp-card">${OPTS.map((o) => `<button class="sp-r" data-k="${o[0]}"><div style="flex:1"><b style="display:block;font-weight:500">${o[1]}</b><em>${o[2]}</em></div><span style="width:24px;height:24px;border-radius:50%;border:2px solid ${cur === o[0] ? "#fe2c55" : "#666"};background:${cur === o[0] ? "radial-gradient(#fff 0 35%,#fe2c55 40%)" : "none"}"></span></button>`).join("")}</div>
+          <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">People open your list by tapping "Following" on your profile. You can always see your own list. The number of people you follow stays visible.</p>`;
+        box.querySelector(".sp-card").addEventListener("click", async (e) => {
+          const b = e.target.closest("[data-k]"); if (!b) return;
+          if (await LS.saveSettings({ following_who: b.dataset.k })) { draw(b.dataset.k); toast("Saved"); } else toast("Could not save. Try again.");
+        });
+      };
+      draw(s.following_who || "everyone");
+    })();
+  };
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
@@ -8132,6 +8196,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     [/^\/inbox$/, S.inbox, "inbox"],
     [/^\/inbox\/([\w-]+)$/, S.thread, "thread"],
     [/^\/chat\/([\w]+)$/, S.chat, "thread"],
+    [/^\/following\/([^\/]+)$/, S.userFollowing, "thread"],
     [/^\/profile$/, S.profile, "profile"],
     [/^\/settings$/, S.settings, "thread"],
     [/^\/blocked$/, S.blocked, "thread"],
