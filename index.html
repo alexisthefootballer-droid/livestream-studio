@@ -5028,7 +5028,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["⬇️", "Downloads", null, "On"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
     ["Content & Display", [
       ["🎵", "Music", "fn:music"], ["📥", "Inbox & Messaging", "fn:inbox"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control", "fn:audience"],
-      ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language"],
+      ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback", "fn:playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language"],
       ["♿", "Accessibility"], ["👁", "Amplify"], ["📍", "Contacts and location"]]],
     ["Cache & Cellular", [
       ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver"], ["🖼", "Wallpaper"]]],
@@ -5065,6 +5065,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:playback") { LS.openPlayback(); return; }
       if (a === "fn:plan") { LS.openPlan(); return; }
       if (a === "fn:audience") { LS.openAudience(); return; }
       if (a === "fn:inbox") { LS.openInboxSettings(); return; }
@@ -7705,6 +7706,50 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     document.body.appendChild(ov);
     $("#pb", ov).addEventListener("click", () => ov.remove());
     ov.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => ov.remove()));
+  };
+})();
+</script>
+  <script>
+/* Playback settings: speed, loop, auto-scroll. */
+(function () {
+  const LS = window.LS, $ = LS.$;
+  const KEY = "ls.playback";
+  const get = () => { try { const o = JSON.parse(localStorage.getItem(KEY) || "{}"); return { speed: [0.5, 0.75, 1, 1.25, 1.5, 2].indexOf(o.speed) >= 0 ? o.speed : 1, loop: o.loop !== false, auto: !!o.auto }; } catch (e) { return { speed: 1, loop: true, auto: false }; } };
+  const put = (o) => { try { localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) { /* ignore */ } };
+  LS.playbackPrefs = get;
+  const isFeed = (v) => !!(v.closest && v.closest(".fyp, .vplayer"));
+  function apply(v) {
+    if (!v || v.tagName !== "VIDEO" || !isFeed(v)) return;
+    const m = get(), inFyp = !!v.closest(".fyp");
+    try { if (v.playbackRate !== m.speed) v.playbackRate = m.speed; const lp = m.loop && !(inFyp && m.auto); if (v.loop !== lp) v.loop = lp; } catch (e) { /* ignore */ }
+  }
+  ["play", "loadedmetadata"].forEach((ev) => document.addEventListener(ev, (e) => apply(e.target), true));
+  document.addEventListener("ended", (e) => {
+    const v = e.target; if (!v || v.tagName !== "VIDEO") return;
+    const m = get(), it = v.closest && v.closest(".fy-item");
+    if (!it || !m.auto) return;
+    const nx = it.nextElementSibling;
+    if (nx && nx.scrollIntoView) nx.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, true);
+  new MutationObserver((list) => list.forEach((r) => r.addedNodes.forEach((n) => { if (n.nodeType === 1) { if (n.tagName === "VIDEO") apply(n); else if (n.querySelectorAll) n.querySelectorAll("video").forEach(apply); } }))).observe(document.body, { childList: true, subtree: true });
+  LS.applyPlayback = () => document.querySelectorAll("video").forEach(apply);
+  LS.openPlayback = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    const m = get();
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="yb" aria-label="Back">←</button><div>Playback</div></div>
+      <div class="sp-s">Videos</div>
+      <div class="sp-card">
+        <div class="sp-r" style="display:flex;align-items:center"><div style="flex:1"><b style="display:block;font-weight:500">Playback speed</b><em>How fast videos play</em></div>
+          <select id="ysp" style="background:#2a2a30;color:#fff;border:0;border-radius:8px;padding:8px 10px;font-size:16px">${[0.5, 0.75, 1, 1.25, 1.5, 2].map((x) => `<option value="${x}" ${x === m.speed ? "selected" : ""}>${x === 1 ? "Normal" : x + "x"}</option>`).join("")}</select></div>
+        <label class="sp-r" style="cursor:pointer"><div style="flex:1"><b style="display:block;font-weight:500">Loop videos</b><em>Replay a video when it ends</em></div><input type="checkbox" class="switch" id="ylp" ${m.loop ? "checked" : ""}></label>
+        <label class="sp-r" style="cursor:pointer"><div style="flex:1"><b style="display:block;font-weight:500">Auto-scroll</b><em>Go to the next video on the For You page when one ends</em></div><input type="checkbox" class="switch" id="yau" ${m.auto ? "checked" : ""}></label>
+      </div></div>`;
+    document.body.appendChild(ov);
+    $("#yb", ov).addEventListener("click", () => ov.remove());
+    $("#ysp", ov).addEventListener("change", (e) => { put(Object.assign(get(), { speed: Number(e.target.value) })); LS.applyPlayback(); });
+    $("#ylp", ov).addEventListener("change", (e) => { put(Object.assign(get(), { loop: e.target.checked })); LS.applyPlayback(); });
+    $("#yau", ov).addEventListener("change", (e) => { put(Object.assign(get(), { auto: e.target.checked })); LS.applyPlayback(); });
   };
 })();
 </script>
