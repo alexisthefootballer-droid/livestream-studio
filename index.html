@@ -5029,7 +5029,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     ["Content & Display", [
       ["🎵", "Music", "fn:music"], ["📥", "Inbox & Messaging", "fn:inbox"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control", "fn:audience"],
       ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback", "fn:playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language", "fn:lang"],
-      ["♿", "Accessibility"], ["👁", "Amplify"], ["📍", "Contacts and location"]]],
+      ["♿", "Accessibility", "fn:a11y"], ["👁", "Amplify"], ["📍", "Contacts and location"]]],
     ["Cache & Cellular", [
       ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver"], ["🖼", "Wallpaper"]]],
     ["Support & About", [
@@ -5065,6 +5065,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:a11y") { LS.openAccessibility(); return; }
       if (a === "fn:lang") { LS.openLanguage(); return; }
       if (a === "fn:playback") { LS.openPlayback(); return; }
       if (a === "fn:plan") { LS.openPlan(); return; }
@@ -7856,6 +7857,45 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     draw("");
     $("#mls", ov).addEventListener("input", (e) => draw(e.target.value.trim().toLowerCase()));
     list.addEventListener("click", (e) => { const b = e.target.closest("[data-k]"); if (b) LS.setGoogleLang(b.dataset.k); });
+  };
+})();
+</script>
+  <script>
+/* Accessibility: text size, bold, high contrast, reduce motion. */
+(function () {
+  const LS = window.LS, $ = LS.$;
+  const KEY = "ls.a11y";
+  const SZ = { s: 1, m: 1.12, l: 1.25 };
+  const get = () => { try { const o = JSON.parse(localStorage.getItem(KEY) || "{}"); return { size: SZ[o.size] ? o.size : "s", bold: !!o.bold, contrast: !!o.contrast, motion: !!o.motion }; } catch (e) { return { size: "s", bold: false, contrast: false, motion: false }; } };
+  const put = (o) => { try { localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) { /* ignore */ } };
+  const st = document.createElement("style"); st.id = "a11y-css"; document.head.appendChild(st);
+  function apply() {
+    const m = get(), z = SZ[m.size];
+    st.textContent = (z !== 1 ? `#view:not(:has(.fyp)),.sp{zoom:${z}}` : "")
+      + (m.bold ? `body,body *{font-weight:600!important}` : "")
+      + (m.contrast ? `.sp-s,.sp-r em,.sp-empty,small,em,.pf-empty,.sp-ver{color:#f0f0f4!important}.sp-card,.sp-r{background-color:#000!important}.sp-card{border:1px solid #777}` : "")
+      + (m.motion ? `*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}` : "");
+  }
+  apply();
+  LS.openAccessibility = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    const draw = () => {
+      const m = get();
+      ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="xb" aria-label="Back">←</button><div>Accessibility</div></div>
+        <div class="sp-s">Text size</div>
+        <div class="sp-card">${[["s", "Normal"], ["m", "Large"], ["l", "Extra large"]].map((o) => `<button class="sp-r" data-sz="${o[0]}"><b style="flex:1;font-weight:500">${o[1]}</b>${m.size === o[0] ? `<span style="color:#fe2c55">✓</span>` : ""}</button>`).join("")}</div>
+        <div class="sp-s">Display</div>
+        <div class="sp-card">
+          <label class="sp-r" style="cursor:pointer"><div style="flex:1"><b style="display:block;font-weight:500">Bold text</b><em>Makes all text heavier</em></div><input type="checkbox" class="switch" data-k="bold" ${m.bold ? "checked" : ""}></label>
+          <label class="sp-r" style="cursor:pointer"><div style="flex:1"><b style="display:block;font-weight:500">High contrast</b><em>Brighter grey text and clearer boxes</em></div><input type="checkbox" class="switch" data-k="contrast" ${m.contrast ? "checked" : ""}></label>
+          <label class="sp-r" style="cursor:pointer"><div style="flex:1"><b style="display:block;font-weight:500">Reduce motion</b><em>Turns off animations</em></div><input type="checkbox" class="switch" data-k="motion" ${m.motion ? "checked" : ""}></label>
+        </div></div>`;
+      $("#xb", ov).addEventListener("click", () => ov.remove());
+      ov.querySelectorAll("[data-sz]").forEach((b) => b.addEventListener("click", () => { put(Object.assign(get(), { size: b.dataset.sz })); apply(); draw(); }));
+      ov.querySelectorAll("input[data-k]").forEach((c) => c.addEventListener("change", () => { put(Object.assign(get(), { [c.dataset.k]: c.checked })); apply(); }));
+    };
+    document.body.appendChild(ov); draw();
   };
 })();
 </script>
