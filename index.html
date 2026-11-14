@@ -4725,7 +4725,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
             <button class="fy-ic fy-cm" type="button" data-i="${i}" aria-label="Comments"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 5.9 2 10.7c0 2.6 1.3 4.9 3.4 6.5L4.5 22l4.6-2.4c.9.2 1.9.3 2.9.3 5.5 0 10-3.9 10-8.7S17.5 2 12 2zm-4 10.2a1.3 1.3 0 110-2.6 1.3 1.3 0 010 2.6zm4 0a1.3 1.3 0 110-2.6 1.3 1.3 0 010 2.6zm4 0a1.3 1.3 0 110-2.6 1.3 1.3 0 010 2.6z"/></svg><small class="fy-cmc">${fmtN(v.comments_count)}</small></button>
             <button class="fy-ic fy-sv ${saved.has(v.id) ? "on" : ""}" type="button" data-i="${i}" aria-label="Save"><svg viewBox="0 0 24 24"><path d="M5 2h14a1 1 0 011 1v19l-8-5-8 5V3a1 1 0 011-1z"/></svg><small class="fy-svc">${fmtN(v.saves_count)}</small></button>
             <button class="fy-ic fy-sh" type="button" data-i="${i}" aria-label="Share"><svg viewBox="0 0 24 24"><path d="M14 3v5C7 8.5 3 12.5 2 20c2.6-3.7 6.2-5.3 12-5.3V20l8-8.5L14 3z"/></svg><small class="fy-shc">${fmtN(v.shares_count)}</small></button>
-            ${mine ? "" : `<button class="fy-mr" type="button" data-i="${i}" aria-label="More">⋯</button>`}
+            ${mine ? "" : `<button class="fy-mr fy-ru" type="button" data-i="${i}" data-ru="1" aria-label="Reuse" style="font-size:22px">🎬</button><button class="fy-mr" type="button" data-i="${i}" aria-label="More">⋯</button>`}
           </div>
           <div class="fy-info"><b>@${esc(pr.username || "user")}</b>${v.caption ? `<p class="fy-cap">${esc(v.caption)}</p>${v.caption.length > 60 ? `<button type="button" class="fy-more" data-more="1">…more</button>` : ""}` : ""}<small style="opacity:.8;display:block;margin-top:4px">👁 ${fmtN(v.views)} views</small></div>
           <div class="fy-disc"><span>${LS.photo(pr, 30)}</span></div>
@@ -4791,6 +4791,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           svb.classList.toggle("on", on); $(".fy-svc", svb).textContent = fmtN(Number(data) || 0);
           return;
         }
+        const rub = e.target.closest(".fy-ru");
+        if (rub) { const v = vids[+rub.dataset.i], pr = P[v.user_id] || {}; LS.startReuse(v, pr.username); return; }
         const mrb = e.target.closest(".fy-mr");
         if (mrb) { const v = vids[+mrb.dataset.i], pr = P[v.user_id] || {}; LS.reportSheet({ uid: v.user_id, uname: pr.username, vid: v.id, done: (k) => { if (k === "block") load(); } }); return; }
         const shb = e.target.closest(".fy-sh");
@@ -5022,7 +5024,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     ["Visibility", [
       ["🔒", "Private account", "fn:private"], ["🚫", "Blocked accounts", "#/blocked"]]],
     ["Interactions", [
-      ["💬", "Comments", "fn:comments"], ["@", "Mentions", "fn:mentions"], ["✉️", "Direct messages", "fn:dm"], ["🎬", "Reuse of content"],
+      ["💬", "Comments", "fn:comments"], ["@", "Mentions", "fn:mentions"], ["✉️", "Direct messages", "fn:dm"], ["🎬", "Reuse of content", "fn:reuse"],
       ["⬇️", "Downloads", null, "On"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
     ["Content & Display", [
       ["🎵", "Music"], ["📥", "Inbox & Messaging"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control"],
@@ -5063,6 +5065,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:reuse") { LS.openReuseSetting(); return; }
       if (a === "fn:dm") { LS.openDmSetting(); return; }
       if (a === "fn:mentions") { LS.openMentionsSetting(); return; }
       if (a === "fn:content") { LS.openContentPrefs(); return; }
@@ -6696,7 +6699,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
         return;
       }
       if (kind === "ads") { body.innerHTML = `<div class="sp-empty">No ads activity.<br><br>This app does not show ads.</div>`; return; }
-      if (kind === "reuse") { body.innerHTML = `<div class="sp-empty">No reused content yet.<br><br>When someone reuses your videos, or you reuse theirs, it will show here.</div>`; return; }
+      if (kind === "reuse") { LS.reuseHistory(body); return; }
       if (kind === "account") {
         const u = LS.user, pr = LS.myProfile || {};
         const d = (t) => (t ? new Date(t).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "—");
@@ -6859,7 +6862,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   const sb = LS.sb;
   const esc = LS.esc;
   const $ = LS.$;
-  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone", dm_who: "everyone" };
+  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone", dm_who: "everyone", reuse_who: "everyone" };
   const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
   let cache = null, cacheUid = null;
   LS.getSettings = async function (force) {
@@ -6873,7 +6876,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   LS.saveSettings = async function (patch) {
     const cur = await LS.getSettings();
     const next = Object.assign({}, cur, patch);
-    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, dm_who: next.dm_who, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, dm_who: next.dm_who, reuse_who: next.reuse_who, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
     if (r && r.error) return false;
     cache = next; return true;
   };
@@ -7480,6 +7483,106 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
         });
       };
       draw(s.dm_who || "everyone");
+    })();
+  };
+})();
+</script>
+  <script>
+/* Reuse of content: reply to a video with your own video. */
+(function () {
+  const LS = window.LS, S = LS.screens, sb = LS.sb, esc = LS.esc, $ = LS.$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2800); };
+  const MSG = { reuse_off: "This person does not allow others to reuse their videos.", reuse_friends: "Only friends can reuse this person's videos.", reuse_blocked: "You can not reuse this video.", reuse_gone: "This video is no longer available.", not_signed_in: "Please log in first." };
+  LS.reuseMsg = (m) => { m = String(m || ""); for (const k in MSG) if (m.indexOf(k) >= 0) return MSG[k]; return null; };
+  /* start a reuse: v = video row, uname = owner username */
+  LS.startReuse = async function (v, uname) {
+    if (!LS.user) { location.hash = "#/auth"; return false; }
+    let r = "ok";
+    try { const x = await sb.rpc("can_reuse", { p_video: v.id }); r = x.data || "ok"; } catch (e) { /* ignore */ }
+    if (r !== "ok") { toast(MSG[r] || "You can not reuse this video."); return false; }
+    LS.reuseFrom = { id: v.id, uname: uname || "user", caption: v.caption || "" };
+    location.hash = "#/upload-video";
+    return true;
+  };
+  /* upload screen: banner + link */
+  const prevUp = S.uploadVideo;
+  S.uploadVideo = function (view) {
+    const c = prevUp.apply(this, arguments);
+    const rf = LS.reuseFrom;
+    if (rf && $(".upv", view)) {
+      const b = document.createElement("div");
+      b.id = "ubanner"; b.style.cssText = "background:#1c1c22;border:1px solid #fe2c55;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:14.5px;display:flex;gap:10px;align-items:center";
+      b.innerHTML = `<span style="flex:1">🎬 Reusing <b>@${esc(rf.uname)}</b>'s video</span><button type="button" id="ucancel" style="background:none;border:0;color:#9a9aa3;font-size:18px">✕</button>`;
+      $(".upv", view).prepend(b);
+      $("#ucancel", view).addEventListener("click", () => { LS.reuseFrom = null; b.remove(); });
+    }
+    return c;
+  };
+  /* attach reused_from on insert */
+  if (sb) {
+    const realFrom = sb.from.bind(sb);
+    sb.from = function (t) {
+      const q = realFrom(t);
+      if (t !== "videos" || !q.insert) return q;
+      const ins = q.insert.bind(q);
+      q.insert = function (row, ...rest) {
+        if (LS.reuseFrom && row && !Array.isArray(row) && row.video_path) {
+          const id = LS.reuseFrom.id;
+          return Promise.resolve(ins(Object.assign({}, row, { reused_from: id }), ...rest)).then((res) => { if (!res.error) LS.reuseFrom = null; else { const m = LS.reuseMsg(res.error.message); if (m) { LS.reuseFrom = null; res.error = { message: m }; } } return res; });
+        }
+        return ins(row, ...rest);
+      };
+      return q;
+    };
+  }
+  /* player: Reuse button on other people's videos */
+  const prevOpen = LS.openPlayer;
+  LS.openPlayer = function (v, mine, onChange) {
+    const r = prevOpen.apply(this, arguments);
+    const box = document.querySelector(".vplayer:last-of-type") || document.querySelector(".vplayer");
+    if (box && !mine) {
+      const side = box.querySelector(".vp-side");
+      if (side && !side.querySelector(".vp-ru")) {
+        const b = document.createElement("button"); b.className = "vp-like vp-ru"; b.type = "button"; b.setAttribute("aria-label", "Reuse"); b.textContent = "🎬"; b.style.fontSize = "24px";
+        side.insertBefore(b, side.querySelector(".vp-mr"));
+        b.addEventListener("click", async () => {
+          let un = "user";
+          try { const { data } = await sb.from("profiles").select("username").eq("id", v.user_id).maybeSingle(); if (data) un = data.username; } catch (e) { /* ignore */ }
+          if (await LS.startReuse(v, un)) box.remove();
+        });
+      }
+    }
+    return r;
+  };
+  /* reuse history */
+  LS.reuseHistory = async function (body, esc2) {
+    body.innerHTML = `<div class="sp-empty">Loading…</div>`;
+    let rows = [];
+    try { const { data } = await sb.rpc("my_reuse_history"); rows = data || []; } catch (e) { /* ignore */ }
+    if (!rows.length) { body.innerHTML = `<div class="sp-empty">No reused content yet.<br><br>When someone reuses your videos, or you reuse theirs, it will show here.</div>`; return; }
+    const url = (p) => sb.storage.from("videos").getPublicUrl(p).data.publicUrl;
+    body.innerHTML = `<div class="sp-card">${rows.map((r) => `<div class="sp-u" style="gap:10px">${r.thumb_path ? `<img src="${esc(url(r.thumb_path))}" alt="" style="width:44px;height:58px;object-fit:cover;border-radius:6px">` : `<span style="font-size:26px">🎬</span>`}<div style="flex:1;min-width:0"><b style="font-weight:500;display:block">${r.kind === "mine" ? "You reused @" + esc(r.other || "user") : "@" + esc(r.other || "user") + " reused your video"}</b><em style="font-style:normal;color:#9a9aa3;font-size:13.5px">${esc((r.caption || "").slice(0, 50))} · ${new Date(r.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</em></div></div>`).join("")}</div>`;
+  };
+  /* setting overlay */
+  LS.openReuseSetting = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="rb" aria-label="Back">←</button><div>Reuse of content</div></div><div id="rbody"></div></div>`;
+    document.body.appendChild(ov);
+    $("#rb", ov).addEventListener("click", () => ov.remove());
+    const box = $("#rbody", ov);
+    const OPTS = [["everyone", "Everyone", "Anyone can reply to your videos with their own video"], ["friends", "Friends", "Only people you follow who follow you back"], ["none", "No one", "Nobody can reuse your videos"]];
+    (async () => {
+      const s = await LS.getSettings(true);
+      const draw = (cur) => {
+        box.innerHTML = `<div class="sp-s">Who can reuse your videos</div><div class="sp-card">${OPTS.map((o) => `<button class="sp-r" data-k="${o[0]}"><div style="flex:1"><b style="display:block;font-weight:500">${o[1]}</b><em>${o[2]}</em></div><span style="width:24px;height:24px;border-radius:50%;border:2px solid ${cur === o[0] ? "#fe2c55" : "#666"};background:${cur === o[0] ? "radial-gradient(#fff 0 35%,#fe2c55 40%)" : "none"}"></span></button>`).join("")}</div>
+          <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">Reusing means posting your own video as a reply to someone's video. People you block can never reuse your videos.</p>`;
+        box.querySelector(".sp-card").addEventListener("click", async (e) => {
+          const b = e.target.closest("[data-k]"); if (!b) return;
+          if (await LS.saveSettings({ reuse_who: b.dataset.k })) { draw(b.dataset.k); toast("Saved"); } else toast("Could not save. Try again.");
+        });
+      };
+      draw(s.reuse_who || "everyone");
     })();
   };
 })();
