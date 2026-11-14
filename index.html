@@ -5029,7 +5029,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     ["Content & Display", [
       ["🎵", "Music", "fn:music"], ["📥", "Inbox & Messaging", "fn:inbox"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control", "fn:audience"],
       ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback", "fn:playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language", "fn:lang"],
-      ["♿", "Accessibility", "fn:a11y"], ["👁", "Amplify"], ["📍", "Contacts and location"]]],
+      ["♿", "Accessibility", "fn:a11y"], ["👁", "Amplify", "fn:amplify"], ["📍", "Contacts and location"]]],
     ["Cache & Cellular", [
       ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver"], ["🖼", "Wallpaper"]]],
     ["Support & About", [
@@ -5065,6 +5065,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:amplify") { LS.openAmplify(); return; }
       if (a === "fn:a11y") { LS.openAccessibility(); return; }
       if (a === "fn:lang") { LS.openLanguage(); return; }
       if (a === "fn:playback") { LS.openPlayback(); return; }
@@ -7894,6 +7895,34 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       $("#xb", ov).addEventListener("click", () => ov.remove());
       ov.querySelectorAll("[data-sz]").forEach((b) => b.addEventListener("click", () => { put(Object.assign(get(), { size: b.dataset.sz })); apply(); draw(); }));
       ov.querySelectorAll("input[data-k]").forEach((c) => c.addEventListener("change", () => { put(Object.assign(get(), { [c.dataset.k]: c.checked })); apply(); }));
+    };
+    document.body.appendChild(ov); draw();
+  };
+})();
+</script>
+  <script>
+/* Amplify: brighter, clearer, more colourful videos. */
+(function () {
+  const LS = window.LS, $ = LS.$;
+  const KEY = "ls.amplify";
+  const LV = { off: [1, 1, 1], low: [1.1, 1.05, 1.1], med: [1.22, 1.1, 1.25], high: [1.4, 1.18, 1.4] };
+  const get = () => { try { const v = localStorage.getItem(KEY); return LV[v] ? v : "off"; } catch (e) { return "off"; } };
+  const st = document.createElement("style"); st.id = "amp-css"; document.head.appendChild(st);
+  function apply() { const l = LV[get()]; st.textContent = get() === "off" ? "" : `.fyp video,.vplayer video,.pl video{filter:brightness(${l[0]}) contrast(${l[1]}) saturate(${l[2]})}`; }
+  apply();
+  LS.openAmplify = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    const draw = () => {
+      const cur = get();
+      ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="mpb" aria-label="Back">←</button><div>Amplify</div></div>
+        <div class="sp-s">Video enhancement</div>
+        <div class="sp-card">${[["off", "Off", "Videos play as uploaded"], ["low", "Low", "A little brighter and clearer"], ["med", "Medium", "Good for dark videos"], ["high", "High", "Brightest and most colourful"]].map((o) => `<button class="sp-r" data-k="${o[0]}"><div style="flex:1"><b style="display:block;font-weight:500">${o[1]}</b><em>${o[2]}</em></div>${cur === o[0] ? `<span style="color:#fe2c55">✓</span>` : ""}</button>`).join("")}</div>
+        <div class="sp-s">Preview</div>
+        <div style="margin:0 14px"><div style="height:90px;border-radius:14px;background:linear-gradient(90deg,#3a2a55,#2d5a6e,#6e4a2d,#4a2d4a);filter:brightness(${LV[cur][0]}) contrast(${LV[cur][1]}) saturate(${LV[cur][2]})"></div></div>
+        <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">Applies to videos on the For You page and in the video player. It only changes how you see videos, not the video itself.</p></div>`;
+      $("#mpb", ov).addEventListener("click", () => ov.remove());
+      ov.querySelectorAll("[data-k]").forEach((b) => b.addEventListener("click", () => { try { localStorage.setItem(KEY, b.dataset.k); } catch (e) { /* ignore */ } apply(); draw(); }));
     };
     document.body.appendChild(ov); draw();
   };
