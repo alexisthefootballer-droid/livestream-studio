@@ -5053,7 +5053,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     ["Cache & Cellular", [
       ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver", "fn:datasaver"], ["🖼", "Wallpaper", "fn:wallpaper"]]],
     ["Support & About", [
-      ["🎧", "Help Center", "fn:help"], ["🔐", "Privacy Center"], ["ℹ️", "Terms and Policies"]]],
+      ["🎧", "Help Center", "fn:help"], ["🔐", "Privacy Center", "fn:privacy"], ["ℹ️", "Terms and Policies"]]],
     ["Login", [
       ["🔁", "Switch account", "fn:logout"], ["🚪", "Log out", "fn:logout"]]],
   ];
@@ -5085,6 +5085,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:privacy") { LS.openPrivacyCenter(); return; }
       if (a === "fn:help") { LS.openHelp(); return; }
       if (a === "fn:wallpaper") { LS.openWallpaper(); return; }
       if (a === "fn:datasaver") { LS.openDataSaver(); return; }
@@ -8393,6 +8394,63 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       e.target.disabled = false;
       if (error) { toast(/too_many/.test(error.message) ? "You sent 5 requests today. Try again tomorrow." : "Could not send. Try again."); return; }
       $("#hm", ov).value = ""; toast("Sent ✓ We will reply here."); loadMine();
+    });
+  };
+})();
+</script>
+  <script>
+/* Privacy Center: what we keep, your privacy settings, download your data, delete account. */
+(function () {
+  const LS = window.LS, sb = LS.sb, esc = LS.esc, $ = LS.$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 3200); };
+  const WHO = { everyone: "Everyone", friends: "Friends", me: "Only me", none: "No one" };
+  LS.openPrivacyCenter = async function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    document.body.appendChild(ov);
+    const s = LS.user ? await LS.getSettings(true) : {};
+    const link = (ic, t, d, act) => `<button class="sp-r" data-a="${act}"><span class="ic">${ic}</span><div style="flex:1"><b style="display:block;font-weight:500">${t}</b><em>${d}</em></div><span style="color:#9a9aa3">›</span></button>`;
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="vb" aria-label="Back">←</button><div>Privacy Center</div></div>
+      <div class="sp-s">Your privacy settings</div>
+      <div class="sp-card">
+        ${link("🔒", "Private account", s.private_account ? "On" : "Off", "private")}
+        ${link("👁", "Who can watch your videos", WHO[s.videos_who] || "Everyone", "audience")}
+        ${link("💬", "Who can comment", WHO[s.comments_who] || "Everyone", "comments")}
+        ${link("✉️", "Who can message you", WHO[s.dm_who] || "Everyone", "dm")}
+        ${link("@", "Who can mention you", WHO[s.mentions_who] || "Everyone", "mentions")}
+        ${link("🎬", "Who can reuse your videos", WHO[s.reuse_who] || "Everyone", "reuse")}
+        ${link("⬇️", "Downloads", s.downloads_on === false ? "Off" : "On", "downloads")}
+        ${link("♥", "Who can see your liked videos", WHO[s.liked_who] || "Everyone", "liked")}
+        ${link("👥", "Who can see who you follow", WHO[s.following_who] || "Everyone", "following")}
+        ${link("📇", "Let contacts find me", s.find_by_contacts ? "On" : "Off", "contacts")}
+        ${link("🚫", "Blocked accounts", "People you blocked", "blocked")}
+      </div>
+      <div class="sp-s">What we keep about you</div>
+      <div class="sp-card"><div class="sp-r" style="display:block;line-height:1.5;font-size:15.5px;color:#cfcfd6"><b style="display:block;font-weight:600;color:#fff;margin-bottom:4px">We store only what the app needs:</b>• Your email, username, name, photo and bio<br>• Your videos, comments, likes, saves and follows<br>• Your messages (only you and the other person can read them)<br>• Videos you watched (for your history)<br>• Your privacy settings<br><br><b style="color:#fff;font-weight:600">We do not</b> show ads, sell your data, or read your location.</div></div>
+      <div class="sp-s">Your data</div>
+      <div class="sp-card">
+        <button class="sp-r" id="vdl"><span class="ic">📦</span><div style="flex:1"><b style="display:block;font-weight:500">Download my data</b><em>Get a file with your information</em></div><span style="color:#9a9aa3">›</span></button>
+        <button class="sp-r" id="vdel"><span class="ic">🗑</span><div style="flex:1"><b style="display:block;font-weight:500;color:#ff5c7a">Request account deletion</b><em>We delete your account and data</em></div><span style="color:#9a9aa3">›</span></button>
+      </div><div style="height:30px"></div></div>`;
+    $("#vb", ov).addEventListener("click", () => ov.remove());
+    const GO = { private: "private", audience: "audience", comments: "comments", dm: "dm", mentions: "mentions", reuse: "reuse", downloads: "downloads", liked: "liked", following: "following", contacts: "contacts" };
+    const OPEN = { private: () => LS.openPrivate(), audience: () => LS.openAudience(), comments: () => LS.openCommentsSetting(), dm: () => LS.openDmSetting(), mentions: () => LS.openMentionsSetting(), reuse: () => LS.openReuseSetting(), downloads: () => LS.openDownloads(), liked: () => LS.openLikedSetting(), following: () => LS.openFollowingSetting(), contacts: () => LS.openContacts() };
+    ov.querySelectorAll("[data-a]").forEach((b) => b.addEventListener("click", () => { const a = b.dataset.a; if (a === "blocked") { ov.remove(); location.hash = "#/blocked"; return; } if (OPEN[a]) { ov.remove(); OPEN[a](); } }));
+    $("#vdl", ov).addEventListener("click", async (e) => {
+      if (!LS.user) { location.hash = "#/auth"; return; }
+      const btn = e.currentTarget; btn.disabled = true; toast("Collecting your data…");
+      const me = LS.user.id, out = { exported_at: new Date().toISOString(), email: LS.user.email, user_id: me };
+      const Q = [["profile", "profiles", "id"], ["settings", "user_settings", "user_id"], ["videos", "videos", "user_id"], ["comments", "video_comments", "user_id"], ["likes", "video_likes", "user_id"], ["watch_history", "watch_history", "user_id"], ["following", "follows", "follower_id"], ["followers", "follows", "followee_id"], ["messages_sent", "dm_messages", "sender_id"], ["messages_received", "dm_messages", "recipient_id"], ["blocked", "user_blocks", "blocker_id"]];
+      for (const [k, t, c] of Q) { try { const { data } = await sb.from(t).select("*").eq(c, me).limit(5000); out[k] = data || []; } catch (x) { out[k] = []; } }
+      const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
+      const u = URL.createObjectURL(blob), a = document.createElement("a"); a.href = u; a.download = "my-livestream-studio-data.json"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 10000);
+      btn.disabled = false; toast("Your data file was saved ✓");
+    });
+    $("#vdel", ov).addEventListener("click", async () => {
+      if (!LS.user) { location.hash = "#/auth"; return; }
+      if (!confirm("Request deletion of your account and all your data? This can not be undone once we process it.")) return;
+      const { error } = await sb.from("support_tickets").insert({ user_id: LS.user.id, topic: "Account deletion", body: "Please delete my account and all my data. Email: " + (LS.user.email || "") });
+      toast(error ? (/too_many/.test(error.message) ? "You already sent requests today." : "Could not send. Try again.") : "Request sent ✓ We will process it and reply in Help Center.");
     });
   };
 })();
