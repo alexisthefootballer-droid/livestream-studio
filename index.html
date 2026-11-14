@@ -5028,7 +5028,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["⬇️", "Downloads", null, "On"], ["👥", "Following list", null, "Everyone"], ["♥", "Liked videos", null, "Everyone"]]],
     ["Content & Display", [
       ["🎵", "Music", "fn:music"], ["📥", "Inbox & Messaging", "fn:inbox"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control", "fn:audience"],
-      ["📣", "Plan and ads"], ["▶️", "Playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language"],
+      ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language"],
       ["♿", "Accessibility"], ["👁", "Amplify"], ["📍", "Contacts and location"]]],
     ["Cache & Cellular", [
       ["☁️", "Offline videos", "fn:offline"], ["🗑", "Free up space", "fn:free"], ["💧", "Data Saver"], ["🖼", "Wallpaper"]]],
@@ -5065,6 +5065,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:plan") { LS.openPlan(); return; }
       if (a === "fn:audience") { LS.openAudience(); return; }
       if (a === "fn:inbox") { LS.openInboxSettings(); return; }
       if (a === "fn:music") { LS.openMusic(); return; }
@@ -7681,6 +7682,29 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       };
       draw(s.videos_who || "everyone");
     })();
+  };
+})();
+</script>
+  <script>
+/* Plan and ads. */
+(function () {
+  const LS = window.LS, $ = LS.$;
+  LS.openPlan = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    const row = (t, d) => `<div class="sp-r" style="display:block"><b style="display:block;font-weight:500">${t}</b><em style="font-style:normal;color:#9a9aa3;font-size:14px">${d}</em></div>`;
+    const link = (t, d, h) => `<a class="sp-r" href="${h}" style="text-decoration:none;color:inherit"><div style="flex:1"><b style="display:block;font-weight:500">${t}</b><em>${d}</em></div><span style="color:#9a9aa3">›</span></a>`;
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="pb" aria-label="Back">←</button><div>Plan and ads</div></div>
+      <div class="sp-s">Your plan</div>
+      <div class="sp-card"><div class="sp-r" style="display:block"><b style="font-size:20px">Free plan</b><em style="font-style:normal;color:#9a9aa3;display:block;margin-top:4px">Everything in the app is free to use.</em></div>
+        ${row("Go LIVE and upload videos", "Included")}${row("Creator earnings", "You keep 40% of gifts you receive")}${row("Withdrawals", "From $10, paid manually")}</div>
+      <div class="sp-s">Ads</div>
+      <div class="sp-card">${row("No ads", "This app does not show ads, and does not sell your data to advertisers.")}${link("Ads activity history", "See your ad history", "#/history/ads")}</div>
+      <div class="sp-s">Money</div>
+      <div class="sp-card">${link("Wallet", "Buy coins and manage your balance", "#/recharge")}${link("Analytics", "LIVE earnings and viewers", "#/live-analytics")}</div></div>`;
+    document.body.appendChild(ov);
+    $("#pb", ov).addEventListener("click", () => ov.remove());
+    ov.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => ov.remove()));
   };
 })();
 </script>
