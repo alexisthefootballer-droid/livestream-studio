@@ -7803,10 +7803,59 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     const draw = () => {
       const cur = get();
       box.innerHTML = `<div class="sp-s">App language</div><div class="sp-card">${NAMES.map((o) => `<button class="sp-r" data-k="${o[0]}"><b style="flex:1;font-weight:500">${o[1]}</b><span style="width:24px;height:24px;border-radius:50%;border:2px solid ${cur === o[0] ? "#fe2c55" : "#666"};background:${cur === o[0] ? "radial-gradient(#fff 0 35%,#fe2c55 40%)" : "none"}"></span></button>`).join("")}</div>
+        <div class="sp-card" style="margin-top:14px"><button class="sp-r" id="gmore"><b style="flex:1;font-weight:500">🌍 More languages (100+)</b><i>›</i></button></div>
         <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">Menus, settings and main buttons change language. Videos, comments and names stay as people wrote them.</p>`;
-      box.querySelector(".sp-card").addEventListener("click", (e) => { const b = e.target.closest("[data-k]"); if (!b) return; LS.setLang(b.dataset.k); draw(); });
+      box.querySelector(".sp-card").addEventListener("click", (e) => { const b = e.target.closest("[data-k]"); if (!b) return; if (localStorage.getItem("ls.gt")) { LS.setLang(b.dataset.k); LS.setGoogleLang("en"); return; } LS.setLang(b.dataset.k); draw(); });
+      $("#gmore", box).addEventListener("click", () => LS.openMoreLanguages());
     };
     draw();
+  };
+})();
+</script>
+  <script>
+/* More languages: the whole app via Google Translate in the browser. */
+(function () {
+  const LS = window.LS, $ = LS.$;
+  const ALL = "af Afrikaans|sq Shqip|am አማርኛ|ar العربية|hy Հայերեն|az Azərbaycan|eu Euskara|be Беларуская|bn বাংলা|bs Bosanski|bg Български|ca Català|ceb Cebuano|ny Chichewa|zh-CN 中文 (简体)|zh-TW 中文 (繁體)|co Corsu|hr Hrvatski|cs Čeština|da Dansk|nl Nederlands|en English|eo Esperanto|et Eesti|tl Filipino|fi Suomi|fr Français|fy Frysk|gl Galego|ka ქართული|de Deutsch|el Ελληνικά|gu ગુજરાતી|ht Kreyòl ayisyen|ha Hausa|haw ʻŌlelo Hawaiʻi|iw עברית|hi हिन्दी|hmn Hmong|hu Magyar|is Íslenska|ig Igbo|id Indonesia|ga Gaeilge|it Italiano|ja 日本語|jw Basa Jawa|kn ಕನ್ನಡ|kk Қазақша|km ខ្មែរ|rw Kinyarwanda|ko 한국어|ku Kurdî|ky Кыргызча|lo ລາວ|la Latina|lv Latviešu|lt Lietuvių|lb Lëtzebuergesch|mk Македонски|mg Malagasy|ms Bahasa Melayu|ml മലയാളം|mt Malti|mi Māori|mr मराठी|mn Монгол|my မြန်မာ|ne नेपाली|no Norsk|or ଓଡ଼ିଆ|ps پښتو|fa فارسی|pl Polski|pt Português|pa ਪੰਜਾਬੀ|ro Română|ru Русский|sm Samoa|gd Gàidhlig|sr Српски|st Sesotho|sn Shona|sd سنڌي|si සිංහල|sk Slovenčina|sl Slovenščina|so Soomaali|es Español|su Basa Sunda|sw Kiswahili|sv Svenska|tg Тоҷикӣ|ta தமிழ்|tt Татарча|te తెలుగు|th ไทย|tr Türkçe|tk Türkmen|uk Українська|ur اردو|ug ئۇيغۇرچە|uz Oʻzbek|vi Tiếng Việt|cy Cymraeg|xh isiXhosa|yi ייִדיש|yo Yorùbá|zu isiZulu".split("|").map((x) => { const i = x.indexOf(" "); return [x.slice(0, i), x.slice(i + 1)]; });
+  const GK = "ls.gt";
+  const cur = () => { try { return localStorage.getItem(GK) || ""; } catch (e) { return ""; } };
+  const st = document.createElement("style");
+  st.textContent = `.goog-te-banner-frame,.skiptranslate>iframe,#goog-gt-tt,.goog-te-balloon-frame{display:none!important}body{top:0!important}#gtbox{position:fixed;left:-9999px;top:0}.goog-text-highlight{background:none!important;box-shadow:none!important}`;
+  document.head.appendChild(st);
+  function setCookie(v) {
+    const h = location.hostname, exp = v ? "" : ";expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    document.cookie = "googtrans=" + (v || "") + ";path=/" + exp;
+    document.cookie = "googtrans=" + (v || "") + ";path=/;domain=" + h + exp;
+  }
+  function load() {
+    if (window.__gtLoaded) return; window.__gtLoaded = 1;
+    const box = document.createElement("div"); box.id = "gtbox"; box.className = "notranslate"; document.body.appendChild(box);
+    window.__gtInit = () => { try { new google.translate.TranslateElement({ pageLanguage: "en", autoDisplay: false }, "gtbox"); } catch (e) { /* ignore */ } };
+    const sc = document.createElement("script"); sc.src = "https://translate.google.com/translate_a/element.js?cb=__gtInit"; document.head.appendChild(sc);
+  }
+  if (cur()) { setCookie("/en/" + cur()); setTimeout(load, 400); const l = cur(); document.documentElement.dir = ["ar", "iw", "fa", "ur", "ps", "sd", "ug", "yi"].indexOf(l) >= 0 ? "rtl" : "ltr"; }
+  LS.setGoogleLang = function (code) {
+    try { if (code && code !== "en") { localStorage.setItem(GK, code); localStorage.setItem("ls.lang", "en"); setCookie("/en/" + code); } else { localStorage.removeItem(GK); setCookie(""); } } catch (e) { /* ignore */ }
+    location.reload();
+  };
+  LS.openMoreLanguages = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:160;overflow:auto";
+    ov.className = "notranslate";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="mlb" aria-label="Back">←</button><div>More languages</div></div>
+      <div style="padding:0 14px 10px"><input id="mls" placeholder="Search language…" style="width:100%;box-sizing:border-box;background:#1f1f22;color:#fff;border:0;border-radius:12px;padding:13px 14px;font-size:16px"></div>
+      <div class="sp-card" id="mll"></div>
+      <p style="color:#9a9aa3;margin:12px 20px;font-size:14px;line-height:1.4">Uses Google Translate on your phone, so it needs internet. The page reloads when you pick a language. Pick English to go back.</p></div>`;
+    document.body.appendChild(ov);
+    $("#mlb", ov).addEventListener("click", () => ov.remove());
+    const list = $("#mll", ov), c = cur() || "en";
+    const draw = (q) => {
+      const f = ALL.filter((x) => !q || x[1].toLowerCase().indexOf(q) >= 0 || x[0].toLowerCase() === q);
+      list.innerHTML = f.map((x) => `<button class="sp-r" data-k="${x[0]}"><b style="flex:1;font-weight:500">${x[1]}</b>${x[0] === c ? `<span style="color:#fe2c55">✓</span>` : ""}</button>`).join("") || `<div class="sp-empty">No language found.</div>`;
+    };
+    draw("");
+    $("#mls", ov).addEventListener("input", (e) => draw(e.target.value.trim().toLowerCase()));
+    list.addEventListener("click", (e) => { const b = e.target.closest("[data-k]"); if (b) LS.setGoogleLang(b.dataset.k); });
   };
 })();
 </script>
