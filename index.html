@@ -5045,7 +5045,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["🔒", "Private account", "fn:private"], ["🚫", "Blocked accounts", "#/blocked"]]],
     ["Interactions", [
       ["💬", "Comments", "fn:comments"], ["@", "Mentions", "fn:mentions"], ["✉️", "Direct messages", "fn:dm"], ["🎬", "Reuse of content", "fn:reuse"],
-      ["⬇️", "Downloads", "fn:downloads"], ["👥", "Following list", "fn:following"], ["♥", "Liked videos", null, "Everyone"]]],
+      ["⬇️", "Downloads", "fn:downloads"], ["👥", "Following list", "fn:following"], ["♥", "Liked videos", "fn:liked"]]],
     ["Content & Display", [
       ["🎵", "Music", "fn:music"], ["📥", "Inbox & Messaging", "fn:inbox"], ["🕒", "Activity center", "#/activity"], ["👪", "Audience control", "fn:audience"],
       ["📣", "Plan and ads", "fn:plan"], ["▶️", "Playback", "fn:playback"], ["🌙", "Display", "fn:display"], ["🅰️", "Language", "fn:lang"],
@@ -5085,6 +5085,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:liked") { LS.openLikedSetting(); return; }
       if (a === "fn:following") { LS.openFollowingSetting(); return; }
       if (a === "fn:downloads") { LS.openDownloads(); return; }
       if (a === "fn:security") { LS.openSecurity(); return; }
@@ -6894,7 +6895,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   const sb = LS.sb;
   const esc = LS.esc;
   const $ = LS.$;
-  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone", dm_who: "everyone", reuse_who: "everyone", videos_who: "everyone", find_by_contacts: false, downloads_on: true, following_who: "everyone" };
+  const DEF = { private_account: false, comments_who: "everyone", notif_live: true, restricted_mode: false, filter_words: [], mentions_who: "everyone", dm_who: "everyone", reuse_who: "everyone", videos_who: "everyone", find_by_contacts: false, downloads_on: true, following_who: "everyone", liked_who: "everyone" };
   const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
   let cache = null, cacheUid = null;
   LS.getSettings = async function (force) {
@@ -6908,7 +6909,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   LS.saveSettings = async function (patch) {
     const cur = await LS.getSettings();
     const next = Object.assign({}, cur, patch);
-    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, dm_who: next.dm_who, reuse_who: next.reuse_who, videos_who: next.videos_who, find_by_contacts: next.find_by_contacts, downloads_on: next.downloads_on, following_who: next.following_who, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    const r = await sb.from("user_settings").upsert({ user_id: LS.user.id, private_account: next.private_account, comments_who: next.comments_who, notif_live: next.notif_live, restricted_mode: next.restricted_mode, filter_words: next.filter_words, mentions_who: next.mentions_who, dm_who: next.dm_who, reuse_who: next.reuse_who, videos_who: next.videos_who, find_by_contacts: next.find_by_contacts, downloads_on: next.downloads_on, following_who: next.following_who, liked_who: next.liked_who, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
     if (r && r.error) return false;
     cache = next; return true;
   };
@@ -8180,6 +8181,73 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
 })();
 </script>
   <script>
+/* Liked videos: your liked list + who can see it. */
+(function () {
+  const LS = window.LS, S = LS.screens, sb = LS.sb, esc = LS.esc, $ = LS.$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); };
+  const vurl = (p) => sb.storage.from("videos").getPublicUrl(p).data.publicUrl;
+  const fmtN = (n) => { n = Number(n) || 0; return n >= 10000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "K" : String(n); };
+  S.liked = function (view, uname) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    let dead = false; const mine = !uname;
+    view.innerHTML = `<header class="er-top"><button class="icon-btn" id="lkb" aria-label="Back">←</button><div class="er-title">${mine ? "Liked videos" : "@" + esc(uname) + " · Liked"}</div><span style="width:40px"></span></header><div id="lkbody"><div class="pf-empty">Loading…</div></div>`;
+    $("#lkb", view).addEventListener("click", () => { history.length > 1 ? history.back() : (location.hash = mine ? "#/settings" : "#/u/" + uname); });
+    (async () => {
+      const body = $("#lkbody", view);
+      let uid = LS.user.id;
+      if (!mine) { try { const r = await sb.from("profiles").select("id").eq("username", uname).maybeSingle(); uid = r.data && r.data.id; } catch (e) { uid = null; } }
+      if (dead) return;
+      if (!uid) { body.innerHTML = `<div class="pf-empty">User not found.</div>`; return; }
+      const { data, error } = await sb.rpc("user_liked_videos", { p_user: uid });
+      if (dead) return;
+      if (error) { body.innerHTML = `<div class="pf-empty">${/liked_hidden/.test(error.message) ? "🔒 This person's liked videos are private." : "Could not load. Try again."}</div>`; return; }
+      if (!data || !data.length) { body.innerHTML = `<div class="pf-empty">${mine ? "You have not liked any videos yet.<br>Tap ♥ on a video to add it here." : "No liked videos yet."}</div>`; return; }
+      body.innerHTML = `<div class="vgrid">${data.map((v, i) => `<button class="vcell" data-i="${i}" type="button">${v.thumb_path ? `<img loading="lazy" src="${esc(vurl(v.thumb_path))}" alt="">` : `<video muted preload="metadata" src="${esc(vurl(v.video_path))}#t=0.5"></video>`}<span>▶ ${fmtN(v.views)}</span></button>`).join("")}</div>`;
+      body.querySelectorAll(".vcell").forEach((b) => b.addEventListener("click", () => LS.openPlayer(data[+b.dataset.i], data[+b.dataset.i].user_id === LS.user.id, () => {})));
+    })();
+    return () => { dead = true; };
+  };
+  /* "Liked" button on other people's profiles */
+  const prevUser = S.userProfile;
+  S.userProfile = function (view, uname) {
+    const c = prevUser.apply(this, arguments);
+    (async () => {
+      try {
+        if (!LS.user) return;
+        for (let i = 0; i < 24 && !$("#pbio", view); i++) await new Promise((r) => setTimeout(r, 250));
+        const row = $(".pf-btns", view);
+        if (!row || $("#ulike", view) || $('a[href="#/edit-profile"]', row)) return;
+        const a = document.createElement("a"); a.className = "pf-btn"; a.id = "ulike"; a.href = "#/liked/" + uname; a.textContent = "♥ Liked";
+        row.appendChild(a);
+      } catch (e) { /* ignore */ }
+    })();
+    return c;
+  };
+  LS.openLikedSetting = function () {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:150;overflow:auto";
+    ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="kb" aria-label="Back">←</button><div>Liked videos</div></div><div id="kbody"></div></div>`;
+    document.body.appendChild(ov);
+    $("#kb", ov).addEventListener("click", () => ov.remove());
+    const box = $("#kbody", ov);
+    const OPTS = [["everyone", "Everyone", "Anyone can see videos you liked"], ["friends", "Friends", "Only people you follow who follow you back"], ["me", "Only me", "Nobody else can see videos you liked"]];
+    (async () => {
+      const s = await LS.getSettings(true);
+      const draw = (cur) => {
+        box.innerHTML = `<div class="sp-card" style="margin-top:12px"><a class="sp-r" href="#/liked" id="kview" style="text-decoration:none;color:inherit"><b style="flex:1;font-weight:500">♥ View my liked videos</b><span style="color:#9a9aa3">›</span></a></div>
+          <div class="sp-s">Who can see your liked videos</div><div class="sp-card">${OPTS.map((o) => `<button class="sp-r" data-k="${o[0]}"><div style="flex:1"><b style="display:block;font-weight:500">${o[1]}</b><em>${o[2]}</em></div><span style="width:24px;height:24px;border-radius:50%;border:2px solid ${cur === o[0] ? "#fe2c55" : "#666"};background:${cur === o[0] ? "radial-gradient(#fff 0 35%,#fe2c55 40%)" : "none"}"></span></button>`).join("")}</div>
+          <p style="color:#9a9aa3;margin:12px 20px;font-size:14.5px;line-height:1.4">People open your liked videos with the "♥ Liked" button on your profile. You can always see your own.</p>`;
+        $("#kview", box).addEventListener("click", () => ov.remove());
+        box.querySelectorAll("[data-k]").forEach((b) => b.addEventListener("click", async () => {
+          if (await LS.saveSettings({ liked_who: b.dataset.k })) { draw(b.dataset.k); toast("Saved"); } else toast("Could not save. Try again.");
+        }));
+      };
+      draw(s.liked_who || "everyone");
+    })();
+  };
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
@@ -8197,6 +8265,8 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     [/^\/inbox\/([\w-]+)$/, S.thread, "thread"],
     [/^\/chat\/([\w]+)$/, S.chat, "thread"],
     [/^\/following\/([^\/]+)$/, S.userFollowing, "thread"],
+    [/^\/liked$/, S.liked, "thread"],
+    [/^\/liked\/([^\/]+)$/, S.liked, "thread"],
     [/^\/profile$/, S.profile, "profile"],
     [/^\/settings$/, S.settings, "thread"],
     [/^\/blocked$/, S.blocked, "thread"],
