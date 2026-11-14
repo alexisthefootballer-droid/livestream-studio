@@ -4628,6 +4628,20 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     if (!sb) return origHome(view);
     let tab = forced || (LS.store ? LS.store.get("fyTab", "fy") : "fy");
     let dead = false, io = null, soundOn = false, startVid = null;
+    const hasAct = () => { try { return !!(navigator.userActivation && navigator.userActivation.hasBeenActive); } catch (e) { return false; } };
+    soundOn = hasAct();
+    const playSafe = (vd) => {
+      const pr = vd.play();
+      if (pr && pr.catch) pr.catch(() => { if (!vd.muted) { vd.muted = true; soundOn = false; const r2 = vd.play(); if (r2 && r2.catch) r2.catch(() => {}); } });
+    };
+    const unmuteAll = () => {
+      if (soundOn || dead) return;
+      soundOn = true;
+      $$("video", $(".fy-scroll", view) || view).forEach((x) => { x.muted = false; if (!x.paused) { const r = x.play(); if (r && r.catch) r.catch(() => { x.muted = true; soundOn = false; x.play().catch(() => {}); }); } });
+      const h = $(".fy-hint", view); if (h) h.remove();
+    };
+    const onAct = () => { if (hasAct()) unmuteAll(); };
+    ["pointerup", "click", "touchend", "keydown"].forEach((ev) => window.addEventListener(ev, onAct, true));
     const viewed = new Set();
     view.innerHTML = `<div class="fyp">
       <div class="fy-top">${forced ? `<b class="fy-title">Friends</b>` : `<button type="button" class="fy-live-btn" data-live="1" aria-label="Live">LIVE</button><button data-t="com">Community</button><button data-t="fol">Following</button><button data-t="fy">For You</button>`}<a class="fy-search" href="#/discover" aria-label="Search">🔍</a></div>
@@ -4736,8 +4750,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         return;
       }
       scroll.innerHTML = liveHtml + vidHtml + (vids.length ? "" : "");
-      const hint = document.createElement("div"); hint.className = "fy-hint"; hint.textContent = "🔇 Tap the video for sound"; $(".fyp", view).appendChild(hint);
-      setTimeout(() => hint.remove(), 5000);
+      if (!soundOn) { const hint = document.createElement("div"); hint.className = "fy-hint"; hint.textContent = "🔇 Tap anywhere for sound"; $(".fyp", view).appendChild(hint);
+      setTimeout(() => hint.remove(), 5000); }
       if (jump) { const f = $('.fy-item[data-i="0"]', scroll); if (f) f.scrollIntoView(); }
       const items = $$(".fy-item[data-i]", scroll);
       io = new IntersectionObserver((ents) => {
@@ -4746,7 +4760,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           if (!vd) return;
           if (en.isIntersecting && en.intersectionRatio >= 0.7) {
             vd.muted = !soundOn;
-            const pr = vd.play(); if (pr && pr.catch) pr.catch(() => {});
+            playSafe(vd);
             const v = vids[+en.target.dataset.i];
             if (v && !viewed.has(v.id)) { viewed.add(v.id); setTimeout(() => { if (!vd.paused) sb.rpc("add_view", { p_video: v.id }).then(() => {}, () => {}); }, 2000); }
           } else vd.pause();
@@ -4837,7 +4851,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       setTabs(); load();
     });
     setTabs(); load(); bell();
-    return () => { dead = true; if (io) io.disconnect(); $$("video", scroll).forEach((x) => { try { x.pause(); x.removeAttribute("src"); x.load(); } catch (e) { /* ignore */ } }); };
+    return () => { dead = true; ["pointerup", "click", "touchend", "keydown"].forEach((ev) => window.removeEventListener(ev, onAct, true)); if (io) io.disconnect(); $$("video", scroll).forEach((x) => { try { x.pause(); x.removeAttribute("src"); x.load(); } catch (e) { /* ignore */ } }); };
   };
 
   S.friends = function (view) { return S.home(view, "friends"); };
