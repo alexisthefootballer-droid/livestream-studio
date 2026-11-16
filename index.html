@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b0b12">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" href="/icon-192.png">
-  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <script>if ("serviceWorker" in navigator && location.protocol === "https:") { window.addEventListener("load", function () { navigator.serviceWorker.register("/sw.js").catch(function () {}); }); }</script>
@@ -1630,7 +1631,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   S.home = function (view) {
     view.innerHTML = `
       <header class="topbar">
-        <div class="logo">Live<span>Stream</span> Studio</div>
+        <div class="logo"><img src="/icon-192.png" alt="" width="28" height="28" style="vertical-align:-7px;border-radius:8px;margin-right:8px">Live<span>Stream</span> Studio</div>
         <a class="icon-btn" href="#/discover" aria-label="Search">🔍</a>
       </header>
       <section class="hero">
@@ -2432,7 +2433,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     if (LS.user) { location.hash = "#/profile"; return; }
     let mode = "signup";
     view.innerHTML = `
-      <header class="topbar"><div class="logo">LiveStream <span>Studio</span></div></header>
+      <header class="topbar"><div class="logo"><img src="/icon-192.png" alt="" width="28" height="28" style="vertical-align:-7px;border-radius:8px;margin-right:8px">LiveStream <span>Studio</span></div></header>
       <div class="seg wide" id="mode"><button data-m="signup" class="on">Sign up</button><button data-m="login">Log in</button></div>
       <form class="pad" id="af" autocomplete="on">
         <label class="field" id="unwrap">Username<input id="au" maxlength="20" autocapitalize="none" autocomplete="username" placeholder="letters, numbers, _"></label>
