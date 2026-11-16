@@ -3174,6 +3174,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           ${swr("record", "⏺️", "Save a recording", "Saves your LIVE so you can replay or post it later. Not saved in Practice mode.", live())}
           ${go("recs", "🎞", "LIVE recordings")}
           ${swr("guardian", "🛡️", "Guardian", "Let viewers compete each week to be your Guardian. The top gifter gets a shield in chat.", false)}
+          ${swr("ai", "🤖", "AI-generated content", "Label your LIVE if it uses AI-made or AI-edited visuals or voices.")}
+          ${sel("disc", "📢", "Content disclosure", [["none", "None"], ["brand", "Own brand"], ["paid", "Paid partnership"]], T.disc || "none")}
         </div>
         <div class="tl-card">
           ${sel("quality", "▶️", "LIVE quality", [["480", "480p"], ["720", "720p"], ["1080", "1080p"]], T.quality)}
@@ -3261,6 +3263,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       else if (k === "noise" || k === "stable") { T[k] = el.checked; ctx.applyMedia(); }
       else if (k === "practice") { T.practice = el.checked; }
       else if (k === "record") { T.record = el.checked; }
+      else if (k === "ai") { T.ai = el.checked; push({ ai_generated: T.ai }); }
+      else if (k === "disc") { T.disc = el.value; push({ disclosure: T.disc }); }
       else if (k === "guardian") { T.guardian = el.checked; if (LS.user) sb.from("guardian_settings").upsert({ host_id: LS.user.id, enabled: T.guardian, updated_at: new Date().toISOString() }).then(() => {}, () => {}); }
       else if (k === "strict") { T.strict = el.checked; push({ chat_strict: T.strict }); }
       ctx.save();
@@ -9133,6 +9137,60 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
   LS.startBroadcast = async function (o) {
     const bc = await prevBc.apply(this, arguments);
     try { if (bc && LS.user && o && o.tools) await sb.from("guardian_settings").upsert({ host_id: LS.user.id, enabled: o.tools.guardian !== false, updated_at: new Date().toISOString() }); } catch (e) { /* ignore */ }
+    return bc;
+  };
+})();
+</script>
+  <script>
+/* LIVE labels: AI-generated content + content disclosure. */
+(function () {
+  "use strict";
+  const LS = window.LS, S = LS.screens, sb = LS.sb;
+  if (LS.TOOLS_DEFAULT) { LS.TOOLS_DEFAULT.ai = false; LS.TOOLS_DEFAULT.disc = "none"; }
+  const st = document.createElement("style");
+  st.textContent = `.lb-wrap{position:absolute;top:104px;left:10px;z-index:6;display:flex;flex-direction:column;gap:6px;align-items:flex-start;max-width:55%}
+  .lb-chip{background:#000a;color:#fff;border:1px solid #ffffff30;border-radius:14px;padding:4px 10px;font-size:12.5px}`;
+  document.head.appendChild(st);
+  const TXT = { brand: "📢 Promoting their own brand", paid: "📢 Paid partnership" };
+
+  LS.labelsAttach = function (view, streamId) {
+    let dead = false, tm = null;
+    const box = document.createElement("div"); box.className = "lb-wrap";
+    async function refresh() {
+      if (dead) return;
+      let d = null;
+      try { const r = await sb.from("streams").select("ai_generated,disclosure").eq("id", streamId).maybeSingle(); d = r.data; } catch (e) { /* ignore */ }
+      if (dead || !d) return;
+      const chips = [];
+      if (d.ai_generated) chips.push("🤖 AI-generated content");
+      if (TXT[d.disclosure]) chips.push(TXT[d.disclosure]);
+      box.innerHTML = chips.map((t) => `<span class="lb-chip">${t}</span>`).join("");
+    }
+    const r = view.querySelector(".room"); if (!r) return () => {};
+    r.appendChild(box); refresh(); tm = setInterval(refresh, 20000);
+    return () => { dead = true; clearInterval(tm); box.remove(); };
+  };
+
+  const prevRoom = S.room;
+  S.room = function (view, id) {
+    const c = prevRoom.apply(this, arguments);
+    let stop = null, n = 0;
+    const tmo = setInterval(() => {
+      n++;
+      if (view.querySelector(".room")) { clearInterval(tmo); stop = LS.labelsAttach(view, id); }
+      else if (n > 40) clearInterval(tmo);
+    }, 300);
+    return () => { clearInterval(tmo); if (stop) stop(); if (c) c(); };
+  };
+
+  const prevBc = LS.startBroadcast;
+  LS.startBroadcast = async function (o) {
+    const bc = await prevBc.apply(this, arguments);
+    try {
+      if (bc && bc.streamId && o && o.tools && !o.tools.practice) {
+        await sb.from("streams").update({ ai_generated: !!o.tools.ai, disclosure: o.tools.disc || "none" }).eq("id", bc.streamId);
+      }
+    } catch (e) { /* ignore */ }
     return bc;
   };
 })();
