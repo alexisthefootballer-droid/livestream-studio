@@ -3173,6 +3173,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           ${sel("about", "📄", "About me", [["1", "Shown"], ["0", "Hidden"]], T.about ? "1" : "0")}
           ${swr("record", "⏺️", "Save a recording", "Saves your LIVE so you can replay or post it later. Not saved in Practice mode.", live())}
           ${go("recs", "🎞", "LIVE recordings")}
+          ${swr("guardian", "🛡️", "Guardian", "Let viewers compete each week to be your Guardian. The top gifter gets a shield in chat.", false)}
         </div>
         <div class="tl-card">
           ${sel("quality", "▶️", "LIVE quality", [["480", "480p"], ["720", "720p"], ["1080", "1080p"]], T.quality)}
@@ -3260,6 +3261,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       else if (k === "noise" || k === "stable") { T[k] = el.checked; ctx.applyMedia(); }
       else if (k === "practice") { T.practice = el.checked; }
       else if (k === "record") { T.record = el.checked; }
+      else if (k === "guardian") { T.guardian = el.checked; if (LS.user) sb.from("guardian_settings").upsert({ host_id: LS.user.id, enabled: T.guardian, updated_at: new Date().toISOString() }).then(() => {}, () => {}); }
       else if (k === "strict") { T.strict = el.checked; push({ chat_strict: T.strict }); }
       ctx.save();
     };
@@ -9016,6 +9018,122 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
     });
     load();
     return () => { dead = true; };
+  };
+})();
+</script>
+  <script>
+/* Guardian: each week the top gifter to a host becomes that host's Guardian. */
+(function () {
+  "use strict";
+  const LS = window.LS, S = LS.screens, sb = LS.sb;
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const MIN = 100; // coins needed in a week to hold the title
+  if (LS.TOOLS_DEFAULT) LS.TOOLS_DEFAULT.guardian = true;
+  const st = document.createElement("style");
+  st.textContent = `
+  .gd-chip{position:absolute;top:104px;right:10px;z-index:6;background:#000a;color:#fff;border:1px solid #ffffff30;border-radius:16px;padding:5px 11px;font-size:13px;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gd-chip b{color:#ffd35c}
+  .gd-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:310;display:flex;align-items:flex-end}
+  .gd-sh{width:100%;max-width:520px;margin:0 auto;background:#1b1b22;color:#fff;border-radius:18px 18px 0 0;padding:14px 0 18px;max-height:78vh;overflow:auto}
+  .gd-sh h3{margin:0 16px 4px;font-size:18px}
+  .gd-sh p{margin:0 16px 10px;color:#9a9aa3;font-size:13.5px;line-height:1.4}
+  .gd-row{display:flex;align-items:center;gap:10px;padding:9px 16px}
+  .gd-row.me{background:#ffffff10}
+  .gd-row .k{width:26px;text-align:center;font-weight:700;color:#9a9aa3}
+  .gd-row .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gd-row .c{color:#ffd35c;font-weight:600}
+  .gd-row.top .k{color:#ffd35c}
+  .gd-ft{margin:10px 16px 0;padding:10px 12px;background:#2b2b35;border-radius:10px;font-size:14px}
+  .gd-x{display:block;margin:12px auto 0;background:none;border:0;color:#9a9aa3;font-size:15px;padding:8px 20px}
+  `;
+  document.head.appendChild(st);
+
+  async function nameMap(ids) {
+    const m = {};
+    if (!ids.length) return m;
+    try { const { data } = await sb.from("profiles").select("id,username,display_name").in("id", ids); (data || []).forEach((p) => { m[p.id] = p.display_name || p.username || "user"; }); } catch (e) { /* ignore */ }
+    return m;
+  }
+
+  LS.guardianAttach = function (view, streamId) {
+    let dead = false, tm = null, obs = null, host = null, gname = "", board = [];
+    const room = () => view.querySelector(".room");
+    const chip = document.createElement("button");
+    chip.type = "button"; chip.className = "gd-chip"; chip.style.display = "none";
+    const badge = (el) => {
+      if (!gname || !el || el.nodeType !== 1 || !el.classList.contains("msg")) return;
+      const b = el.querySelector("b");
+      if (b && !b.dataset.gd && b.textContent.trim() === gname) { b.dataset.gd = "1"; b.textContent = "🛡 " + b.textContent; }
+    };
+    async function refresh() {
+      if (dead || !host) return;
+      let rows = [];
+      try { const { data } = await sb.rpc("guardian_board", { p_host: host }); rows = data || []; } catch (e) { /* ignore */ }
+      if (dead) return;
+      board = rows;
+      const names = await nameMap(rows.map((r) => r.user_id));
+      board.forEach((r) => { r.name = names[r.user_id] || "user"; });
+      const top = board[0];
+      if (!board.length && !(await enabled())) { chip.style.display = "none"; return; }
+      const g = top && Number(top.coins) >= MIN ? top : null;
+      gname = g ? g.name : "";
+      chip.innerHTML = g ? `🛡 Guardian: <b>${esc(g.name)}</b>` : `🛡 Be the Guardian`;
+      chip.style.display = "";
+      view.querySelectorAll(".chat .msg").forEach(badge);
+    }
+    let en = null;
+    async function enabled() {
+      if (en !== null) return en;
+      try { const { data } = await sb.from("guardian_settings").select("enabled").eq("host_id", host).maybeSingle(); en = data ? !!data.enabled : true; } catch (e) { en = true; }
+      return en;
+    }
+    function sheet() {
+      const me = LS.user && LS.user.id;
+      const mine = board.find((r) => r.user_id === me);
+      const top = board[0], need = top ? Math.max(MIN, Number(top.coins) + 1) : MIN;
+      const have = mine ? Number(mine.coins) : 0;
+      const ov = document.createElement("div"); ov.className = "gd-ov";
+      ov.innerHTML = `<div class="gd-sh"><h3>🛡 Guardian</h3>
+        <p>The viewer who sends the most coins to this host each week is the Guardian, with a shield next to their name in chat. It resets every Monday. You need at least ${MIN} coins.</p>
+        ${board.length ? board.map((r, i) => `<div class="gd-row${i === 0 ? " top" : ""}${r.user_id === me ? " me" : ""}"><span class="k">${i + 1}</span><span class="n">${esc(r.name)}${r.user_id === me ? " (you)" : ""}</span><span class="c">${Number(r.coins).toLocaleString()}</span></div>`).join("") : `<p style="margin-top:6px">Nobody has sent gifts this week yet. Be the first!</p>`}
+        <div class="gd-ft">${me ? (mine && mine.rank === 1 && have >= MIN ? "You are the Guardian this week 🎉" : `You sent <b>${have.toLocaleString()}</b> coins this week. Send <b>${Math.max(0, need - have).toLocaleString()}</b> more to become Guardian.`) : "Log in to compete for Guardian."}</div>
+        <button class="gd-x" type="button">Close</button></div>`;
+      ov.addEventListener("click", (e) => { if (e.target === ov || e.target.closest(".gd-x")) ov.remove(); });
+      document.body.appendChild(ov);
+    }
+    chip.addEventListener("click", sheet);
+    (async () => {
+      try { const { data } = await sb.from("streams").select("host_id").eq("id", streamId).maybeSingle(); host = data && data.host_id; } catch (e) { /* ignore */ }
+      if (dead || !host) return;
+      const r = room(); if (!r) return;
+      r.appendChild(chip);
+      const chat = view.querySelector("#chat");
+      if (chat) { obs = new MutationObserver((l) => l.forEach((x) => x.addedNodes.forEach(badge))); obs.observe(chat, { childList: true }); }
+      await refresh();
+      tm = setInterval(refresh, 30000);
+    })();
+    return () => { dead = true; clearInterval(tm); if (obs) obs.disconnect(); chip.remove(); };
+  };
+
+  /* viewer rooms */
+  const prevRoom = S.room;
+  S.room = function (view, id) {
+    const c = prevRoom.apply(this, arguments);
+    let stop = null, n = 0;
+    const tmo = setInterval(() => {
+      n++;
+      if (view.querySelector(".room")) { clearInterval(tmo); stop = LS.guardianAttach(view, id); }
+      else if (n > 40) clearInterval(tmo);
+    }, 300);
+    return () => { clearInterval(tmo); if (stop) stop(); if (c) c(); };
+  };
+
+  /* host: save the switch when going live */
+  const prevBc = LS.startBroadcast;
+  LS.startBroadcast = async function (o) {
+    const bc = await prevBc.apply(this, arguments);
+    try { if (bc && LS.user && o && o.tools) await sb.from("guardian_settings").upsert({ host_id: LS.user.id, enabled: o.tools.guardian !== false, updated_at: new Date().toISOString() }); } catch (e) { /* ignore */ }
+    return bc;
   };
 })();
 </script>
