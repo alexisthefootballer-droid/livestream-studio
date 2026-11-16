@@ -4821,12 +4821,12 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         const shb = e.target.closest(".fy-sh");
         if (shb) {
           const v = vids[+shb.dataset.i], pr = P[v.user_id] || {};
-          const url = location.origin + "/#/u/" + (pr.username || "");
-          const text = (v.caption || "Watch this video") + " — @" + (pr.username || "user");
-          let done = false;
-          try { if (navigator.share) { await navigator.share({ title: "LiveStream Studio", text, url }); done = true; } } catch (x) { /* cancelled */ }
-          if (!done) { try { await navigator.clipboard.writeText(url); const h = document.createElement("div"); h.className = "fy-hint"; h.textContent = "🔗 Link copied"; $(".fyp", view).appendChild(h); setTimeout(() => h.remove(), 2000); done = true; } catch (x) { /* ignore */ } }
-          if (done) { const { data } = await sb.rpc("share_video", { p_video: v.id }); if (data != null) $(".fy-shc", shb).textContent = fmtN(Number(data) || 0); }
+          LS.shareSheet({
+            url: location.origin + "/#/u/" + (pr.username || ""),
+            text: (v.caption || "Watch this video") + " \u2014 @" + (pr.username || "user"),
+            vid: v.id, uid: v.user_id, uname: pr.username, video: v,
+            onShared: async () => { const { data } = await sb.rpc("share_video", { p_video: v.id }); if (data != null) $(".fy-shc", shb).textContent = fmtN(Number(data) || 0); }
+          });
           return;
         }
         const it = e.target.closest(".fy-item[data-i]");
@@ -8741,6 +8741,129 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
     } catch (e) { /* ignore */ }
     const t = setTimeout(async () => { if (dead || !LS.user) return; try { await sb.rpc("announce_entrance", { p_stream: id }); } catch (e) { /* ignore */ } }, 2500);
     return () => { dead = true; clearTimeout(t); try { if (ch) sb.removeChannel(ch); } catch (e) { /* ignore */ } if (c) c(); };
+  };
+  /* live room: share button */
+  const prevRoom2 = S.room;
+  S.room = function (view, id) {
+    const c = prevRoom2.apply(this, arguments);
+    let n = 0, tm = setInterval(() => {
+      n++;
+      const bar = view.querySelector(".room-bottom");
+      if (bar && !bar.querySelector("#shareBtn")) {
+        const b = document.createElement("button");
+        b.className = "icon-btn glass"; b.id = "shareBtn"; b.type = "button"; b.setAttribute("aria-label", "Share"); b.textContent = "\u21AA\uFE0F";
+        b.addEventListener("click", () => LS.shareSheet({ url: location.origin + "/#/live/" + id, text: "Watch this live on LiveStream Studio" }));
+        const g = bar.querySelector("#giftBtn"); bar.insertBefore(b, g || null);
+      }
+      if ((bar && bar.querySelector("#shareBtn")) || n > 40) clearInterval(tm);
+    }, 250);
+    return () => { clearInterval(tm); if (c) c(); };
+  };
+})();
+</script>
+  <script>
+/* Share sheet: send to friends, apps, copy link, save, report. */
+(function () {
+  "use strict";
+  const LS = window.LS, sb = LS.sb;
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.style.zIndex = 400; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
+  const st = document.createElement("style");
+  st.textContent = `
+  .sh-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:300;display:flex;align-items:flex-end}
+  .sh-sh{width:100%;max-width:520px;margin:0 auto;background:#fff;color:#111;border-radius:18px 18px 0 0;padding:12px 0 16px;max-height:80vh;overflow:auto}
+  .sh-hd{display:flex;align-items:center;justify-content:space-between;padding:4px 16px 10px}
+  .sh-hd b{font-size:17px}
+  .sh-hd button{background:none;border:0;font-size:22px;color:#111;padding:4px 8px}
+  .sh-q{margin:0 16px 8px;display:none}
+  .sh-q input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid #ddd;font-size:15px}
+  .sh-row{display:flex;gap:14px;overflow-x:auto;padding:8px 16px 12px;border-bottom:1px solid #eee;scrollbar-width:none}
+  .sh-row::-webkit-scrollbar{display:none}
+  .sh-row.last{border-bottom:0}
+  .sh-it{flex:0 0 auto;width:68px;text-align:center;background:none;border:0;color:#111;font-size:12px;line-height:1.2;padding:0}
+  .sh-it .c{display:flex;width:56px;height:56px;border-radius:50%;margin:0 auto 6px;align-items:center;justify-content:center;font-size:26px;overflow:hidden;color:#fff;background:#999}
+  .sh-it .c img{width:100%;height:100%;object-fit:cover}
+  .sh-it .n{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sh-it.sent .c{outline:3px solid #19c37d}
+  .sh-empty{padding:10px 16px;color:#777;font-size:14px}
+  `;
+  document.head.appendChild(st);
+
+  LS.shareSheet = async function (o) {
+    const url = o.url || location.href;
+    const text = o.text || "Check this out on LiveStream Studio";
+    const full = text + " " + url;
+    let shared = false;
+    const mark = () => { if (!shared) { shared = true; if (o.onShared) { try { o.onShared(); } catch (e) { /* ignore */ } } } };
+    const ov = document.createElement("div");
+    ov.className = "sh-ov";
+    const apps = [
+      ["wa", "WhatsApp", "💬", "#25d366", "https://wa.me/?text=" + encodeURIComponent(full)],
+      ["tg", "Telegram", "✈️", "#2aa3e0", "https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(text)],
+      ["fb", "Facebook", "f", "#1877f2", "https://www.facebook.com/sharer/sharer.php?u=" + encodeURIComponent(url)],
+      ["x", "X", "𝕏", "#111", "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text) + "&url=" + encodeURIComponent(url)],
+      ["sms", "SMS", "✉️", "#4c8bf5", "sms:?body=" + encodeURIComponent(full)],
+      ["em", "Email", "📧", "#0bb5f0", "mailto:?subject=" + encodeURIComponent("LiveStream Studio") + "&body=" + encodeURIComponent(full)]
+    ];
+    const canNative = !!navigator.share;
+    const isMe = LS.user && o.uid && LS.user.id === o.uid;
+    ov.innerHTML = `<div class="sh-sh">
+      <div class="sh-hd"><button data-a="srch" aria-label="Search">🔍</button><b>Share</b><button data-a="x" aria-label="Close">✕</button></div>
+      <div class="sh-q"><input type="search" placeholder="Search friends" autocomplete="off"></div>
+      <div class="sh-row" id="shf"><div class="sh-empty">Loading friends…</div></div>
+      <div class="sh-row">${apps.map((a) => `<button class="sh-it" data-app="${a[0]}"><span class="c" style="background:${a[3]}">${a[2]}</span>${a[1]}</button>`).join("")}${canNative ? `<button class="sh-it" data-a="more"><span class="c" style="background:#6b6b78">⋯</span>More</button>` : ""}</div>
+      <div class="sh-row last">
+        <button class="sh-it" data-a="copy"><span class="c" style="background:#3b6cf6">🔗</span>Copy link</button>
+        ${o.video ? `<button class="sh-it" data-a="save"><span class="c" style="background:#19a974">⬇️</span>Save video</button>` : ""}
+        ${o.uid && !isMe ? `<button class="sh-it" data-a="rep"><span class="c" style="background:#555">🚩</span>Report</button>` : ""}
+      </div></div>`;
+    const close = () => ov.remove();
+    const q = ov.querySelector(".sh-q input");
+    let friends = [];
+    const drawFriends = () => {
+      const k = (q.value || "").trim().toLowerCase();
+      const list = friends.filter((p) => !k || (p.display_name || "").toLowerCase().includes(k) || (p.username || "").toLowerCase().includes(k));
+      const row = ov.querySelector("#shf");
+      row.innerHTML = list.length ? list.map((p) => `<button class="sh-it" data-uid="${p.id}"><span class="c">${LS.photo ? LS.photo(p, 56) : ""}</span><span class="n">${esc(p.display_name || p.username || "user")}</span></button>`).join("") : `<div class="sh-empty">${friends.length ? "No match." : (LS.user ? "Follow people to send them videos here." : "Log in to send to friends.")}</div>`;
+    };
+    q.addEventListener("input", drawFriends);
+    ov.addEventListener("click", async (e) => {
+      if (e.target === ov) return close();
+      const b = e.target.closest("button");
+      if (!b) return;
+      const a = b.dataset.a;
+      if (a === "x") return close();
+      if (a === "srch") { const bx = ov.querySelector(".sh-q"); bx.style.display = bx.style.display === "block" ? "none" : "block"; if (bx.style.display === "block") q.focus(); return; }
+      if (b.dataset.app) { const ap = apps.find((z) => z[0] === b.dataset.app); mark(); window.open(ap[4], "_blank", "noopener"); return; }
+      if (a === "more") { try { await navigator.share({ title: "LiveStream Studio", text, url }); mark(); } catch (x) { /* cancelled */ } return; }
+      if (a === "copy") {
+        let ok = false;
+        try { await navigator.clipboard.writeText(url); ok = true; } catch (x) { try { const t = document.createElement("textarea"); t.value = url; document.body.appendChild(t); t.select(); ok = document.execCommand("copy"); t.remove(); } catch (y) { /* ignore */ } }
+        toast(ok ? "Link copied" : "Could not copy"); if (ok) mark(); return;
+      }
+      if (a === "save") { close(); if (LS.downloadVideo) LS.downloadVideo(o.video, o.uname); return; }
+      if (a === "rep") { close(); LS.reportSheet({ uid: o.uid, uname: o.uname, vid: o.vid }); return; }
+      if (b.dataset.uid) {
+        if (b.classList.contains("sent")) return;
+        b.disabled = true;
+        const { error } = await sb.rpc("send_dm", { p_to: b.dataset.uid, p_body: full });
+        b.disabled = false;
+        if (error) { toast("Could not send. They may not accept messages."); return; }
+        b.classList.add("sent"); toast("Sent"); mark();
+      }
+    });
+    document.body.appendChild(ov);
+    if (LS.user) {
+      try {
+        const fs = await LS.myFollows();
+        const ids = Array.from(fs).slice(0, 40);
+        if (ids.length) {
+          const { data } = await sb.from("profiles").select("*").in("id", ids);
+          friends = data || [];
+        }
+      } catch (e) { /* ignore */ }
+    }
+    drawFriends();
   };
 })();
 </script>
