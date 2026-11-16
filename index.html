@@ -2440,6 +2440,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         <label class="field">Password<input id="ap" type="password" autocomplete="current-password" minlength="6" placeholder="at least 6 characters" required></label>
         <div class="formmsg" id="am" role="status"></div>
         <button class="btn big" type="submit" id="asub">Create account</button>
+        <p style="text-align:center;color:#9a9aa3;font-size:13.5px;line-height:1.5;margin:16px 6px 0">By continuing, you agree to our <a href="/terms.html" target="_blank" rel="noopener" style="color:#fe2c55">Terms of Service</a> and confirm you have read our <a href="/privacy.html" target="_blank" rel="noopener" style="color:#fe2c55">Privacy Policy</a>.</p>
       </form>
       <div class="spacer"></div>`;
     const msg = (t, ok) => { const m = $("#am", view); m.textContent = t || ""; m.classList.toggle("ok", !!ok); };
@@ -8495,7 +8496,13 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     const list = () => {
       ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="tb" aria-label="Back">←</button><div>Terms and Policies</div></div>
         <div class="sp-card" style="margin-top:12px">${DOCS.map((d, i) => `<button class="sp-r" data-i="${i}"><span class="ic">${d[0]}</span><b style="flex:1;font-weight:500">${d[1]}</b><span style="color:#9a9aa3">›</span></button>`).join("")}</div>
-        <p style="color:#9a9aa3;margin:14px 20px;font-size:14px;line-height:1.4">Last updated ${UPDATED}. Questions? Ask in Help Center.</p></div>`;
+        <div class="sp-s">Web pages</div>
+        <div class="sp-card">
+          <a class="sp-r" href="/privacy.html" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="ic">🔐</span><b style="flex:1;font-weight:500">Privacy Policy (web page)</b><span style="color:#9a9aa3">↗</span></a>
+          <a class="sp-r" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="ic">📄</span><b style="flex:1;font-weight:500">Terms (web page)</b><span style="color:#9a9aa3">↗</span></a>
+          <a class="sp-r" href="/delete-account.html" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="ic">🗑</span><b style="flex:1;font-weight:500">How to delete your account</b><span style="color:#9a9aa3">↗</span></a>
+        </div>
+        <p style="color:#9a9aa3;margin:14px 20px;font-size:14px;line-height:1.4">Last updated ${UPDATED}. Questions? Ask in Help Center, or email alexisthefootballer@gmail.com.</p></div>`;
       $("#tb", ov).addEventListener("click", () => ov.remove());
       ov.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => doc(+b.dataset.i)));
     };
