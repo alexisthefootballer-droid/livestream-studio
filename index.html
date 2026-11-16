@@ -3147,7 +3147,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       LS.hostLists[kind].delete(uid);
     } catch (e) { /* ignore */ }
   };
-  LS.TOOLS_DEFAULT = { watch: "everyone", about: true, quality: "720", noise: true, stable: true, practice: false, strict: false, blocked: "" };
+  LS.TOOLS_DEFAULT = { record: false, watch: "everyone", about: true, quality: "720", noise: true, stable: true, practice: false, strict: false, blocked: "" };
   LS.videoConstraints = (T, facing) => { const q = QUALITY[T.quality] || QUALITY["720"]; return { facingMode: facing, width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: T.stable ? 24 : 30 } }; };
   LS.audioConstraints = (T) => ({ noiseSuppression: !!T.noise, echoCancellation: true, autoGainControl: true });
   LS.videoEncoding = (T) => ({ maxBitrate: (QUALITY[T.quality] || QUALITY["720"]).br, maxFramerate: T.stable ? 24 : 30 });
@@ -3171,6 +3171,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           ${sel("watch", "🌐", "Who can watch this LIVE", [["everyone", "Everyone"], ["followers", "Followers"]], T.watch)}
           ${swr("practice", "🏋️", "Practice mode", live() ? "Choose before you go live." : "Test your setup. Nobody can see you.", live())}
           ${sel("about", "📄", "About me", [["1", "Shown"], ["0", "Hidden"]], T.about ? "1" : "0")}
+          ${swr("record", "⏺️", "Save a recording", "Saves your LIVE so you can replay or post it later. Not saved in Practice mode.", live())}
+          ${go("recs", "🎞", "LIVE recordings")}
         </div>
         <div class="tl-card">
           ${sel("quality", "▶️", "LIVE quality", [["480", "480p"], ["720", "720p"], ["1080", "1080p"]], T.quality)}
@@ -3232,6 +3234,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (b.id === "tlx") { ctx.close(); return; }
       if (b.id === "tlback") { vw = "main"; render(); return; }
       if (b.dataset.go === "seats") { ctx.close(); ctx.openSeats(); return; }
+      if (b.dataset.go === "recs") { if (live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "End your LIVE first, then open LIVE recordings."; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); } else { ctx.close(); location.hash = "#/recordings"; } return; }
       if (b.dataset.prem) { const kind = vw; LS.hostSetRemove(kind, b.dataset.prem).then(() => render()); return; }
       if (b.id === "tlpadd") {
         const kind = vw, inp = $("#tlpuser", sheet), msg = $("#tlpmsg", sheet);
@@ -3256,6 +3259,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       else if (k === "quality") { T.quality = el.value; ctx.applyMedia(); }
       else if (k === "noise" || k === "stable") { T[k] = el.checked; ctx.applyMedia(); }
       else if (k === "practice") { T.practice = el.checked; }
+      else if (k === "record") { T.record = el.checked; }
       else if (k === "strict") { T.strict = el.checked; push({ chat_strict: T.strict }); }
       ctx.save();
     };
@@ -5283,7 +5287,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
             <a class="link" href="#/settings">⚙️ Settings and privacy<i>›</i></a></div>`;
         return;
       }
-      bar.innerHTML = `<a class="red" href="#/golive">🔴 Go LIVE</a><a href="#/live-analytics">📈 LIVE Analytics</a><a href="#/earnings">💰 Earnings</a>`;
+      bar.innerHTML = `<a class="red" href="#/golive">🔴 Go LIVE</a><a href="#/live-analytics">📈 LIVE Analytics</a><a href="#/earnings">💰 Earnings</a><a href="#/recordings">🎞 Recordings</a>`;
       const all = await myStreams();
       if (dead || tab !== "live") return;
       const since = Date.now() - 7 * 864e5, wk = all.filter((s) => s.start.getTime() >= since);
@@ -8868,6 +8872,154 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
 })();
 </script>
   <script>
+/* LIVE recordings: save my live to my account, then replay, download or post it. */
+(function () {
+  "use strict";
+  const LS = window.LS, S = LS.screens, sb = LS.sb;
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.style.zIndex = 400; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 3000); };
+  const vurl = (p) => sb.storage.from("videos").getPublicUrl(p).data.publicUrl;
+  const MAX = 38e6; // each saved part stays under the 50 MB file limit
+  if (LS.TOOLS_DEFAULT) LS.TOOLS_DEFAULT.record = false;
+
+  function pickMime() {
+    if (!window.MediaRecorder) return "";
+    return ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"].find((m) => { try { return MediaRecorder.isTypeSupported(m); } catch (e) { return false; } }) || "";
+  }
+
+  function startRec(o, bc) {
+    const mime = pickMime();
+    if (!mime || !o.stream) { toast("Recording is not supported on this phone."); return null; }
+    const ext = mime.indexOf("mp4") >= 0 ? "mp4" : "webm", type = mime.split(";")[0];
+    const uid = LS.user.id, stamp = Date.now(), title = o.title || "Live";
+    let part = 0, mr = null, chunks = [], size = 0, t0 = 0, stopping = false, queue = Promise.resolve(), saved = 0, failed = false;
+    const upload = (blob, secs, n) => {
+      queue = queue.then(async () => {
+        const path = uid + "/live-" + String(bc.streamId).slice(0, 8) + "-" + stamp + "-p" + n + "." + ext;
+        try {
+          const up = await sb.storage.from("videos").upload(path, blob, { contentType: type, upsert: false });
+          if (up.error) throw up.error;
+          const ins = await sb.from("live_recordings").insert({ host_id: uid, stream_id: bc.streamId, title, path, part: n, seconds: secs, size: blob.size });
+          if (ins.error) throw ins.error;
+          saved++;
+        } catch (e) { failed = true; }
+      });
+    };
+    const begin = () => {
+      part++; chunks = []; size = 0; t0 = Date.now();
+      const n = part; let m;
+      try { m = new MediaRecorder(o.stream, { mimeType: mime, videoBitsPerSecond: 700000, audioBitsPerSecond: 64000 }); }
+      catch (e) { try { m = new MediaRecorder(o.stream); } catch (x) { return false; } }
+      mr = m;
+      m.ondataavailable = (e) => {
+        if (!e.data || !e.data.size) return;
+        chunks.push(e.data); size += e.data.size;
+        if (size > MAX && !stopping && mr === m) { const secs = Math.round((Date.now() - t0) / 1000), cs = chunks; try { m.stop(); } catch (x) { /* ignore */ } begin(); upload(new Blob(cs, { type }), secs, n); }
+      };
+      m.onstop = () => { if (stopping && mr === m) upload(new Blob(chunks, { type }), Math.round((Date.now() - t0) / 1000), n); };
+      m.start(4000);
+      return true;
+    };
+    if (!begin()) return null;
+    return {
+      async stop() {
+        if (stopping) return; stopping = true;
+        await new Promise((res) => { const m = mr; const f = m.onstop; m.onstop = () => { try { f(); } catch (e) { /* ignore */ } res(); }; try { m.stop(); } catch (e) { res(); } });
+        toast("Saving your recording…");
+        queue.then(() => toast(failed && !saved ? "Could not save the recording." : "Recording saved. Find it in LIVE recordings."));
+      }
+    };
+  }
+
+  LS.startRecording = startRec;
+  const prev = LS.startBroadcast;
+  LS.startBroadcast = async function (o) {
+    const bc = await prev.apply(this, arguments);
+    try {
+      if (bc && bc.streamId && o && o.tools && o.tools.record && !o.tools.practice) {
+        const rec = startRec(o, bc);
+        if (rec) { const e0 = bc.end; bc.end = async function () { try { await rec.stop(); } catch (e) { /* ignore */ } return e0.apply(this, arguments); }; }
+      }
+    } catch (e) { /* recording must never break the live */ }
+    return bc;
+  };
+
+  /* ---- screen ---- */
+  const fmtT = (s) => { s = Math.max(0, +s || 0); const m = Math.floor(s / 60), r = s % 60; return m + ":" + String(r).padStart(2, "0"); };
+  const fmtS = (b) => (b > 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.round(b / 1e3) + " KB");
+  const st = document.createElement("style");
+  st.textContent = `
+  .rc-wrap{padding:0 0 90px;color:#fff}
+  .rc-top{display:flex;align-items:center;gap:10px;padding:14px 12px}
+  .rc-top a{color:#fff;font-size:22px;text-decoration:none}
+  .rc-top b{font-size:19px}
+  .rc-note{margin:0 16px 10px;color:#9a9aa3;font-size:13.5px;line-height:1.4}
+  .rc-card{margin:0 12px 12px;background:#1b1b22;border-radius:14px;padding:12px 14px}
+  .rc-card h4{margin:0 0 2px;font-size:16px}
+  .rc-card small{color:#9a9aa3;display:block;margin-bottom:10px}
+  .rc-btns{display:flex;gap:8px;flex-wrap:wrap}
+  .rc-btns button{background:#2b2b35;color:#fff;border:0;border-radius:18px;padding:8px 14px;font-size:14px}
+  .rc-btns .red{background:#3a1d26;color:#ff6b86}
+  .rc-play{position:fixed;inset:0;background:#000;z-index:300;display:flex;flex-direction:column}
+  .rc-play video{flex:1;width:100%;min-height:0;background:#000}
+  .rc-play button{position:absolute;top:14px;right:14px;background:#0008;color:#fff;border:0;border-radius:50%;width:40px;height:40px;font-size:20px}
+  .rc-empty{padding:60px 24px;text-align:center;color:#9a9aa3}
+  `;
+  document.head.appendChild(st);
+
+  S.recordings = function (view) {
+    let dead = false, rows = [];
+    view.innerHTML = `<div class="rc-wrap"><div class="rc-top"><a href="#/profile" aria-label="Back">←</a><b>LIVE recordings</b></div>
+      <p class="rc-note">Turn on <b>Save a recording</b> in Live tools before you go live. Each recording is saved here, only you can see it, and you can post it to your profile.</p>
+      <div id="rcl"><div class="rc-empty">Loading…</div></div></div>`;
+    const box = view.querySelector("#rcl");
+    function draw() {
+      if (dead) return;
+      if (!rows.length) { box.innerHTML = `<div class="rc-empty">No recordings yet.<br><br><a class="btn" href="#/golive">Go LIVE</a></div>`; return; }
+      box.innerHTML = rows.map((r) => `<div class="rc-card" data-id="${r.id}"><h4>${esc(r.title)}${r.part > 1 ? " · part " + r.part : ""}</h4>
+        <small>${new Date(r.created_at).toLocaleString()} · ${fmtT(r.seconds)} · ${fmtS(r.size)}${r.posted ? " · posted" : ""}</small>
+        <div class="rc-btns"><button data-a="play">▶ Play</button><button data-a="dl">⬇ Save</button>${r.posted ? "" : `<button data-a="post">📤 Post</button>`}<button class="red" data-a="del">🗑 Delete</button></div></div>`).join("");
+    }
+    async function load() {
+      if (!LS.user) { location.hash = "#/auth"; return; }
+      const { data } = await sb.from("live_recordings").select("*").eq("host_id", LS.user.id).order("created_at", { ascending: false }).limit(100);
+      rows = data || []; draw();
+    }
+    box.addEventListener("click", async (e) => {
+      const b = e.target.closest("button[data-a]"); if (!b) return;
+      const id = b.closest(".rc-card").dataset.id, r = rows.find((x) => x.id === id); if (!r) return;
+      const a = b.dataset.a;
+      if (a === "play") {
+        const ov = document.createElement("div"); ov.className = "rc-play";
+        ov.innerHTML = `<video src="${esc(vurl(r.path))}" controls autoplay playsinline></video><button aria-label="Close">✕</button>`;
+        ov.querySelector("button").onclick = () => ov.remove(); document.body.appendChild(ov);
+      } else if (a === "dl") {
+        toast("Downloading…");
+        try {
+          const res = await fetch(vurl(r.path)); const blob = await res.blob(), u = URL.createObjectURL(blob);
+          const l = document.createElement("a"); l.href = u; l.download = (r.title || "live").replace(/[^\w-]+/g, "_") + "-p" + r.part + "." + (r.path.split(".").pop()); document.body.appendChild(l); l.click(); l.remove();
+          setTimeout(() => URL.revokeObjectURL(u), 15000);
+        } catch (x) { toast("Could not download. Try again."); }
+      } else if (a === "post") {
+        b.disabled = true;
+        const ins = await sb.from("videos").insert({ user_id: LS.user.id, video_path: r.path, caption: "LIVE replay: " + (r.title || "") });
+        if (ins.error) { b.disabled = false; toast("Could not post it."); return; }
+        await sb.from("live_recordings").update({ posted: true }).eq("id", r.id);
+        r.posted = true; draw(); toast("Posted to your profile");
+      } else if (a === "del") {
+        if (!confirm("Delete this recording?")) return;
+        if (!r.posted) { try { await sb.storage.from("videos").remove([r.path]); } catch (x) { /* ignore */ } }
+        const d = await sb.from("live_recordings").delete().eq("id", r.id);
+        if (d.error) { toast("Could not delete."); return; }
+        rows = rows.filter((x) => x.id !== r.id); draw();
+      }
+    });
+    load();
+    return () => { dead = true; };
+  };
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
@@ -8899,6 +9051,7 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
     [/^\/edit-profile$/, S.editProfile, "thread"],
     [/^\/recharge$/, S.recharge, "thread"],
     [/^\/store$/, S.store, "thread"],
+    [/^\/recordings$/, S.recordings, "thread"],
     [/^\/earnings$/, S.earnings, "thread"],
     [/^\/upload-video$/, S.uploadVideo, "thread"],
     [/^\/follows\/(followers|following)$/, S.follows, "profile"],
