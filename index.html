@@ -2660,6 +2660,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         <span style="width:40px"></span>
       </header>
       <div class="rc-bal">Balance: <i class="coin"></i> <b id="rbal">${LS.coins == null ? "…" : LS.coins.toLocaleString()}</b></div>
+      <a href="#/store" style="display:block;margin:8px 16px;background:linear-gradient(90deg,#3a2a10,#1c1408);border:1px solid #6a5020;border-radius:14px;padding:12px 14px;color:#ffd35a;text-decoration:none;font-weight:700">🛍 Store · rides and entrance effects ›</a>
       <div class="rc-notice">Pay securely with PayPal or a card. Coins are added to your balance right after payment.</div>
       <div id="radmin"></div>
       <div class="rc-grid" id="rpacks">${PACKS.map((c) => `<button data-c="${c}" class="${c === pack ? "on" : ""}"><b><i class="coin"></i> ${c.toLocaleString()}</b><small>$${aed(c)}</small></button>`).join("")}<button data-c="custom" id="rcust"><b>Custom</b><small>Any amount</small></button></div>
@@ -5040,7 +5041,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["🎞", "Manage posts", "#/profile"], ["🎥", "Content preferences", "fn:content"], ["📺", "LIVE", "#/golive"],
       ["🔔", "Notifications", "fn:notif"], ["⏳", "Time and well-being", "fn:wellbeing"], ["🏠", "Family Pairing", "fn:family"]]],
     ["Account", [
-      ["👤", "Account", "#/edit-profile"], ["🗑", "Delete account", "fn:deleteacct"], ["🛡", "Security & permissions", "fn:security"], ["📈", "Analytics", "#/live-analytics"],
+      ["👤", "Account", "#/edit-profile"], ["🛍", "Store", "#/store"], ["🗑", "Delete account", "fn:deleteacct"], ["🛡", "Security & permissions", "fn:security"], ["📈", "Analytics", "#/live-analytics"],
       ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"]]],
     ["Visibility", [
       ["🔒", "Private account", "fn:private"], ["🚫", "Blocked accounts", "#/blocked"]]],
@@ -8576,6 +8577,155 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
 })();
 </script>
   <script>
+/* Store: rides (entrance effects), SVIP levels, live entrance animation. */
+(function () {
+  const LS = window.LS, S = LS.screens, sb = LS.sb, esc = LS.esc, $ = LS.$;
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 3000); };
+  const wheel=(x,y,r)=>`<circle cx="${x}" cy="${y}" r="${r}" fill="#15151c"/><circle cx="${x}" cy="${y}" r="${r*0.55}" fill="#c9ced8"/><circle cx="${x}" cy="${y}" r="${r*0.2}" fill="#15151c"/>`;
+const ART={
+scooter:`<defs><linearGradient id="a1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5df2ff"/><stop offset="1" stop-color="#2a6fff"/></linearGradient></defs><path d="M55 92 L110 92 L132 40 L146 40" stroke="url(#a1)" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="62" y="84" width="58" height="9" rx="4" fill="url(#a1)"/><path d="M128 36 L156 36" stroke="#e8f6ff" stroke-width="7" stroke-linecap="round"/>${wheel(62,98,14)}${wheel(138,98,14)}<path d="M20 98 H44 M14 90 H36" stroke="#5df2ff" stroke-width="3" stroke-linecap="round" opacity=".7"/>`,
+taxi:`<defs><linearGradient id="a2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe14a"/><stop offset="1" stop-color="#f0a800"/></linearGradient></defs><rect x="82" y="26" width="34" height="14" rx="4" fill="#fff"/><text x="99" y="37" font-size="10" font-weight="800" text-anchor="middle" fill="#222" font-family="Arial">TAXI</text><path d="M26 86 Q26 70 44 68 L66 66 Q76 46 100 46 L128 46 Q146 48 154 66 L170 70 Q178 74 178 86 Z" fill="url(#a2)"/><path d="M80 66 Q86 54 100 54 L108 54 L108 66 Z M114 54 L128 54 Q140 56 146 66 L114 66 Z" fill="#bfe6ff"/>${wheel(58,92,15)}${wheel(146,92,15)}<rect x="172" y="76" width="8" height="6" rx="2" fill="#fff6a8"/>`,
+sportscar:`<defs><linearGradient id="a3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5a5a"/><stop offset="1" stop-color="#a1002a"/></linearGradient></defs><path d="M14 88 Q16 74 40 70 L74 64 Q96 44 124 46 Q146 48 160 64 L182 72 Q190 76 188 88 Z" fill="url(#a3)"/><path d="M92 62 Q104 50 122 52 Q138 54 148 64 L92 64 Z" fill="#a6dcff"/><path d="M30 80 H170" stroke="#fff" stroke-opacity=".35" stroke-width="2"/>${wheel(54,92,16)}${wheel(152,92,16)}<rect x="180" y="76" width="10" height="5" rx="2" fill="#fff6a8"/><path d="M4 80 H20 M0 88 H14" stroke="#ff7a7a" stroke-width="3" stroke-linecap="round" opacity=".6"/>`,
+bike:`<defs><linearGradient id="a4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c25bff"/><stop offset="1" stop-color="#5a1bd6"/></linearGradient></defs>${wheel(50,92,20)}${wheel(152,92,20)}<path d="M50 92 L82 62 L120 62 L152 92" stroke="#2b2b38" stroke-width="5" fill="none"/><path d="M70 66 Q84 40 116 46 L132 58 L118 66 L82 70 Z" fill="url(#a4)"/><path d="M118 46 L142 38 L150 44 L134 56 Z" fill="#1f1f2b"/><path d="M142 38 L152 30 H162" stroke="#e5e5f0" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M78 74 H112 L108 86 H84 Z" fill="#d8d8e8"/><circle cx="152" cy="92" r="30" fill="none" stroke="#c25bff" stroke-opacity=".35" stroke-width="3"/>`,
+suv:`<defs><linearGradient id="a5" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fb3ff"/><stop offset="1" stop-color="#1b4f9e"/></linearGradient></defs><path d="M60 38 H150 M70 38 V46 M140 38 V46" stroke="#cfd6e4" stroke-width="3" fill="none"/><path d="M22 90 L22 66 Q22 58 32 58 L58 56 L68 44 Q72 42 80 42 H138 Q148 42 152 50 L160 58 L176 60 Q186 62 186 72 V90 Z" fill="url(#a5)"/><path d="M74 56 L82 48 H108 V56 Z M114 48 H138 L146 56 H114 Z" fill="#cfeaff"/>${wheel(56,92,19)}${wheel(150,92,19)}<rect x="178" y="68" width="9" height="6" rx="2" fill="#fff6a8"/>`,
+heli:`<defs><linearGradient id="a6" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7a6b"/><stop offset="1" stop-color="#d11f3a"/></linearGradient></defs><g class="rotor"><rect x="38" y="24" width="124" height="5" rx="2.5" fill="#d7dcea"/></g><rect x="96" y="28" width="8" height="10" fill="#8890a8"/><path d="M60 70 Q60 42 100 42 Q134 42 138 66 L190 60 L190 72 L138 80 Q130 92 100 92 Q60 92 60 70 Z" fill="url(#a6)"/><path d="M72 66 Q74 52 98 52 L110 52 L110 70 L72 70 Z" fill="#bfe6ff"/><path d="M62 100 H140 M80 92 V100 M122 92 V100" stroke="#d7dcea" stroke-width="4" stroke-linecap="round"/><circle cx="190" cy="66" r="9" fill="none" stroke="#d7dcea" stroke-width="2.5"/>`,
+speedboat:`<defs><linearGradient id="a7" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#cfd8ea"/></linearGradient></defs><path d="M20 84 Q70 78 104 66 L170 62 Q184 62 184 70 Q160 96 100 98 Q44 98 20 84 Z" fill="url(#a7)"/><path d="M26 86 Q80 94 176 70" stroke="#ff3b6b" stroke-width="5" fill="none"/><path d="M96 66 L110 46 H138 L150 64 Z" fill="#9ed8ff"/><path d="M116 46 V34" stroke="#d7dcea" stroke-width="3"/><path d="M10 100 Q40 94 70 102 T130 102 T196 100" stroke="#7fe0ff" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M4 90 Q24 86 36 92" stroke="#c9f4ff" stroke-width="3" fill="none" opacity=".8"/>`,
+jet:`<defs><linearGradient id="a8" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#aeb8d6"/></linearGradient></defs><path d="M14 66 Q14 56 28 56 L150 56 Q186 58 192 66 Q186 74 150 76 L28 76 Q14 76 14 66 Z" fill="url(#a8)"/><path d="M96 56 L74 22 L92 22 L128 56 Z" fill="#d6dcf0"/><path d="M96 76 L74 110 L92 110 L128 76 Z" fill="#c4cbe6"/><path d="M28 56 L18 36 L34 36 L48 56 Z" fill="#ff5a7a"/><path d="M150 60 Q172 60 184 66 L150 66 Z" fill="#8fd0ff"/><circle cx="108" cy="66" r="3" fill="#6d7798"/><circle cx="124" cy="66" r="3" fill="#6d7798"/><path d="M4 66 H14" stroke="#ffb35a" stroke-width="5" stroke-linecap="round"/>`,
+carriage:`<defs><linearGradient id="a9" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset="1" stop-color="#c58a14"/></linearGradient></defs><path d="M48 44 Q48 28 70 28 H130 Q152 28 152 44 V76 H48 Z" fill="url(#a9)"/><rect x="62" y="40" width="30" height="26" rx="6" fill="#6b1f3a"/><rect x="108" y="40" width="30" height="26" rx="6" fill="#6b1f3a"/><path d="M40 78 H160 V86 Q100 94 40 86 Z" fill="#a8700c"/><path d="M60 28 Q100 6 140 28" stroke="#ffe27a" stroke-width="5" fill="none"/><circle cx="100" cy="14" r="6" fill="#ff5a7a"/><circle cx="62" cy="96" r="20" fill="none" stroke="#ffcf4a" stroke-width="5"/><circle cx="62" cy="96" r="4" fill="#ffcf4a"/><path d="M62 76 V116 M42 96 H82 M48 82 L76 110 M76 82 L48 110" stroke="#ffcf4a" stroke-width="2.5"/><circle cx="138" cy="96" r="20" fill="none" stroke="#ffcf4a" stroke-width="5"/><circle cx="138" cy="96" r="4" fill="#ffcf4a"/><path d="M138 76 V116 M118 96 H158 M124 82 L152 110 M152 82 L124 110" stroke="#ffcf4a" stroke-width="2.5"/>`,
+rocket:`<defs><linearGradient id="a10" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e8ecff"/><stop offset="1" stop-color="#9aa6d8"/></linearGradient></defs><g transform="rotate(-38 100 60)"><path d="M100 4 Q124 30 124 64 V86 H76 V64 Q76 30 100 4 Z" fill="url(#a10)"/><circle cx="100" cy="46" r="11" fill="#5fd2ff" stroke="#fff" stroke-width="3"/><path d="M76 66 L56 92 L76 88 Z M124 66 L144 92 L124 88 Z" fill="#ff4a6b"/><path d="M84 86 Q100 128 116 86 Z" fill="#ffb02e"/><path d="M92 86 Q100 112 108 86 Z" fill="#fff3a8"/></g><circle cx="34" cy="26" r="2" fill="#fff"/><circle cx="170" cy="20" r="2.4" fill="#fff"/><circle cx="182" cy="96" r="2" fill="#fff"/>`,
+cruise:`<defs><linearGradient id="a11" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cdd5ea"/></linearGradient></defs><path d="M12 80 H188 Q180 100 160 100 H40 Q20 100 12 80 Z" fill="#1d3b8a"/><rect x="24" y="64" width="150" height="16" rx="3" fill="url(#a11)"/><rect x="38" y="48" width="120" height="16" rx="3" fill="url(#a11)"/><rect x="58" y="32" width="80" height="16" rx="3" fill="url(#a11)"/><rect x="108" y="14" width="14" height="18" rx="2" fill="#ff4a6b"/><g fill="#ffd966"><rect x="32" y="69" width="8" height="6"/><rect x="46" y="69" width="8" height="6"/><rect x="60" y="69" width="8" height="6"/><rect x="74" y="69" width="8" height="6"/><rect x="88" y="69" width="8" height="6"/><rect x="102" y="69" width="8" height="6"/><rect x="116" y="69" width="8" height="6"/><rect x="130" y="69" width="8" height="6"/><rect x="144" y="69" width="8" height="6"/><rect x="48" y="53" width="8" height="6"/><rect x="66" y="53" width="8" height="6"/><rect x="84" y="53" width="8" height="6"/><rect x="102" y="53" width="8" height="6"/><rect x="120" y="53" width="8" height="6"/><rect x="138" y="53" width="8" height="6"/></g><path d="M6 106 Q40 98 70 106 T130 106 T196 104" stroke="#7fe0ff" stroke-width="4" fill="none" stroke-linecap="round"/>`,
+dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset="1" stop-color="#d4890c"/></linearGradient></defs><path d="M14 92 Q40 40 70 76 T120 60 T160 40" stroke="url(#a12)" stroke-width="16" fill="none" stroke-linecap="round"/><path d="M14 92 Q40 40 70 76 T120 60 T160 40" stroke="#fff3b0" stroke-width="3" fill="none" stroke-dasharray="2 12" stroke-linecap="round"/><path d="M150 44 Q160 20 182 26 L194 32 L180 40 L190 48 Q168 58 150 44 Z" fill="url(#a12)"/><circle cx="170" cy="34" r="3" fill="#7a1010"/><path d="M158 26 L152 12 M168 22 L166 8" stroke="#ffcf4a" stroke-width="4" stroke-linecap="round"/><path d="M80 66 L74 40 L100 58 Z M112 62 L112 36 L132 54 Z" fill="#ff8a2e" opacity=".9"/><path d="M194 32 Q200 28 200 20" stroke="#ff6a2e" stroke-width="3" fill="none"/>`
+};
+
+
+  const KIND = {};
+  const VIP = ["", "linear-gradient(90deg,#6c7a96,#9fb0cf)", "linear-gradient(90deg,#1fb6a6,#2a7fff)", "linear-gradient(90deg,#3a5bff,#6b3aff)", "linear-gradient(90deg,#ff3fa4,#b13aff)"];
+  const THRESH = [0, 1000, 5000, 20000, 100000];
+  const st = document.createElement("style");
+  st.textContent = `
+  .stg{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 14px 90px}
+  .stc{position:relative;background:linear-gradient(165deg,#2b2218,#15110d);border:1px solid #5a4620;border-radius:20px;padding:10px 10px 12px;text-align:left;color:#fff;cursor:pointer}
+  .stc svg{width:100%;height:auto;display:block;margin:20px 0 6px;filter:drop-shadow(0 6px 10px #0008)}
+  .stc b{display:block;font-size:17px;font-weight:700}
+  .stc .pr{display:flex;justify-content:space-between;align-items:center;margin-top:4px;color:#ffd35a;font-weight:600}
+  .stc .pr i{font-style:normal;color:#aaa;font-weight:400}
+  .stc .lk{position:absolute;inset:0;border-radius:20px;background:#000a;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700}
+  .vb{position:absolute;left:10px;top:10px;font-size:12px;font-weight:800;font-style:italic;padding:2px 9px;border-radius:12px;color:#fff;border:1px solid #fff5}
+  .stc .ow{position:absolute;right:10px;top:10px;background:#2ecc71;color:#06220f;font-size:11px;font-weight:800;border-radius:10px;padding:2px 8px}
+  .stsh{position:fixed;inset:0;z-index:180;background:#000b;display:flex;align-items:flex-end}
+  .stsh>div{width:100%;background:#17141a;border-radius:24px 24px 0 0;padding:18px 18px 26px;max-height:88vh;overflow:auto}
+  .ridefx{position:fixed;inset:0;z-index:9999;pointer-events:none;overflow:hidden}
+  .ridefx .ra{position:absolute;width:62vw;max-width:340px;filter:drop-shadow(0 0 22px #ffcf4a99)}
+  .ridefx .rb{position:absolute;left:50%;bottom:22%;transform:translateX(-50%);background:linear-gradient(90deg,#00000000,#000b,#00000000);padding:10px 34px;border-radius:30px;color:#fff;font-weight:700;font-size:17px;white-space:nowrap;animation:rbn 4s ease both}
+  @keyframes rbn{0%{opacity:0;transform:translate(-50%,16px)}12%,82%{opacity:1;transform:translate(-50%,0)}100%{opacity:0}}
+  @keyframes rdrive{0%{left:-70vw}45%{left:19vw}58%{left:19vw}100%{left:110vw}}
+  @keyframes rfly{0%{left:-60vw;top:70%;transform:rotate(-8deg) scale(.7)}50%{left:20vw;top:34%;transform:rotate(0) scale(1.05)}62%{left:22vw;top:33%}100%{left:110vw;top:6%;transform:rotate(-6deg) scale(.8)}}
+  @keyframes rsail{0%{left:-70vw}40%{left:19vw}70%{left:21vw}100%{left:110vw}}
+  @keyframes rrock{0%{left:30vw;top:100%;transform:scale(.7)}45%{left:30vw;top:30%;transform:scale(1.1)}60%{left:32vw;top:28%}100%{left:60vw;top:-45%;transform:scale(.6)}}
+  .rotor{transform-origin:100px 26px;animation:rspin .25s linear infinite}@keyframes rspin{50%{transform:scaleX(.15)}}`;
+  document.head.appendChild(st);
+  const kindOf = (k) => (window.__rk && window.__rk[k]) || "drive";
+  LS.playRide = function (key, who, name) {
+    if (!ART[key]) return;
+    const fx = document.createElement("div"); fx.className = "ridefx";
+    const kind = kindOf(key);
+    const anim = kind === "fly" ? "rfly 4.2s ease-in-out both" : kind === "sail" ? "rsail 4.6s ease-in-out both" : kind === "rocket" ? "rrock 4s ease-in both" : "rdrive 4s ease-in-out both";
+    const top = kind === "drive" ? "top:46%" : kind === "sail" ? "top:52%" : "";
+    fx.innerHTML = `<svg class="ra" viewBox="0 0 200 120" style="${top};animation:${anim}">${ART[key]}</svg><div class="rb">👑 ${esc(who || "Someone")} arrived in ${esc(name || key)}</div>`;
+    document.body.appendChild(fx); setTimeout(() => fx.remove(), 4800);
+  };
+  let cache = null;
+  async function load(force) {
+    if (cache && !force) return cache;
+    const { data, error } = await sb.rpc("store_list");
+    if (error || !data) throw new Error("x");
+    cache = data; window.__rk = window.__rk || {}; data.rides.forEach((r) => { window.__rk[r.key] = r.kind; });
+    return data;
+  }
+  const left = (iso) => { const d = Math.max(0, new Date(iso) - Date.now()), days = Math.floor(d / 864e5); return days >= 1 ? days + "d left" : Math.max(1, Math.floor(d / 36e5)) + "h left"; };
+  S.store = function (view) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    let dead = false, tab = "store";
+    view.innerHTML = `<header class="er-top"><button class="icon-btn" id="stb" aria-label="Back">←</button><div class="er-title">Store</div><a href="#/recharge" style="color:#ffd35a;text-decoration:none;font-weight:700;font-size:15px" id="stbal">…</a></header>
+      <div id="stlv" style="margin:6px 14px 10px"></div>
+      <div class="seg wide" id="sttabs" style="margin:0 14px 12px"><button class="on" data-t="store">Store</button><button data-t="mine">My rides</button></div>
+      <p style="color:#9a9aa3;font-size:13.5px;line-height:1.4;margin:0 16px 12px">Rides show a full-screen entrance when you join someone's LIVE. Store purchases only raise your SVIP level. They do not count as income for streamers.</p>
+      <div id="stbody"><div class="pf-empty">Loading…</div></div>`;
+    $("#stb", view).addEventListener("click", () => { history.length > 1 ? history.back() : (location.hash = "#/profile"); });
+    const body = $("#stbody", view);
+    function head(d) {
+      $("#stbal", view).innerHTML = `<i class="coin"></i> ${LS.coins == null ? "…" : LS.coins.toLocaleString()}`;
+      const lv = d.level, next = THRESH[lv + 1], pct = next ? Math.min(100, Math.round(((d.spent - THRESH[lv]) / (next - THRESH[lv])) * 100)) : 100;
+      $("#stlv", view).innerHTML = `<div style="background:#1b1b22;border-radius:14px;padding:12px 14px"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">${lv ? `<span class="vb" style="position:static;background:${VIP[lv]}">SVIP ${lv}</span>` : "No SVIP yet"}</b><small style="color:#9a9aa3">Spent ${Number(d.spent).toLocaleString()} coins</small></div><div style="height:7px;background:#2a2a33;border-radius:4px;margin-top:9px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${VIP[Math.min(4, lv + 1)] || VIP[4]}"></div></div><small style="color:#9a9aa3;display:block;margin-top:6px">${next ? `${(next - d.spent).toLocaleString()} more coins spent to reach SVIP ${lv + 1}` : "Top level reached 🎉"}</small></div>`;
+    }
+    async function draw(force) {
+      let d; try { d = await load(force); } catch (e) { body.innerHTML = `<div class="pf-empty">Could not load the Store. Try again.</div>`; return; }
+      if (dead) return;
+      head(d);
+      const own = {}; d.owned.forEach((o) => { own[o.ride_key] = o; });
+      const active = (k) => own[k] && new Date(own[k].expires_at) > Date.now();
+      if (tab === "mine") {
+        const mine = d.rides.filter((r) => active(r.key));
+        body.innerHTML = mine.length ? `<div class="sp-card" style="margin:0 14px">${mine.map((r) => `<div class="sp-r" style="gap:12px"><svg viewBox="0 0 200 120" width="84" height="50">${ART[r.key]}</svg><div style="flex:1"><b style="display:block;font-weight:600">${esc(r.name)}</b><em>${left(own[r.key].expires_at)}</em></div><button data-pv="${r.key}" style="background:#ffffff1f;border:0;color:#fff;border-radius:10px;padding:8px 10px">▶</button><label style="display:flex;align-items:center;gap:6px;color:#cfcfd6;font-size:14px"><input type="checkbox" class="switch" data-eq="${r.key}" ${own[r.key].equipped ? "checked" : ""}></label></div>`).join("")}</div><p style="color:#9a9aa3;margin:12px 20px;font-size:14px">Switch on the ride you want to arrive in. Only one can be on.</p>` : `<div class="pf-empty">You do not own any rides yet.<br>Open the Store tab to get one.</div>`;
+        body.querySelectorAll("[data-pv]").forEach((b) => b.addEventListener("click", () => LS.playRide(b.dataset.pv, "You", (d.rides.find((r) => r.key === b.dataset.pv) || {}).name)));
+        body.querySelectorAll("[data-eq]").forEach((c) => c.addEventListener("change", async () => {
+          const { error } = await sb.rpc("equip_ride", { p_key: c.dataset.eq, p_on: c.checked });
+          if (error) { toast("Could not change. Try again."); } else { toast(c.checked ? "Equipped ✓" : "Unequipped"); }
+          draw(true);
+        }));
+        return;
+      }
+      body.innerHTML = `<div class="stg">${d.rides.map((r) => `<div class="stc" data-k="${r.key}">${r.svip ? `<span class="vb" style="background:${VIP[r.svip]}">SVIP${r.svip}</span>` : ""}${active(r.key) ? `<span class="ow">OWNED</span>` : ""}<svg viewBox="0 0 200 120">${ART[r.key]}</svg><b>${esc(r.name)}</b><div class="pr"><span><i class="coin"></i> ${r.price.toLocaleString()}</span><i>${r.days}d</i></div>${d.level < r.svip ? `<div class="lk">🔒 SVIP ${r.svip}</div>` : ""}</div>`).join("")}</div>`;
+      body.querySelectorAll(".stc").forEach((c) => c.addEventListener("click", () => sheet(d.rides.find((r) => r.key === c.dataset.k), d, own[c.dataset.k])));
+    }
+    function sheet(r, d, o) {
+      const locked = d.level < r.svip, owned = o && new Date(o.expires_at) > Date.now();
+      const ov = document.createElement("div"); ov.className = "stsh";
+      ov.innerHTML = `<div><div style="text-align:center;background:linear-gradient(165deg,#2b2218,#15110d);border-radius:18px;padding:10px"><svg viewBox="0 0 200 120" style="width:70%;max-width:280px">${ART[r.key]}</svg></div>
+        <h2 style="margin:14px 0 2px;font-size:22px">${esc(r.name)} ${r.svip ? `<span class="vb" style="position:static;background:${VIP[r.svip]}">SVIP ${r.svip}</span>` : ""}</h2>
+        <p style="color:#cfcfd6;margin:4px 0 12px;font-size:15.5px">Use it for <b>${r.days} days</b>. Shows a full-screen entrance when you join a LIVE. ${owned ? `<br><span style="color:#2ecc71">You own this (${left(o.expires_at)}). Buying again adds ${r.days} days.</span>` : ""}</p>
+        <div style="display:flex;gap:10px"><button id="spv" style="flex:1;background:#ffffff1f;color:#fff;border:0;border-radius:12px;padding:14px;font-size:16px">▶ Preview</button><button id="sbuy" ${locked ? "disabled" : ""} style="flex:2;background:${locked ? "#444" : "#fe2c55"};color:#fff;border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:700">${locked ? `🔒 Needs SVIP ${r.svip}` : `${owned ? "Renew" : "Buy"} · ${r.price.toLocaleString()} coins`}</button></div>
+        <button id="sx" style="width:100%;margin-top:10px;background:none;color:#9a9aa3;border:0;padding:10px;font-size:15px">Close</button></div>`;
+      document.body.appendChild(ov);
+      const close = () => ov.remove();
+      $("#sx", ov).addEventListener("click", close); ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+      $("#spv", ov).addEventListener("click", () => LS.playRide(r.key, "You", r.name));
+      $("#sbuy", ov).addEventListener("click", async (e) => {
+        if (locked) return;
+        if ((LS.coins || 0) < r.price) { close(); toast("Not enough coins. Recharge first."); location.hash = "#/recharge"; return; }
+        e.target.disabled = true; e.target.textContent = "Buying…";
+        const { data, error } = await sb.rpc("buy_ride", { p_key: r.key });
+        if (error) { const m = error.message || ""; toast(/not_enough/.test(m) ? "Not enough coins." : /svip/.test(m) ? "Your SVIP level is too low." : "Could not buy. Try again."); e.target.disabled = false; e.target.textContent = "Buy"; return; }
+        LS.coins = data; close(); toast("Bought ✓ " + r.name); LS.playRide(r.key, "You", r.name); draw(true);
+      });
+    }
+    $("#sttabs", view).addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (!b) return; tab = b.dataset.t; view.querySelectorAll("#sttabs button").forEach((x) => x.classList.toggle("on", x === b)); draw(); });
+    LS.refreshBalance && LS.refreshBalance().then(() => { if (!dead) draw(true); });
+    draw(true);
+    return () => { dead = true; };
+  };
+  /* live room: announce my ride and play others' entrances */
+  const prevRoom = S.room;
+  S.room = function (view, id) {
+    const c = prevRoom.apply(this, arguments);
+    let ch = null, dead = false; const names = {};
+    (async () => { try { await load(); } catch (e) { /* ignore */ } })();
+    try {
+      ch = sb.channel("ride-" + id + "-" + Math.random().toString(36).slice(2, 7)).on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: "stream_id=eq." + id }, async (p) => {
+        const m = p && p.new; if (!m || m.kind !== "ride" || dead) return;
+        const key = String(m.gift || "").replace("ride:", "");
+        let nm = names[m.user_id];
+        if (!nm) { try { const { data } = await sb.from("profiles").select("display_name,username").eq("id", m.user_id).maybeSingle(); nm = data ? (data.display_name || data.username) : "Someone"; } catch (e) { nm = "Someone"; } names[m.user_id] = nm; }
+        const rn = String(m.body || "").replace("arrived in ", "");
+        LS.playRide(key, m.user_id === (LS.user && LS.user.id) ? "You" : nm, rn);
+      }).subscribe();
+    } catch (e) { /* ignore */ }
+    const t = setTimeout(async () => { if (dead || !LS.user) return; try { await sb.rpc("announce_entrance", { p_stream: id }); } catch (e) { /* ignore */ } }, 2500);
+    return () => { dead = true; clearTimeout(t); try { if (ch) sb.removeChannel(ch); } catch (e) { /* ignore */ } if (c) c(); };
+  };
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
@@ -8606,6 +8756,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     [/^\/auth$/, S.auth, "profile"],
     [/^\/edit-profile$/, S.editProfile, "thread"],
     [/^\/recharge$/, S.recharge, "thread"],
+    [/^\/store$/, S.store, "thread"],
     [/^\/earnings$/, S.earnings, "thread"],
     [/^\/upload-video$/, S.uploadVideo, "thread"],
     [/^\/follows\/(followers|following)$/, S.follows, "profile"],
