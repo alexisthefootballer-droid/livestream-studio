@@ -3173,6 +3173,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           ${sel("about", "📄", "About me", [["1", "Shown"], ["0", "Hidden"]], T.about ? "1" : "0")}
           ${swr("record", "⏺️", "Save a recording", "Saves your LIVE so you can replay or post it later. Not saved in Practice mode.", live())}
           ${go("recs", "🎞", "LIVE recordings")}
+          ${go("grp", "💬", "Group chats")}
           ${swr("guardian", "🛡️", "Guardian", "Let viewers compete each week to be your Guardian. The top gifter gets a shield in chat.", false)}
           ${swr("ai", "🤖", "AI-generated content", "Label your LIVE if it uses AI-made or AI-edited visuals or voices.")}
           ${sel("disc", "📢", "Content disclosure", [["none", "None"], ["brand", "Own brand"], ["paid", "Paid partnership"]], T.disc || "none")}
@@ -3237,6 +3238,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (b.id === "tlx") { ctx.close(); return; }
       if (b.id === "tlback") { vw = "main"; render(); return; }
       if (b.dataset.go === "seats") { ctx.close(); ctx.openSeats(); return; }
+      if (b.dataset.go === "grp") { if (live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "End your LIVE first, then open Group chats in your Inbox."; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); } else { ctx.close(); location.hash = "#/inbox"; } return; }
       if (b.dataset.go === "recs") { if (live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "End your LIVE first, then open LIVE recordings."; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); } else { ctx.close(); location.hash = "#/recordings"; } return; }
       if (b.dataset.prem) { const kind = vw; LS.hostSetRemove(kind, b.dataset.prem).then(() => render()); return; }
       if (b.id === "tlpadd") {
@@ -9196,6 +9198,197 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
 })();
 </script>
   <script>
+/* Group chats: create a group, invite people with a link, chat together. */
+(function () {
+  "use strict";
+  const LS = window.LS, S = LS.screens, sb = LS.sb;
+  const $ = (s, r) => (r || document).querySelector(s), $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.style.zIndex = 400; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); };
+  const ERR = { login: "Please log in first.", name: "Give the group a name (up to 40 letters).", limit: "You can own up to 10 groups.", notfound: "That invite link is not valid.", banned: "You can not join this group.", full: "This group is full.", owner: "The owner can not leave. Delete the group instead.", notowner: "Only the owner can do that.", notmember: "You are not in this group.", slow: "Slow down a little.", body: "Write a message first." };
+  const errText = (e) => { const m = String((e && e.message) || ""); for (const k in ERR) if (m.indexOf(k) >= 0) return ERR[k]; return "Something went wrong. Try again."; };
+  const ago = (t) => { const s = (Date.now() - new Date(t).getTime()) / 1000; if (s < 60) return "now"; if (s < 3600) return Math.floor(s / 60) + "m"; if (s < 86400) return Math.floor(s / 3600) + "h"; return new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
+  const link = (code) => location.origin + "/#/join/" + code;
+
+  const st = document.createElement("style");
+  st.textContent = `
+  .gc-bar{display:flex;gap:8px;padding:10px 12px}
+  .gc-bar button{flex:1;background:#2b2b35;color:#fff;border:0;border-radius:12px;padding:11px;font-size:15px}
+  .gc-bar .p{background:linear-gradient(90deg,#ff2d55,#9a45ff)}
+  .gc-av{width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,#ff3d6e,#7b5bff);display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;flex:0 0 auto}
+  .gc-top{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid #ffffff14}
+  .gc-top a,.gc-top button.i{background:none;border:0;color:#fff;font-size:22px;text-decoration:none;padding:4px 8px}
+  .gc-top .t{flex:1;min-width:0}
+  .gc-top .t b{display:block;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gc-top .t small{color:#9a9aa3}
+  .gc-msgs{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+  .gc-m{max-width:80%;align-self:flex-start;background:#2b2b35;color:#fff;border-radius:14px;padding:7px 11px;font-size:15px;line-height:1.35;word-wrap:break-word}
+  .gc-m i{display:block;font-style:normal;font-size:12px;color:#ffd35c;margin-bottom:2px}
+  .gc-m.me{align-self:flex-end;background:#6a3df0}
+  .gc-wrap{display:flex;flex-direction:column;height:100dvh;background:#000;color:#fff}
+  .gc-comp{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #ffffff14}
+  .gc-comp input{flex:1;background:#1b1b22;color:#fff;border:0;border-radius:20px;padding:11px 14px;font-size:15px}
+  .gc-comp button{background:linear-gradient(90deg,#ff2d55,#9a45ff);color:#fff;border:0;border-radius:20px;padding:0 18px;font-size:15px}
+  .gc-sh{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:320;display:flex;align-items:flex-end}
+  .gc-sh>div{width:100%;max-width:520px;margin:0 auto;background:#1b1b22;color:#fff;border-radius:18px 18px 0 0;padding:14px 0 18px;max-height:80vh;overflow:auto}
+  .gc-sh h3{margin:0 16px 10px;font-size:18px}
+  .gc-sh button.r,.gc-sh .r{display:flex;align-items:center;width:100%;box-sizing:border-box;text-align:left;background:none;border:0;color:#fff;font-size:16px;padding:13px 18px;gap:10px}
+  .gc-sh .red{color:#ff6b86}
+  .gc-sh input{margin:0 16px 12px;width:calc(100% - 32px);box-sizing:border-box;background:#2b2b35;border:0;color:#fff;border-radius:10px;padding:12px;font-size:16px}
+  .gc-sh .rm{margin-left:auto;background:#3a1d26;color:#ff6b86;border:0;border-radius:12px;padding:5px 11px;font-size:13px}
+  .gc-empty{padding:50px 24px;text-align:center;color:#9a9aa3;line-height:1.5}
+  `;
+  document.head.appendChild(st);
+
+  function sheet(html, onclick) {
+    const ov = document.createElement("div"); ov.className = "gc-sh"; ov.innerHTML = `<div>${html}</div>`;
+    ov.addEventListener("click", (e) => { if (e.target === ov) { ov.remove(); return; } if (onclick) onclick(e, () => ov.remove(), ov); });
+    document.body.appendChild(ov); return ov;
+  }
+  async function groupList() { try { const { data } = await sb.rpc("my_groups"); return data || []; } catch (e) { return []; } }
+
+  /* ---- create / join dialogs ---- */
+  LS.groupCreate = function (after) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    const ov = sheet(`<h3>New group</h3><input id="gcn" maxlength="40" placeholder="Group name (for example: My fans)"><button class="r" data-a="go" style="justify-content:center;font-weight:700">Create group</button>`, async (e, close, o) => {
+      const b = e.target.closest("[data-a]"); if (!b) return;
+      b.disabled = true;
+      const { data, error } = await sb.rpc("create_group", { p_name: $("#gcn", o).value });
+      if (error) { b.disabled = false; toast(errText(error)); return; }
+      close(); if (after) after(data); else location.hash = "#/group/" + data;
+    });
+    setTimeout(() => { const i = $("#gcn", ov); if (i) i.focus(); }, 50);
+  };
+  LS.groupJoinCode = function () {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    sheet(`<h3>Join with a code or link</h3><input id="gcj" placeholder="Paste the invite link or code"><button class="r" data-a="go" style="justify-content:center;font-weight:700">Join</button>`, async (e, close, o) => {
+      const b = e.target.closest("[data-a]"); if (!b) return;
+      let v = $("#gcj", o).value.trim(); const m = v.match(/join\/([A-Za-z0-9]+)/); if (m) v = m[1];
+      if (!v) return;
+      location.hash = "#/join/" + v; close();
+    });
+  };
+
+  /* ---- Inbox: Groups tab ---- */
+  const prevInbox = S.inbox;
+  S.inbox = function (view) {
+    const c = prevInbox.apply(this, arguments);
+    const tabs = $("#tabs", view), list = $("#list", view);
+    if (!tabs || !list) return c;
+    const btn = document.createElement("button"); btn.dataset.gt = "1"; btn.textContent = "Groups"; tabs.appendChild(btn);
+    const gl = document.createElement("div"); gl.id = "glist"; gl.style.display = "none"; list.parentNode.insertBefore(gl, list.nextSibling);
+    let dead = false, on = false, poll = null;
+    async function draw() {
+      if (dead || !on) return;
+      if (!LS.user) { gl.innerHTML = `<div class="gc-empty">Log in to use group chats.<br><br><a class="btn" href="#/auth">Log in</a></div>`; return; }
+      const rows = await groupList(); if (dead || !on) return;
+      gl.innerHTML = `<div class="gc-bar"><button class="p" data-a="new">＋ New group</button><button data-a="join">🔗 Join</button></div>` +
+        (rows.length ? rows.map((g) => `<a class="row-item" href="#/group/${g.id}"><span class="gc-av">${esc((g.name || "?").trim().charAt(0).toUpperCase())}</span><div class="grow"><b>${esc(g.name)}</b><small>${g.last_body ? esc(String(g.last_body).slice(0, 60)) : g.members + " member" + (g.members == 1 ? "" : "s")}</small></div><div class="right"><small>${ago(g.last_at)}</small></div></a>`).join("") : `<div class="gc-empty">No groups yet.<br>Create one for your fans or friends, then share the invite link.</div>`);
+    }
+    function show(v) { on = v; list.style.display = v ? "none" : ""; gl.style.display = v ? "" : "none"; btn.classList.toggle("on", v); if (v) { $$("#tabs button", view).forEach((x) => { if (x !== btn) x.classList.remove("on"); }); draw(); } }
+    btn.addEventListener("click", (e) => { e.stopPropagation(); show(true); });
+    tabs.addEventListener("click", (e) => { if (!e.target.closest("[data-gt]")) show(false); });
+    gl.addEventListener("click", (e) => { const b = e.target.closest("[data-a]"); if (!b) return; if (b.dataset.a === "new") LS.groupCreate(); else LS.groupJoinCode(); });
+    poll = setInterval(draw, 15000);
+    return () => { dead = true; clearInterval(poll); if (c) c(); };
+  };
+
+  /* ---- group chat screen ---- */
+  S.group = function (view, id) {
+    if (!LS.user) { location.hash = "#/auth"; return; }
+    let dead = false, ch = null, poll = null, info = null, names = {}, last = 0;
+    const seen = new Set();
+    view.innerHTML = `<div class="gc-wrap"><div class="gc-top"><a href="#/inbox" aria-label="Back">←</a><div class="t"><b id="gct">Group</b><small id="gcs"></small></div><button class="i" id="gcm" aria-label="Menu">⋯</button></div>
+      <div class="gc-msgs" id="gcl"><div class="gc-empty">Loading…</div></div>
+      <div class="gc-comp"><input id="gci" placeholder="Message…" autocomplete="off" maxlength="1000"><button id="gcsend" type="button">Send</button></div></div>`;
+    const box = $("#gcl", view);
+    async function who(ids) {
+      const need = ids.filter((i) => !names[i]); if (!need.length) return;
+      try { const { data } = await sb.from("profiles").select("id,username,display_name").in("id", need); (data || []).forEach((p) => { names[p.id] = p.display_name || p.username || "user"; }); } catch (e) { /* ignore */ }
+    }
+    async function add(rows, scroll) {
+      const fresh = rows.filter((m) => !seen.has(m.id)); if (!fresh.length) return;
+      await who(fresh.map((m) => m.user_id)); if (dead) return;
+      if (box.querySelector(".gc-empty")) box.innerHTML = "";
+      fresh.forEach((m) => {
+        if (seen.has(m.id)) return; seen.add(m.id); if (m.id > last) last = m.id;
+        const me = m.user_id === LS.user.id, d = document.createElement("div");
+        d.className = "gc-m" + (me ? " me" : "");
+        d.innerHTML = (me ? "" : `<i>${esc(names[m.user_id] || "user")}</i>`) + esc(m.body);
+        box.appendChild(d);
+      });
+      box.scrollTop = box.scrollHeight;
+    }
+    async function load() {
+      const { data, error } = await sb.from("group_messages").select("id,user_id,body,created_at").eq("group_id", id).order("id", { ascending: false }).limit(60);
+      if (dead) return;
+      if (error) { box.innerHTML = `<div class="gc-empty">You are not in this group.<br><br><a class="btn" href="#/inbox">Back</a></div>`; return; }
+      const rows = (data || []).reverse();
+      if (!rows.length && !seen.size) box.innerHTML = `<div class="gc-empty">No messages yet. Say hi 👋</div>`;
+      await add(rows);
+    }
+    async function head() {
+      const g = (await groupList()).find((x) => x.id === id); if (dead) return;
+      if (!g) { box.innerHTML = `<div class="gc-empty">You are not in this group.<br><br><a class="btn" href="#/inbox">Back</a></div>`; return; }
+      info = g; $("#gct", view).textContent = g.name; $("#gcs", view).textContent = g.members + " member" + (g.members == 1 ? "" : "s");
+      await load();
+      try { ch = sb.channel("grp-" + id + "-" + Math.random().toString(36).slice(2, 7)).on("postgres_changes", { event: "INSERT", schema: "public", table: "group_messages", filter: "group_id=eq." + id }, (p) => { if (p && p.new && !dead) add([p.new]); }).subscribe(); } catch (e) { /* polling covers it */ }
+      poll = setInterval(async () => { if (dead) return; const { data } = await sb.from("group_messages").select("id,user_id,body,created_at").eq("group_id", id).gt("id", last).order("id", { ascending: true }).limit(50); if (data && data.length) add(data); }, 5000);
+    }
+    head();
+    let busy = false;
+    async function send() {
+      const inp = $("#gci", view), v = inp.value.trim(); if (!v || busy || !info) return; busy = true;
+      try {
+        const mod = LS.moderate ? await LS.moderate(v, "dm") : null;
+        if (mod && mod.allowed === false) { toast("Not sent. " + (mod.message || "It breaks the chat rules.")); return; }
+        const r = await sb.rpc("send_group_message", { p_group: id, p_body: v });
+        if (r.error) { toast(errText(r.error)); return; }
+        inp.value = ""; add([{ id: r.data, user_id: LS.user.id, body: v }]);
+      } catch (e) { toast("Could not send. Try again."); } finally { busy = false; }
+    }
+    $("#gcsend", view).addEventListener("click", send);
+    $("#gci", view).addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    $("#gcm", view).addEventListener("click", () => {
+      if (!info) return; const owner = info.owner_id === LS.user.id;
+      sheet(`<h3>${esc(info.name)}</h3><button class="r" data-a="inv">🔗 Invite people</button><button class="r" data-a="mem">👥 Members</button>${owner ? `<button class="r red" data-a="del">🗑 Delete group</button>` : `<button class="r red" data-a="leave">🚪 Leave group</button>`}`, async (e, close) => {
+        const a = e.target.closest("[data-a]"); if (!a) return; const k = a.dataset.a;
+        if (k === "inv") { close(); LS.shareSheet({ url: link(info.code), text: "Join my group \"" + info.name + "\" on LiveStream Studio" }); }
+        else if (k === "mem") { close(); members(); }
+        else if (k === "leave") { if (!confirm("Leave this group?")) return; const r = await sb.rpc("leave_group", { p_group: id }); if (r.error) { toast(errText(r.error)); return; } close(); location.hash = "#/inbox"; }
+        else if (k === "del") { if (!confirm("Delete this group for everyone?")) return; const r = await sb.rpc("delete_group", { p_group: id }); if (r.error) { toast(errText(r.error)); return; } close(); location.hash = "#/inbox"; }
+      });
+    });
+    async function members() {
+      const { data } = await sb.rpc("group_member_list", { p_group: id }); const owner = info.owner_id === LS.user.id;
+      sheet(`<h3>Members</h3>${(data || []).map((m) => `<div class="r"><span>${esc(m.display_name || m.username || "user")}${m.role === "owner" ? " 👑" : ""}</span>${owner && m.user_id !== LS.user.id ? `<button class="rm" data-rm="${m.user_id}">Remove</button>` : ""}</div>`).join("")}`, async (e, close) => {
+        const b = e.target.closest("[data-rm]"); if (!b) return;
+        if (!confirm("Remove this person? They can not rejoin.")) return;
+        const r = await sb.rpc("remove_group_member", { p_group: id, p_user: b.dataset.rm }); if (r.error) { toast(errText(r.error)); return; }
+        b.closest(".r").remove(); toast("Removed");
+      });
+    }
+    return () => { dead = true; clearInterval(poll); try { if (ch) sb.removeChannel(ch); } catch (e) { /* ignore */ } };
+  };
+
+  /* ---- invite link screen ---- */
+  S.joinGroup = function (view, code) {
+    view.innerHTML = `<div class="gc-empty" style="padding-top:90px">Loading…</div>`;
+    if (!LS.user) { try { sessionStorage.setItem("ls.afterLogin", "#/join/" + code); } catch (e) { /* ignore */ } view.innerHTML = `<div class="gc-empty" style="padding-top:90px">Log in to join this group.<br><br><a class="btn big" href="#/auth">Log in</a></div>`; return; }
+    let dead = false;
+    (async () => {
+      const { data } = await sb.rpc("group_preview", { p_code: code }); if (dead) return;
+      const g = data && data[0];
+      if (!g) { view.innerHTML = `<div class="gc-empty" style="padding-top:90px">This invite link is not valid.<br><br><a class="btn" href="#/inbox">Back</a></div>`; return; }
+      if (g.joined) { location.hash = "#/group/" + g.id; return; }
+      view.innerHTML = `<div class="gc-empty" style="padding-top:90px"><span class="gc-av" style="margin:0 auto 14px;width:84px;height:84px;font-size:36px">${esc(g.name.charAt(0).toUpperCase())}</span><h2 style="color:#fff;margin:0 0 6px">${esc(g.name)}</h2>${g.members} member${g.members == 1 ? "" : "s"}<br><br><button class="btn big" id="gj">Join group</button><p><a href="#/inbox" style="color:#9a9aa3">Not now</a></p></div>`;
+      $("#gj", view).addEventListener("click", async () => { const r = await sb.rpc("join_group", { p_code: code }); if (r.error) { toast(errText(r.error)); return; } location.hash = "#/group/" + r.data; });
+    })();
+    return () => { dead = true; };
+  };
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
@@ -9227,6 +9420,8 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
     [/^\/edit-profile$/, S.editProfile, "thread"],
     [/^\/recharge$/, S.recharge, "thread"],
     [/^\/store$/, S.store, "thread"],
+    [/^\/group\/([\w-]+)$/, S.group, "thread"],
+    [/^\/join\/([\w]+)$/, S.joinGroup, "thread"],
     [/^\/recordings$/, S.recordings, "thread"],
     [/^\/earnings$/, S.earnings, "thread"],
     [/^\/upload-video$/, S.uploadVideo, "thread"],
