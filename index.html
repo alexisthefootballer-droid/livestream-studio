@@ -350,6 +350,10 @@ body.immersive #tabbar { display: none; }
 .qk .qkb b{font-size:13px}
 .qk .qkc{display:block;width:100%;background:rgba(255,255,255,.08);border:0;color:#fff;padding:3px 0;cursor:pointer}
 .qk.shut{width:44px}.qk.shut .qkb{display:none}.qk.shut .qkc{transform:rotate(180deg)}
+.emo-tray{position:absolute;left:10px;right:10px;bottom:64px;display:flex;flex-wrap:wrap;gap:4px;background:rgba(20,20,26,.95);border-radius:14px;padding:8px;z-index:8}
+.emo-tray.hidden{display:none}
+.emo-tray button{background:none;border:0;font-size:24px;padding:4px 6px;cursor:pointer}
+.room-bottom{gap:5px;padding-left:8px;padding-right:8px}.room-bottom .icon-btn{width:38px;height:38px;min-width:38px;flex:none;font-size:17px}.room-bottom input{min-width:0;padding:0 12px}
 .gslot { position: relative; width: 62px; height: 82px; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: rgba(0,0,0,0.38); border: 2px dashed rgba(255,255,255,0.6); color: #fff; cursor: pointer; backdrop-filter: blur(4px); }
 .gslot.gtile { cursor: pointer; }
 .gmenu-bg { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 90; display: flex; align-items: flex-end; }
@@ -2019,6 +2023,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         <div class="hearts" id="hearts"></div>
         <div class="room-bottom">
           <input id="msg" placeholder="Say something…" maxlength="120" autocomplete="off" enterkeyhint="send">
+          <button class="icon-btn glass" id="emoBtn" aria-label="Emoji" type="button">😊</button>
+          <button class="icon-btn glass" id="roseBtn" aria-label="Send a rose" type="button">🌹</button>
           <button class="icon-btn glass send-btn" id="sendMsg" aria-label="Send message" type="button">➤</button>
           <button class="icon-btn glass" id="soundBtn" aria-label="Sound">${LS.audio.on ? "🔊" : "🔇"}</button>
           <button class="icon-btn glass" id="giftBtn" aria-label="Gifts">🎁</button>
@@ -2073,7 +2079,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       $("#hearts", view).appendChild(h);
       setTimeout(() => h.remove(), 2200);
     }
-    $("#heartBtn", view).addEventListener("click", () => { for (let i = 0; i < 3; i++) setTimeout(heart, i * 90); });
+    $("#heartBtn", view).addEventListener("click", () => { for (let i = 0; i < 3; i++) setTimeout(heart, i * 90); if (real && real.sendLike) real.sendLike(); });
     $("#stage", view).addEventListener("dblclick", () => { for (let i = 0; i < 5; i++) setTimeout(heart, i * 80); });
     const showBal = () => {
       const bal = $("#giftBal", view);
@@ -2127,6 +2133,15 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         $("#gifts", view).classList.add("hidden");
       });
     });
+    {
+      const EM = ["😀","😂","🥰","😍","😎","🔥","👏","🙏","❤️","💜","👍","🎉","😭","😮","🤣","💯","✨","🌹","🇨🇲","🇦🇪"];
+      const tray = document.createElement("div"); tray.className = "emo-tray hidden";
+      tray.innerHTML = EM.map((e) => `<button type="button">${e}</button>`).join("");
+      const rb = $(".room-bottom", view); if (rb) rb.appendChild(tray);
+      $("#emoBtn", view).addEventListener("click", () => tray.classList.toggle("hidden"));
+      tray.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const inp = $("#msg", view); inp.value += b.textContent; inp.focus(); });
+      $("#roseBtn", view).addEventListener("click", () => { const q = $('.qk [data-q="0"]', view); if (q) q.click(); });
+    }
     {
       const roomEl0 = $(".room", view);
       const qk = document.createElement("div"); qk.className = "qk";
@@ -2934,6 +2949,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       <h4 class="er-sec">Basic info</h4>
       <div class="er-card">
         <div class="er-row er-bio"><label for="eb">Bio</label><textarea id="eb" maxlength="500" rows="10" placeholder="Tell people about yourself. Press Enter for a new line.">${esc(pr.bio || "")}</textarea></div>
+        <div class="er-row"><label for="ec">Country</label><input id="ec" maxlength="40" autocomplete="off" placeholder="Shown in live chat" value="${esc(pr.country || "")}"></div>
+        <div class="er-row"><label for="ey">Birth year</label><input id="ey" inputmode="numeric" maxlength="4" placeholder="Optional, shows your age" value="${pr.birth_year || ""}"></div>
         <div class="er-row"><label for="el">Links</label><input id="el" maxlength="200" inputmode="url" autocapitalize="none" placeholder="Add a link" value="${esc(pr.links || "")}"></div>
       </div>
       <div class="er-count" id="ecnt"></div>
@@ -2969,7 +2986,9 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         const rawLink = $("#el", view).value.trim();
         const link = safeUrl(rawLink);
         if (rawLink && !link) { msg("That link doesn't look right. Use a web address like example.com."); return; }
-        const upd = { display_name: $("#en", view).value.trim() || null, username, bio: $("#eb", view).value.trim() || null, links: link || null };
+        const by = parseInt($("#ey", view).value, 10), yr = new Date().getFullYear();
+        if ($("#ey", view).value.trim() && !(by >= 1920 && by <= yr - 18)) { msg("Birth year must show an age of 18 or older."); return; }
+        const upd = { display_name: $("#en", view).value.trim() || null, username, bio: $("#eb", view).value.trim() || null, links: link || null, country: $("#ec", view).value.trim() || null, birth_year: $("#ey", view).value.trim() ? by : null };
         const file = $("#efile", view).files[0];
         if (file) {
           const blob = await shrink(file);
@@ -3033,6 +3052,16 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     } catch (e) { /* ignore */ }
     need.forEach((i) => { if (!names[i]) names[i] = "user"; });
   }
+
+  const profInfo = {};
+  LS.profLine = async function (id) {
+    if (!sb || !id) return "";
+    if (!profInfo[id]) {
+      try { const { data } = await sb.from("profiles").select("country,birth_year").eq("id", id).maybeSingle(); profInfo[id] = data || {}; } catch (e) { profInfo[id] = {}; }
+    }
+    const d = profInfo[id], age = d.birth_year ? new Date().getFullYear() - d.birth_year : null;
+    return [age, d.country ? "from " + d.country : ""].filter(Boolean).join(" ");
+  };
 
   async function getToken(roomName, asHost) {
     const { data, error } = await wt(sb.functions.invoke("livekit-token", { body: { roomName, asHost: !!asHost } }), 15000);
@@ -3669,6 +3698,24 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         if (!error) el.remove();
       };
       LS.loadHostLists();
+      room.on(LK.RoomEvent.DataReceived, async (payload, p) => {
+        if (!p) return;
+        try {
+          const d = JSON.parse(new TextDecoder().decode(payload)); if (d.t !== "like") return;
+          await ensureNames([p.identity]);
+          const el = document.createElement("div"); el.className = "msg";
+          el.innerHTML = `<b>${esc(names[p.identity] || "Someone")}</b> liked the LIVE`;
+          box.appendChild(el); box.scrollTop = box.scrollHeight;
+        } catch (e) { /* ignore */ }
+      });
+      room.on(LK.RoomEvent.ParticipantConnected, async (p) => {
+        if (!p || LS.hostLists.marked.has(p.identity)) return;
+        await ensureNames([p.identity]);
+        const ln = await LS.profLine(p.identity);
+        const el = document.createElement("div"); el.className = "msg";
+        el.innerHTML = `<b>${esc(names[p.identity] || "Someone")}</b> ${esc(ln || "joined")}`;
+        box.appendChild(el); box.scrollTop = box.scrollHeight;
+      });
       room.on(LK.RoomEvent.ParticipantConnected, async (p) => {
         if (!p || !LS.hostLists.marked.has(p.identity)) return;
         await ensureNames([p.identity]);
@@ -3826,9 +3873,25 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           guestsBox.dataset.vr = st.voice_ring || "green";
           roomEl.on(LK.RoomEvent.ActiveSpeakersChanged, (sp) => tiles.speaking((sp || []).map((x) => x.identity)));
           roomEl.on(LK.RoomEvent.ParticipantConnected, count);
+          roomEl.on(LK.RoomEvent.ParticipantConnected, async (p) => {
+            if (!p || p.identity === st.host_id || p.identity === myId) return;
+            await ensureNames([p.identity]);
+            const ln = await LS.profLine(p.identity);
+            addChat(names[p.identity] || "Someone", ln || "joined", "sys");
+          });
+          let liked = false;
+          real.sendLike = () => {
+            if (liked) return; liked = true;
+            try { roomEl.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ t: "like" })), { reliable: true }); } catch (e) { /* ignore */ }
+            addChat("You", "liked the LIVE", "sys");
+          };
           roomEl.on(LK.RoomEvent.ParticipantDisconnected, (p) => { tiles.remove(p.identity); count(); if (p.identity === st.host_id) sys(hostName + " left the live."); });
           roomEl.on(LK.RoomEvent.DataReceived, (payload, p) => {
-            if (!p || p.identity !== st.host_id) return;
+            if (p && p.identity !== st.host_id) {
+              try { const d0 = JSON.parse(new TextDecoder().decode(payload)); if (d0.t === "like") ensureNames([p.identity]).then(() => addChat(names[p.identity] || "Someone", "liked the LIVE", "sys")); } catch (e) { /* ignore */ }
+              return;
+            }
+            if (!p) return;
             try { const d = JSON.parse(new TextDecoder().decode(payload)); if (d.t === "fx") { applyFx(stage, d); if (d.vr) guestsBox.dataset.vr = d.vr; } } catch (e) { /* ignore */ }
           });
           roomEl.on(LK.RoomEvent.Disconnected, () => {
