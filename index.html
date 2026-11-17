@@ -341,6 +341,15 @@ body.immersive #tabbar { display: none; }
 @keyframes vrp{50%{filter:brightness(1.15)}}
 @keyframes vrr{0%,100%{--vrc:#ff3d3d}33%{--vrc:#3dff7a}66%{--vrc:#3da5ff}}
 @property --vrc{syntax:"<color>";inherits:true;initial-value:#2ee66b}
+.qk{position:absolute;right:10px;top:150px;z-index:6;width:150px;background:rgba(0,0,0,.35);backdrop-filter:blur(6px);border-radius:14px;overflow:hidden}
+.qk .qkb{display:flex;flex-direction:column}
+.qk .qkb button{display:flex;align-items:center;gap:8px;background:none;border:0;color:#fff;padding:7px 9px;text-align:left;font:inherit;cursor:pointer}
+.qk .qkb button.pop{transform:scale(1.08)}
+.qk .qi{position:relative;font-size:28px;line-height:1;width:34px;text-align:center}
+.qk .qi i{position:absolute;right:-4px;bottom:-4px;font:700 10px/1 system-ui;background:#000a;border-radius:8px;padding:2px 4px}
+.qk .qkb b{font-size:13px}
+.qk .qkc{display:block;width:100%;background:rgba(255,255,255,.08);border:0;color:#fff;padding:3px 0;cursor:pointer}
+.qk.shut{width:44px}.qk.shut .qkb{display:none}.qk.shut .qkc{transform:rotate(180deg)}
 .gslot { position: relative; width: 62px; height: 82px; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: rgba(0,0,0,0.38); border: 2px dashed rgba(255,255,255,0.6); color: #fff; cursor: pointer; backdrop-filter: blur(4px); }
 .gslot.gtile { cursor: pointer; }
 .gmenu-bg { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 90; display: flex; align-items: flex-end; }
@@ -2118,6 +2127,30 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         $("#gifts", view).classList.add("hidden");
       });
     });
+    {
+      const roomEl0 = $(".room", view);
+      const qk = document.createElement("div"); qk.className = "qk";
+      const QS = [["Say hi", "Rose"], ["Heart gesture", "Finger Heart"]];
+      const mk = () => QS.map((q, i) => { const g = LS.GIFTS.find((x) => x.name === q[1]); return g ? `<button data-q="${i}"><span class="qi">${g.icon}<i>${g.cost}</i></span><b>${q[0]}</b></button>` : ""; }).join("");
+      qk.innerHTML = `<div class="qkb">${mk()}</div><button class="qkc" aria-label="Hide">︿</button>`;
+      if (roomEl0) roomEl0.appendChild(qk);
+      qk.addEventListener("click", (e) => {
+        if (e.target.closest(".qkc")) { qk.classList.toggle("shut"); return; }
+        const b = e.target.closest("[data-q]"); if (!b) return;
+        const g = LS.GIFTS.find((x) => x.name === QS[+b.dataset.q][1]); if (!g) return;
+        if (!LS.user || !LS.spendGift) { location.hash = "#/auth"; return; }
+        if (b.dataset.busy) return; b.dataset.busy = "1";
+        LS.spendGift(g, c.userId || null, real ? real.streamId : null).then((res) => {
+          delete b.dataset.busy;
+          if (!res.ok) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = res.reason === "ended" ? "This live has ended." : res.reason === "not_enough_coins" ? "Not enough coins. Tap 🎁 then Recharge." : "Could not send. Try again."; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); return; }
+          showBal();
+          if (!real) addChat("You", `sent ${g.name} ${g.icon}`, "gift");
+          const played = LS.giftFx($(".room", view), g, "You");
+          for (let i = 0; i < (played ? 4 : 6); i++) setTimeout(() => heart(g.icon), i * 100);
+          b.classList.add("pop"); setTimeout(() => b.classList.remove("pop"), 300);
+        });
+      });
+    }
     if (!real) $("#follow", view).addEventListener("click", (e) => {
       following = !following;
       e.target.textContent = following ? "Following" : "Follow";
