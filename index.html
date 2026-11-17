@@ -334,6 +334,13 @@ body.immersive #tabbar { display: none; }
 .sp-none, .sp-msg { color: var(--muted); font-size: 13px; padding: 4px 0; }
 .sp-msg { color: #ffd6e8; }
 .guests.host { top: 54px; }
+.guests .gtile.speak{box-shadow:0 0 0 3px var(--vrc,#2ee66b),0 0 14px 3px var(--vrc,#2ee66b),inset 0 0 12px 2px var(--vrc,#2ee66b);border-color:var(--vrc,#2ee66b);animation:vrp 1s ease-in-out infinite}
+.guests[data-vr=green]{--vrc:#2ee66b}.guests[data-vr=pink]{--vrc:#ff3d8b}.guests[data-vr=blue]{--vrc:#3da5ff}.guests[data-vr=gold]{--vrc:#ffc83d}
+.guests[data-vr=rainbow] .gtile.speak{animation:vrp 1s ease-in-out infinite,vrr 1.5s linear infinite}
+.guests[data-vr=off] .gtile.speak{box-shadow:none;animation:none}
+@keyframes vrp{50%{filter:brightness(1.15)}}
+@keyframes vrr{0%,100%{--vrc:#ff3d3d}33%{--vrc:#3dff7a}66%{--vrc:#3da5ff}}
+@property --vrc{syntax:"<color>";inherits:true;initial-value:#2ee66b}
 .gslot { position: relative; width: 62px; height: 82px; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: rgba(0,0,0,0.38); border: 2px dashed rgba(255,255,255,0.6); color: #fff; cursor: pointer; backdrop-filter: blur(4px); }
 .gslot.gtile { cursor: pointer; }
 .gmenu-bg { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 90; display: flex; align-items: flex-end; }
@@ -3047,6 +3054,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       els.set(id, t);
       return t;
     }
+    const spk = new Set();
     function paint() {
       const ids = Array.from(tr.keys()), used = new Set();
       ids.forEach((id) => { const q = pos.get(id); if (q == null || used.has(q)) pos.delete(id); else used.add(q); });
@@ -3059,7 +3067,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         const id = ids.find((x) => pos.get(x) === i);
         if (id) {
           const t = tileEl(id);
-          el.className = "gslot gtile"; el.dataset.id = id; el.dataset.slot = i;
+          el.className = "gslot gtile" + (spk.has(id) ? " speak" : ""); el.dataset.id = id; el.dataset.slot = i;
           if (t.wrap.parentNode !== el) { el.innerHTML = ""; el.appendChild(t.wrap); t.wrap.style.display = "contents"; if (t.v.paused) { const pr = t.v.play(); if (pr && pr.catch) pr.catch(() => {}); } }
         } else {
           el.className = "gslot"; el.innerHTML = "<i>+</i>"; delete el.dataset.id; delete el.dataset.slot;
@@ -3068,6 +3076,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     }
     const api = {
       onChange: null,
+      speaking(ids) { spk.clear(); (ids || []).forEach((i) => spk.add(i)); slotEls.forEach((el) => { if (el.dataset.id) el.classList.toggle("speak", spk.has(el.dataset.id)); }); },
       has(id) { return tr.has(id); },
       streamOf(id) { const i = tr.get(id); return i ? i.ms : null; },
       setOverride(id, stream) {
@@ -3152,7 +3161,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       LS.hostLists[kind].delete(uid);
     } catch (e) { /* ignore */ }
   };
-  LS.TOOLS_DEFAULT = { record: false, watch: "everyone", about: true, quality: "720", noise: true, stable: true, practice: false, strict: false, blocked: "" };
+  LS.TOOLS_DEFAULT = { record: false, watch: "everyone", about: true, quality: "720", noise: true, stable: true, practice: false, strict: false, blocked: "", vr: "green" };
   LS.videoConstraints = (T, facing) => { const q = QUALITY[T.quality] || QUALITY["720"]; return { facingMode: facing, width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: T.stable ? 24 : 30 } }; };
   LS.audioConstraints = (T) => ({ noiseSuppression: !!T.noise, echoCancellation: true, autoGainControl: true });
   LS.videoEncoding = (T) => ({ maxBitrate: (QUALITY[T.quality] || QUALITY["720"]).br, maxFramerate: T.stable ? 24 : 30 });
@@ -3181,6 +3190,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           ${go("grp", "💬", "Group chats")}
           ${swr("guardian", "🛡️", "Guardian", "Let viewers compete each week to be your Guardian. The top gifter gets a shield in chat.", false)}
           ${swr("ai", "🤖", "AI-generated content", "Label your LIVE if it uses AI-made or AI-edited visuals or voices.")}
+          ${sel("vr", "🎙", "Voice rings", [["green", "Green"], ["pink", "Pink"], ["blue", "Blue"], ["gold", "Gold"], ["rainbow", "Rainbow"], ["off", "Off"]], T.vr || "green")}
           ${sel("disc", "📢", "Content disclosure", [["none", "None"], ["brand", "Own brand"], ["paid", "Paid partnership"]], T.disc || "none")}
         </div>
         <div class="tl-card">
@@ -3271,6 +3281,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       else if (k === "practice") { T.practice = el.checked; }
       else if (k === "record") { T.record = el.checked; }
       else if (k === "ai") { T.ai = el.checked; push({ ai_generated: T.ai }); }
+      else if (k === "vr") { T.vr = el.value; if (LS.vrHost) LS.vrHost(T.vr); }
       else if (k === "disc") { T.disc = el.value; push({ disclosure: T.disc }); }
       else if (k === "guardian") { T.guardian = el.checked; if (LS.user) sb.from("guardian_settings").upsert({ host_id: LS.user.id, enabled: T.guardian, updated_at: new Date().toISOString() }).then(() => {}, () => {}); }
       else if (k === "strict") { T.strict = el.checked; push({ chat_strict: T.strict }); }
@@ -3554,10 +3565,14 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     const count = () => room.remoteParticipants.size;
     const upd = () => { try { o.onViewers && o.onViewers(count()); } catch (e) { /* ignore */ } };
     const sendFx = () => {
-      try { room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ t: "fx", layout: fx.layout, loop: fx.loop })), { reliable: true }); } catch (e) { /* ignore */ }
+      try { room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ t: "fx", layout: fx.layout, loop: fx.loop, vr: fx.vr })), { reliable: true }); } catch (e) { /* ignore */ }
     };
     const gtiles = o.guestsEl ? guestTiles(o.guestsEl) : null;
     const gaudio = document.createElement("div"); gaudio.style.display = "none"; document.body.appendChild(gaudio);
+    fx.vr = (o.tools && o.tools.vr) || "green";
+    if (o.guestsEl) o.guestsEl.dataset.vr = fx.vr;
+    LS.vrHost = (v) => { fx.vr = v; if (o.guestsEl) o.guestsEl.dataset.vr = v; sendFx(); };
+    room.on(LK.RoomEvent.ActiveSpeakersChanged, (sp) => { if (gtiles) gtiles.speaking((sp || []).map((x) => x.identity)); });
     room.on(LK.RoomEvent.TrackSubscribed, (track, pub, p) => {
       if (track.kind === "video") { if (gtiles) gtiles.add(p.identity, track); }
       else if (track.kind === "audio") { const el = track.attach(); gaudio.appendChild(el); }
@@ -3751,11 +3766,13 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
             if (track.kind === "video") { if (p && p.identity === st.host_id) sw.setHost(null); else if (p) tiles.remove(p.identity); }
             else try { track.detach().forEach((e) => e.remove()); } catch (e) { /* ignore */ }
           });
+          guestsBox.dataset.vr = st.voice_ring || "green";
+          roomEl.on(LK.RoomEvent.ActiveSpeakersChanged, (sp) => tiles.speaking((sp || []).map((x) => x.identity)));
           roomEl.on(LK.RoomEvent.ParticipantConnected, count);
           roomEl.on(LK.RoomEvent.ParticipantDisconnected, (p) => { tiles.remove(p.identity); count(); if (p.identity === st.host_id) sys(hostName + " left the live."); });
           roomEl.on(LK.RoomEvent.DataReceived, (payload, p) => {
             if (!p || p.identity !== st.host_id) return;
-            try { const d = JSON.parse(new TextDecoder().decode(payload)); if (d.t === "fx") applyFx(stage, d); } catch (e) { /* ignore */ }
+            try { const d = JSON.parse(new TextDecoder().decode(payload)); if (d.t === "fx") { applyFx(stage, d); if (d.vr) guestsBox.dataset.vr = d.vr; } } catch (e) { /* ignore */ }
           });
           roomEl.on(LK.RoomEvent.Disconnected, () => {
             if (dead || busy) return;
