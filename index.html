@@ -2190,6 +2190,12 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         </label>
         <h4 class="sec2">Screen layout</h4>
         <div class="chips wrap" id="layouts">${layoutChips(layout)}</div>
+        <h4 class="sec2">Photo background</h4>
+        <div class="chips wrap" id="gbg">${LS.gbgChips ? LS.gbgChips() : ""}</div>
+        <label class="btn ghost upload">🖼 Use my own photo
+          <input type="file" id="gbgfile" accept="image/*" hidden>
+        </label>
+        <p class="note" id="gbgnote"></p>
         <h4 class="sec2">Video playing on your stream</h4>
         <div class="chips wrap" id="loops">${loopChips(loop)}</div>
         <label class="btn ghost upload">📁 Upload your own video
@@ -2224,6 +2230,24 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       stage.emptyEl.innerHTML = "📷<small>Camera is off</small>";
       $("#cam", view).textContent = "Turn on camera";
     }
+    if (LS.gbg) LS.gbg.reset();
+    const gnote = (t) => { const n = $("#gbgnote", view); if (n) n.textContent = t; };
+    const gApply = async (mode, img) => {
+      LS.gbg.set(mode, img);
+      $$("#gbg [data-gbg]", view).forEach((x) => x.classList.toggle("on", x.dataset.gbg === mode));
+      gnote(mode === "none" ? "" : "Loading…");
+      if (stream) await camOn();
+      gnote(LS.gbg.failed ? "Could not load the background tool. Check your internet." : mode === "none" ? "" : "Background on.");
+    };
+    $("#gbg", view).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-gbg]"); if (!b) return;
+      const m = b.dataset.gbg;
+      if (m === "none" || m === "blur") gApply(m); else gApply("img", LS.gbg.preset(m));
+    });
+    $("#gbgfile", view).addEventListener("change", (e) => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      const im = new Image(); im.onload = () => gApply("img", im); im.src = URL.createObjectURL(f);
+    });
     $("#cam", view).addEventListener("click", () => { if (stream && bc) { $("#gonote", view).textContent = "End the live first to turn the camera off."; return; } stream ? camOff() : camOn(); });
     $("#mic", view).addEventListener("click", () => {
       micOn = !micOn;
@@ -9410,6 +9434,83 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
   };
 })();
 </script>
+  <script>
+/* Photo background: person cut-out over a picture (selfie segmentation). */
+(function () {
+  const LS = window.LS;
+  const PRE = [["gold", "🏙 Gold", ["#2a1a05", "#a8741a", "#f6d27a"]], ["sunset", "🌅 Sunset", ["#3a0d4a", "#e8506a", "#ffc371"]], ["ocean", "🌊 Ocean", ["#021a3a", "#0a6aa8", "#5be0e0"]], ["love", "💗 Love", ["#2b0818", "#b8185c", "#ff8fbf"]], ["green", "🟩 Green", ["#00a64f", "#1fd36e", "#00a64f"]]];
+  const G = { mode: "none", img: null, failed: false };
+  LS.gbg = G;
+  G.reset = () => { G.mode = "none"; G.img = null; G.failed = false; };
+  G.set = (m, img) => { G.mode = m; G.img = img || null; G.failed = false; };
+  G.preset = (id) => {
+    const d = PRE.find((x) => x[0] === id) || PRE[0];
+    const c = document.createElement("canvas"); c.width = 720; c.height = 1280;
+    const x = c.getContext("2d"), g = x.createLinearGradient(0, 0, 360, 1280);
+    g.addColorStop(0, d[2][0]); g.addColorStop(0.55, d[2][1]); g.addColorStop(1, d[2][2]);
+    x.fillStyle = g; x.fillRect(0, 0, 720, 1280);
+    for (let i = 0; i < 40; i++) { x.fillStyle = "rgba(255,255,255," + (0.05 + Math.random() * 0.12) + ")"; x.beginPath(); x.arc(Math.random() * 720, Math.random() * 1280, 8 + Math.random() * 40, 0, 7); x.fill(); }
+    return c;
+  };
+  LS.gbgChips = () => `<button class="chip on" data-gbg="none">🚫 None</button><button class="chip" data-gbg="blur">🫧 Blur</button>` + PRE.map((d) => `<button class="chip" data-gbg="${d[0]}">${d[1]}</button>`).join("");
+  let segP = null;
+  function loadSeg() {
+    if (segP) return segP;
+    segP = new Promise((res, rej) => {
+      const done = () => { try { const sg = new window.SelfieSegmentation({ locateFile: (f) => "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/" + f }); sg.setOptions({ modelSelection: 1 }); res(sg); } catch (e) { rej(e); } };
+      if (window.SelfieSegmentation) return done();
+      const sc = document.createElement("script"); sc.src = "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/selfie_segmentation.js";
+      sc.onload = done; sc.onerror = () => rej(new Error("load")); document.head.appendChild(sc);
+    }).catch((e) => { segP = null; throw e; });
+    return segP;
+  }
+  async function process(raw) {
+    const sg = await loadSeg();
+    const vt = raw.getVideoTracks()[0]; if (!vt) return raw;
+    const st = vt.getSettings ? vt.getSettings() : {};
+    const v = document.createElement("video"); v.muted = true; v.playsInline = true; v.srcObject = new MediaStream([vt]);
+    await v.play().catch(() => {});
+    const W = st.width || v.videoWidth || 720, H = st.height || v.videoHeight || 1280;
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const x = cv.getContext("2d");
+    let last = null, stop = false, busy = false;
+    const mode = G.mode, img = G.img;
+    sg.onResults((r) => { last = r; });
+    function cover(src, sw, sh) { const k = Math.max(W / sw, H / sh), w = sw * k, h = sh * k; x.drawImage(src, (W - w) / 2, (H - h) / 2, w, h); }
+    function frame() {
+      if (!last || !last.segmentationMask) { x.drawImage(v, 0, 0, W, H); return; }
+      x.save(); x.clearRect(0, 0, W, H);
+      x.drawImage(last.segmentationMask, 0, 0, W, H);
+      x.globalCompositeOperation = "source-in"; x.drawImage(v, 0, 0, W, H);
+      x.globalCompositeOperation = "destination-over";
+      if (mode === "blur" || !img) { x.filter = "blur(18px)"; x.drawImage(v, -20, -20, W + 40, H + 40); x.filter = "none"; }
+      else cover(img, img.width || img.videoWidth, img.height || img.videoHeight);
+      x.restore();
+    }
+    const timer = setInterval(async () => {
+      if (stop) return;
+      if (!busy && v.readyState >= 2) { busy = true; try { await sg.send({ image: v }); } catch (e) { /* ignore */ } busy = false; }
+      frame();
+    }, 40);
+    const out = cv.captureStream(25);
+    const ot = out.getVideoTracks()[0];
+    const realStop = ot.stop.bind(ot);
+    ot.stop = () => { stop = true; clearInterval(timer); try { vt.stop(); } catch (e) { /* ignore */ } try { v.srcObject = null; } catch (e) { /* ignore */ } realStop(); };
+    const res = new MediaStream([ot]);
+    raw.getAudioTracks().forEach((a) => res.addTrack(a));
+    return res;
+  }
+  const md = navigator.mediaDevices;
+  if (md && md.getUserMedia) {
+    const orig = md.getUserMedia.bind(md);
+    md.getUserMedia = async function (c) {
+      const raw = await orig(c);
+      if (G.mode === "none" || !c || !c.video) return raw;
+      try { return await process(raw); } catch (e) { G.failed = true; return raw; }
+    };
+  }
+})();
+  </script>
   <script>
 /* Tiny hash router. */
 (function () {
