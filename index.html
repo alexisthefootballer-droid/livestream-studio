@@ -2142,7 +2142,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         if (b.dataset.busy) return; b.dataset.busy = "1";
         LS.spendGift(g, c.userId || null, real ? real.streamId : null).then((res) => {
           delete b.dataset.busy;
-          if (!res.ok) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = res.reason === "ended" ? "This live has ended." : res.reason === "not_enough_coins" ? "Not enough coins. Tap 🎁 then Recharge." : "Could not send. Try again."; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); return; }
+          if (!res.ok) { const d = document.createElement("div"); const msgT = res.reason === "ended" ? "This live has ended." : res.reason === "not_enough_coins" ? "Not enough coins. Tap 🎁, then Recharge." : "Could not send. Check your internet."; d.textContent = msgT; d.style.cssText = "position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#000e;color:#fff;padding:10px 16px;border-radius:20px;z-index:9999;font-size:14px;max-width:86%;text-align:center"; document.body.appendChild(d); addChat("system", msgT, "sys"); setTimeout(() => d.remove(), 3000); return; }
           showBal();
           if (!real) addChat("You", `sent ${g.name} ${g.icon}`, "gift");
           const played = LS.giftFx($(".room", view), g, "You");
