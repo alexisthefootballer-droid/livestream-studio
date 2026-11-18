@@ -9813,13 +9813,13 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
         const cl = LS.curLive, host = cl && cl.hostId;
         const row = document.createElement("div"); row.className = "sh-row last";
         const it = (a, c, ic, t) => `<button class="sh-it" data-x="${a}"><span class="c" style="background:${c}">${ic}</span>${t}</button>`;
-        row.innerHTML = (host && !(LS.user && LS.user.id === host) ? it("rep", "#555", "🚩", "Report") : "") + it("fb", "#e0a030", "💬", "Feedback") + it("vq", "#3b6cf6", "🎞", "Video quality") + it("ds", "#19a974", "📱", "Device status") + it("bgp", "#8a5cf6", "🎧", "Background player") + it("set", "#6b6b78", "⚙️", "Settings");
+        row.innerHTML = (host && !(LS.user && LS.user.id === host) ? it("rep", "#555", "🚩", "Report") : "") + it("fb", "#e0a030", "💬", "Feedback") + it("vq", "#3b6cf6", "🎞", "Video quality") + it("ds", "#19a974", "📱", "Device status") + it("story", "#e0457b", "➕", "Add to Story") + it("bgp", "#8a5cf6", "🎧", "Background player") + it("set", "#6b6b78", "⚙️", "Settings");
         sh.appendChild(row);
         row.addEventListener("click", (e) => {
           const b = e.target.closest("[data-x]"); if (!b) return; const a = b.dataset.x; ov.remove();
           if (a === "rep") LS.reportSheet({ uid: host, uname: "this live" });
           else if (a === "fb") { if (LS.openHelp) LS.openHelp(); }
-          else if (a === "bgp") bgSheet(); else if (a === "vq") qualitySheet(); else if (a === "ds") deviceSheet(); else if (a === "set") settingsSheet();
+          else if (a === "story") { if (LS.storySheet) LS.storySheet(); } else if (a === "bgp") bgSheet(); else if (a === "vq") qualitySheet(); else if (a === "ds") deviceSheet(); else if (a === "set") settingsSheet();
         });
       }
     }
@@ -10000,6 +10000,92 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
 .ds-h{display:flex;justify-content:space-between;align-items:center;font-size:20px;margin-bottom:10px}.ds-x{background:#ffffff1f;border:0;color:#fff;width:36px;height:36px;border-radius:50%;font-size:16px}
 .ds-r{display:flex;gap:12px;padding:10px 0;align-items:flex-start;font-size:17px}.ds-r span{font-size:22px}.ds-r p{margin:4px 0 0;color:#b9b9c0;font-size:14px}
 .ds-d{color:#9a9aa3;font-size:13px;margin:8px 0}.ds-l{color:#9a9aa3}.ds-sh h5{margin:14px 0 4px;font-size:15px}.ds-i{margin:0;padding-left:18px;color:#cfcfd6;font-size:14px}`;
+  document.head.appendChild(css);
+})();
+  </script>
+  <script>
+/* Stories: share a LIVE to your story (24 hours) and see other people's stories. */
+(function () {
+  const LS = window.LS, sb = LS.sb, S = LS.screens;
+  const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; d.style.zIndex = 9999; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); };
+  const av = (url, name, size) => url ? `<img src="${esc(url)}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover">` : `<span style="width:${size}px;height:${size}px;border-radius:50%;background:#444;color:#fff;display:inline-grid;place-items:center;font-weight:700;font-size:${Math.round(size / 2.4)}px">${esc((name || "?").slice(0, 1).toUpperCase())}</span>`;
+  async function profiles(ids) {
+    const out = {}; const need = Array.from(new Set(ids.filter(Boolean))); if (!need.length) return out;
+    try { const { data } = await sb.from("profiles").select("id,username,display_name,avatar_url").in("id", need); (data || []).forEach((p) => { out[p.id] = p; }); } catch (e) { /* ignore */ }
+    return out;
+  }
+  function card(st, host, ended) {
+    return `<div class="stc"><span class="stc-live">${ended ? "LIVE ended" : "LIVE now"}</span><div class="stc-av">${av(host && host.avatar_url, host && (host.display_name || host.username), 110)}</div>
+      <div class="stc-t">${esc(st.title || "Live")}</div><div class="stc-go">${ended ? "This LIVE has ended" : "▮▮ Tap to watch LIVE"}</div></div>
+      <div class="stc-by">@${esc(host ? (host.display_name || host.username) : "host")}</div>`;
+  }
+  LS.storySheet = async function () {
+    const cl = LS.curLive;
+    if (!sb || !LS.user) { location.hash = "#/auth"; return; }
+    if (!cl || !cl.streamId) { toast("Open a LIVE first."); return; }
+    let st = { title: "Live" };
+    try { const { data } = await sb.from("streams").select("title,host_id").eq("id", cl.streamId).maybeSingle(); if (data) st = data; } catch (e) { /* ignore */ }
+    const pr = await profiles([cl.hostId, LS.user.id]);
+    const host = pr[cl.hostId], me = pr[LS.user.id];
+    const ov = document.createElement("div"); ov.className = "st-ov";
+    ov.innerHTML = `<button class="st-back" aria-label="Back">←</button><div class="st-prev">${card(st, host, false)}</div>
+      <button class="st-add">${av(me && me.avatar_url, me && (me.display_name || me.username), 36)}<b>Add to Story</b></button>`;
+    document.body.appendChild(ov);
+    ov.querySelector(".st-back").onclick = () => ov.remove();
+    ov.querySelector(".st-add").onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      const { error } = await sb.from("stories").insert({ kind: "live", stream_id: cl.streamId, host_id: cl.hostId, title: st.title || "Live" });
+      if (error) { e.currentTarget.disabled = false; toast("Could not add. Try again."); return; }
+      ov.remove(); toast("Added to your story ✔");
+    };
+  };
+  async function viewStories(items, pr) {
+    let i = 0;
+    const ov = document.createElement("div"); ov.className = "st-ov";
+    document.body.appendChild(ov);
+    async function show() {
+      const it = items[i]; if (!it) { ov.remove(); return; }
+      let ended = true;
+      try { const { data } = await sb.from("streams").select("is_live,last_seen").eq("id", it.stream_id).maybeSingle(); ended = !(data && data.is_live && Date.now() - new Date(data.last_seen).getTime() < 90000); } catch (e) { /* ignore */ }
+      const host = pr[it.host_id];
+      ov.innerHTML = `<button class="st-back" aria-label="Close">✕</button><div class="st-prev" data-go="1">${card(it, host, ended)}</div><div class="st-cnt">${i + 1} / ${items.length}${i < items.length - 1 ? " · tap here for next" : ""}</div>`;
+      ov.querySelector(".st-back").onclick = () => ov.remove();
+      ov.querySelector(".st-prev").onclick = () => { if (!ended) { ov.remove(); location.hash = "#/live/" + it.stream_id; } };
+      ov.querySelector(".st-cnt").onclick = () => { i++; show(); };
+    }
+    show();
+  }
+  const prevList = S.liveList;
+  S.liveList = function (view) {
+    const c = prevList.apply(this, arguments);
+    const holder = document.createElement("div"); holder.id = "storyrail";
+    const first = view.querySelector("#reallist") || view.querySelector("#list");
+    if (first && first.parentNode) first.parentNode.insertBefore(holder, first);
+    let dead = false;
+    (async () => {
+      if (!sb || !LS.user) return;
+      let rows = [];
+      try { const { data } = await sb.from("stories").select("id,user_id,stream_id,host_id,title,created_at").order("created_at", { ascending: false }).limit(60); rows = data || []; } catch (e) { /* ignore */ }
+      if (dead || !rows.length) return;
+      const pr = await profiles(rows.map((r) => r.user_id).concat(rows.map((r) => r.host_id)));
+      if (dead) return;
+      const by = {}; rows.forEach((r) => { (by[r.user_id] = by[r.user_id] || []).push(r); });
+      const users = Object.keys(by);
+      holder.innerHTML = `<div class="note" style="padding:8px 16px"><b>Stories</b></div><div class="rail">${users.map((u) => { const p = pr[u] || {}; return `<a class="story" data-u="${u}"><span class="ring">${av(p.avatar_url, p.display_name || p.username, 56)}</span><small>${esc((p.display_name || p.username || "user").split(" ")[0])}</small></a>`; }).join("")}</div>`;
+      holder.onclick = (e) => { const a = e.target.closest("[data-u]"); if (!a) return; viewStories(by[a.dataset.u].slice().reverse(), pr); };
+    })();
+    return () => { dead = true; if (c) c(); };
+  };
+  const css = document.createElement("style");
+  css.textContent = `.st-ov{position:fixed;inset:0;background:#111;z-index:9998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff}
+.st-back{position:absolute;left:14px;top:14px;background:none;border:0;color:#fff;font-size:26px}
+.st-prev{width:min(78vw,340px);cursor:pointer}
+.stc{position:relative;height:min(62vh,520px);border-radius:14px;background:linear-gradient(#0a1550,#1a2a80 60%,#0a1550);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;text-align:center}
+.stc-live{position:absolute;left:12px;top:12px;background:#ff2d6f;border-radius:8px;padding:5px 9px;font:700 13px system-ui}
+.stc-t{font:700 18px system-ui}.stc-go{margin-top:20px;font:700 17px system-ui}.stc-by{margin-top:8px;font:600 15px system-ui}
+.st-add{display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;color:#111;border:0;border-radius:30px;padding:10px 30px;font-size:17px;min-width:78vw;max-width:340px}
+.st-cnt{color:#aaa;font-size:14px;cursor:pointer;padding:8px}`;
   document.head.appendChild(css);
 })();
   </script>
