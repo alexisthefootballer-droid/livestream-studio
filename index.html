@@ -3053,6 +3053,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     need.forEach((i) => { if (!names[i]) names[i] = "user"; });
   }
 
+  LS.ensureNames = ensureNames; LS.nameOf = (i) => names[i] || "";
   const profInfo = {};
   LS.profLine = async function (id) {
     if (!sb || !id) return "";
@@ -3276,6 +3277,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           ${go("grp", "💬", "Group chats")}
           ${swr("guardian", "🛡️", "Guardian", "Let viewers compete each week to be your Guardian. The top gifter gets a shield in chat.", false)}
           ${swr("ai", "🤖", "AI-generated content", "Label your LIVE if it uses AI-made or AI-edited visuals or voices.")}
+          ${sel("match", "⚔️", "Live Match", [["0", "Off / stop"], ["120", "Start · 2 min"], ["180", "Start · 3 min"], ["300", "Start · 5 min"]], "0")}
           ${sel("vr", "🎙", "Voice rings", [["green", "Green"], ["pink", "Pink"], ["blue", "Blue"], ["gold", "Gold"], ["rainbow", "Rainbow"], ["off", "Off"]], T.vr || "green")}
           ${sel("disc", "📢", "Content disclosure", [["none", "None"], ["brand", "Own brand"], ["paid", "Paid partnership"]], T.disc || "none")}
         </div>
@@ -3367,6 +3369,12 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       else if (k === "practice") { T.practice = el.checked; }
       else if (k === "record") { T.record = el.checked; }
       else if (k === "ai") { T.ai = el.checked; push({ ai_generated: T.ai }); }
+      else if (k === "match") {
+        const secs = +el.value, say = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; d.style.zIndex = 9999; document.body.appendChild(d); setTimeout(() => d.remove(), 3000); };
+        if (!live()) { say("Go LIVE first, then start a match."); el.value = "0"; return; }
+        const sid = ctx.streamId();
+        (secs ? sb.rpc("start_match", { p_stream: sid, p_seconds: secs }) : sb.rpc("end_match", { p_stream: sid })).then((r) => { if (r.error) say("Could not change the match."); else say(secs ? "Match started! Viewers can gift each player." : "Match stopped."); });
+      }
       else if (k === "vr") { T.vr = el.value; if (LS.vrHost) LS.vrHost(T.vr); }
       else if (k === "disc") { T.disc = el.value; push({ disclosure: T.disc }); }
       else if (k === "guardian") { T.guardian = el.checked; if (LS.user) sb.from("guardian_settings").upsert({ host_id: LS.user.id, enabled: T.guardian, updated_at: new Date().toISOString() }).then(() => {}, () => {}); }
@@ -3669,6 +3677,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     });
     room.on(LK.RoomEvent.ParticipantConnected, () => { upd(); setTimeout(sendFx, 800); });
     room.on(LK.RoomEvent.ParticipantDisconnected, (p) => { if (gtiles) gtiles.remove(p.identity); upd(); });
+    const mt = o.guestsEl && LS.matchAttach ? LS.matchAttach({ room: o.guestsEl.parentNode, guests: o.guestsEl, stream: row.id, host: true }) : null;
     const sw = gtiles && o.stage ? swapper(o.stage, gtiles, true) : null;
     if (sw) sw.setHost(o.stream);
     const stopSeats = o.seatsEl ? seatsPanel(o.seatsEl, row.id, roomName, { gt: gtiles, swapGet: () => (sw ? sw.want : null), swapSet: (u) => { if (sw) sw.setWant(u); }, onSlotTap: o.onSlotTap, onRequests: o.onRequests, onPending: o.onPending, onCfg: o.onCfg, api: o.reqApi }) : null;
@@ -3754,6 +3763,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         clearInterval(beat);
         if (stopFeed) stopFeed();
         if (stopSeats) stopSeats();
+        try { if (mt) mt.stop(); } catch (e) { /* ignore */ }
         if (gtiles) gtiles.clear();
         gaudio.remove();
         try { await sb.rpc("host_set_seats", { p_stream: row.id, p_count: 0 }); } catch (e) { /* ignore */ }
@@ -3852,6 +3862,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           const tiles = guestTiles(guestsBox);
           const sw = swapper(stage, tiles, false);
           sw.setWant(st.swap_uid);
+          if (LS.matchAttach) { const mt = LS.matchAttach({ room: roomDiv, guests: guestsBox, stream: st.id, host: false, hostId: st.host_id }); stops.push(() => mt.stop()); }
           const joinBtn = document.createElement("button"); joinBtn.className = "join-btn hidden"; joinBtn.type = "button"; roomDiv.appendChild(joinBtn);
           let mySeat = null, seatCount = st.seat_count || 0, onStage = false, localStream = null, seatCam = st.seat_cam !== false;
           const count = () => { const n = roomEl.remoteParticipants ? roomEl.remoteParticipants.size : 0; if (vc) vc.textContent = "👁 " + fmtN(n); };
@@ -3876,9 +3887,11 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           roomEl.on(LK.RoomEvent.ParticipantConnected, async (p) => {
             if (!p || p.identity === st.host_id || p.identity === myId) return;
             await ensureNames([p.identity]);
+            if (LS.vset && LS.vset.get("joins") === false) return;
             const ln = await LS.profLine(p.identity);
             addChat(names[p.identity] || "Someone", ln || "joined", "sys");
           });
+          LS.curLive = { hostId: st.host_id, streamId: st.id, room: roomEl, t0: Date.now() };
           let liked = false;
           real.sendLike = () => {
             if (liked) return; liked = true;
@@ -3888,7 +3901,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           roomEl.on(LK.RoomEvent.ParticipantDisconnected, (p) => { tiles.remove(p.identity); count(); if (p.identity === st.host_id) sys(hostName + " left the live."); });
           roomEl.on(LK.RoomEvent.DataReceived, (payload, p) => {
             if (p && p.identity !== st.host_id) {
-              try { const d0 = JSON.parse(new TextDecoder().decode(payload)); if (d0.t === "like") ensureNames([p.identity]).then(() => addChat(names[p.identity] || "Someone", "liked the LIVE", "sys")); } catch (e) { /* ignore */ }
+              try { const d0 = JSON.parse(new TextDecoder().decode(payload)); if (d0.t === "like") ensureNames([p.identity]).then(() => { if (!(LS.vset && LS.vset.get("likes") === false)) addChat(names[p.identity] || "Someone", "liked the LIVE", "sys"); }); } catch (e) { /* ignore */ }
               return;
             }
             if (!p) return;
@@ -4024,7 +4037,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
               addChat(who, `sent ${m.gift || m.body} 🎁`, "gift");
               if (live && who !== "You") {
                 const g = LS.GIFTS.find((x) => x.name === (m.gift || m.body));
-                if (g) { if (!LS.giftFx(fxRoom(), g, who)) for (let i = 0; i < 4; i++) setTimeout(() => heart(g.icon), i * 100); }
+                if (g && !(LS.vset && LS.vset.get("gfx") === false)) { if (!LS.giftFx(fxRoom(), g, who)) for (let i = 0; i < 4; i++) setTimeout(() => heart(g.icon), i * 100); }
               }
             }
           }, (id) => { const x = chat.querySelector(`[data-mid="${id}"]`); if (x) x.remove(); }));
@@ -8906,7 +8919,7 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
       if (bar && !bar.querySelector("#shareBtn")) {
         const b = document.createElement("button");
         b.className = "icon-btn glass"; b.id = "shareBtn"; b.type = "button"; b.setAttribute("aria-label", "Share"); b.textContent = "\u21AA\uFE0F";
-        b.addEventListener("click", () => LS.shareSheet({ url: location.origin + "/#/live/" + id, text: "Watch this live on LiveStream Studio" }));
+        b.addEventListener("click", () => LS.shareSheet({ url: location.origin + "/#/live/" + id, text: "Watch this live on LiveStream Studio", live: true }));
         const g = bar.querySelector("#giftBtn"); bar.insertBefore(b, g || null);
       }
       if ((bar && bar.querySelector("#shareBtn")) || n > 40) clearInterval(tm);
@@ -9605,6 +9618,240 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
       try { return await process(raw); } catch (e) { G.failed = true; return raw; }
     };
   }
+})();
+  </script>
+  <script>
+/* Live room extras: Report, Feedback, Video quality, Device status, viewer Settings. */
+(function () {
+  "use strict";
+  const LS = window.LS;
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.style.cssText = "position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#000e;color:#fff;padding:10px 16px;border-radius:20px;z-index:500;font-size:14px;max-width:86%;text-align:center"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 3000); };
+  const st = document.createElement("style");
+  st.textContent = `.lv-ov{position:fixed;inset:0;z-index:420;background:rgba(0,0,0,.5);display:flex;align-items:flex-end}
+.lv-sh{width:100%;max-height:78vh;overflow:auto;background:#fff;color:#111;border-radius:22px 22px 0 0;padding:14px 18px calc(18px + env(safe-area-inset-bottom))}
+.lv-sh h3{text-align:center;margin:4px 0 12px;font-size:18px}
+.lv-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-top:1px solid #eee}
+.lv-row>div{flex:1}.lv-row small{display:block;color:#777;margin-top:3px;font-size:12.5px}
+.lv-row select{background:#f2f2f4;border:0;border-radius:8px;padding:8px;color:#111}
+.lv-sw{appearance:none;width:44px;height:26px;border-radius:13px;background:#ccc;position:relative;border:0;flex:none}
+.lv-sw:checked{background:#19c37d}.lv-sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.15s}.lv-sw:checked::after{left:21px}
+.lv-opt{display:block;width:100%;text-align:left;background:#f2f2f4;border:0;border-radius:12px;padding:13px;margin:6px 0;font-size:15px;color:#111}
+.lv-opt.on{outline:2px solid #19c37d}
+.lv-ds{display:flex;gap:12px;padding:12px 0;align-items:flex-start}.lv-ds i{font-style:normal;font-size:24px}
+.lv-ds b{display:block;font-weight:600}.lv-ds small{color:#777}`;
+  document.head.appendChild(st);
+
+  /* saved viewer settings (this phone) */
+  const defs = { joins: true, likes: true, gfx: true, wake: false, screen: 0, giftlim: 0 };
+  LS.vset = {
+    get(k) { try { const v = JSON.parse(localStorage.getItem("ls.vset") || "{}"); return k in v ? v[k] : defs[k]; } catch (e) { return defs[k]; } },
+    set(k, val) { let v = {}; try { v = JSON.parse(localStorage.getItem("ls.vset") || "{}"); } catch (e) { /* ignore */ } v[k] = val; try { localStorage.setItem("ls.vset", JSON.stringify(v)); } catch (e) { /* ignore */ } },
+  };
+  let wl = null;
+  async function wake(on) { try { if (on && navigator.wakeLock) wl = await navigator.wakeLock.request("screen"); else if (wl) { await wl.release(); wl = null; } } catch (e) { /* ignore */ } }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && LS.vset.get("wake") && LS.curLive) wake(true); });
+
+  /* screen-time reminder */
+  setInterval(() => {
+    const m = LS.vset.get("screen"), cl = LS.curLive;
+    if (!m || !cl || !/#\/live\//.test(location.hash)) return;
+    const mins = Math.floor((Date.now() - cl.t0) / 60000);
+    if (mins >= m && !cl.remind) { cl.remind = true; toast("⏰ You have been watching for " + mins + " minutes."); }
+  }, 20000);
+
+  /* gift limit notification */
+  let spent = 0, warned = false;
+  const origSpend = LS.spendGift;
+  if (origSpend) LS.spendGift = async function (g) {
+    const r = await origSpend.apply(this, arguments);
+    if (r && r.ok) {
+      spent += (g && g.cost) || 0;
+      const lim = LS.vset.get("giftlim");
+      if (lim && spent >= lim && !warned) { warned = true; toast("🎁 You have spent " + spent + " coins on gifts this visit."); }
+    }
+    return r;
+  };
+
+  function sheet(html, onMount) {
+    const ov = document.createElement("div"); ov.className = "lv-ov";
+    ov.innerHTML = `<div class="lv-sh">${html}</div>`;
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+    document.body.appendChild(ov);
+    if (onMount) onMount(ov);
+    return ov;
+  }
+
+  function settingsSheet() {
+    const v = LS.vset;
+    const sw = (k, t, d) => `<div class="lv-row"><div>${t}<small>${d}</small></div><input class="lv-sw" type="checkbox" data-k="${k}" ${v.get(k) ? "checked" : ""}></div>`;
+    const sl = (k, t, d, opts) => `<div class="lv-row"><div>${t}<small>${d}</small></div><select data-k="${k}">${opts.map(([a, b]) => `<option value="${a}" ${+v.get(k) === a ? "selected" : ""}>${b}</option>`).join("")}</select></div>`;
+    sheet(`<h3>Settings</h3>
+      ${sw("joins", "Joined messages", "Show who joined in the chat.")}
+      ${sw("likes", "Liked messages", "Show who liked the LIVE in the chat.")}
+      ${sw("gfx", "Gift animations", "Show big gift animations from other viewers.")}
+      ${sw("wake", "Keep screen on", "Stop the screen from turning off while you watch.")}
+      ${sl("screen", "Screen time", "Remind me after I watch for a while.", [[0, "Off"], [15, "15 min"], [30, "30 min"], [60, "1 hour"]])}
+      ${sl("giftlim", "Gift limit notification", "Warn me when my gifts reach this many coins.", [[0, "Off"], [50, "50"], [200, "200"], [1000, "1,000"]])}`, (ov) => {
+      ov.addEventListener("change", (e) => {
+        const el = e.target, k = el.dataset && el.dataset.k; if (!k) return;
+        if (el.type === "checkbox") { v.set(k, el.checked); if (k === "wake") wake(el.checked); }
+        else { v.set(k, +el.value); if (k === "screen" && LS.curLive) LS.curLive.remind = false; if (k === "giftlim") warned = false; }
+      });
+    });
+  }
+
+  function applyQuality(q) {
+    const cl = LS.curLive, LK = window.LivekitClient; if (!cl || !LK) return;
+    const lv = q === "low" ? LK.VideoQuality.LOW : LK.VideoQuality.HIGH;
+    try { cl.room.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub) => { if (pub.kind === "video" && pub.setVideoQuality) pub.setVideoQuality(lv); })); } catch (e) { /* ignore */ }
+  }
+  function qualitySheet() {
+    const cur = LS.vset.get("vq") || "auto";
+    sheet(`<h3>Video quality</h3>` + [["auto", "Auto", "Best for your connection"], ["high", "High", "Sharper video, uses more data"], ["low", "Low", "Saves data on a slow connection"]].map((o) => `<button class="lv-opt ${cur === o[0] ? "on" : ""}" data-q="${o[0]}"><b>${o[1]}</b><br><small style="color:#777">${o[2]}</small></button>`).join(""), (ov) => {
+      ov.addEventListener("click", (e) => { const b = e.target.closest("[data-q]"); if (!b) return; LS.vset.set("vq", b.dataset.q); applyQuality(b.dataset.q); toast("Video quality: " + b.querySelector("b").textContent); ov.remove(); });
+    });
+  }
+
+  function deviceSheet() {
+    const ov = sheet(`<h3>Device status</h3><div id="lvds"></div>`);
+    const box = ov.querySelector("#lvds");
+    let bat = null;
+    if (navigator.getBattery) navigator.getBattery().then((b) => { bat = b; }).catch(() => {});
+    const draw = () => {
+      const cn = navigator.connection || {}, q = LS.curLive && LS.curLive.room && LS.curLive.room.localParticipant ? String(LS.curLive.room.localParticipant.connectionQuality || "") : "";
+      const lowBat = bat && !bat.charging && bat.level < 0.15;
+      const slow = (cn.rtt && cn.rtt > 400) || /2g/.test(cn.effectiveType || "") || q === "poor" || q === "lost" || navigator.onLine === false;
+      box.innerHTML = `<div class="lv-ds"><i>${lowBat ? "🪫" : "🔋"}</i><div><b>${lowBat ? "Battery is low" : "Device is stable"}</b><small>${bat ? "Battery " + Math.round(bat.level * 100) + "%" + (bat.charging ? ", charging" : "") : "Battery details are not available on this browser."}</small></div></div>
+        <div class="lv-ds"><i>${slow ? "📶" : "✅"}</i><div><b>${slow ? "Unstable connection" : "Connection is good"}</b><small>${slow ? "Try moving closer to your router and limiting other devices on your network." : "Your internet looks fine for watching."}${cn.effectiveType ? " (" + esc(cn.effectiveType) + (cn.rtt ? ", " + cn.rtt + " ms" : "") + ")" : ""}</small></div></div>`;
+    };
+    draw(); const t = setInterval(() => { if (!ov.isConnected) clearInterval(t); else draw(); }, 2000);
+  }
+
+  /* add the extra row to the share sheet of a live */
+  const origShare = LS.shareSheet;
+  LS.shareSheet = function (o) {
+    const r = origShare.apply(this, arguments);
+    if (o && o.live) {
+      const ovs = document.querySelectorAll(".sh-ov"), ov = ovs[ovs.length - 1], sh = ov && ov.querySelector(".sh-sh");
+      if (sh) {
+        const cl = LS.curLive, host = cl && cl.hostId;
+        const row = document.createElement("div"); row.className = "sh-row last";
+        const it = (a, c, ic, t) => `<button class="sh-it" data-x="${a}"><span class="c" style="background:${c}">${ic}</span>${t}</button>`;
+        row.innerHTML = (host && !(LS.user && LS.user.id === host) ? it("rep", "#555", "🚩", "Report") : "") + it("fb", "#e0a030", "💬", "Feedback") + it("vq", "#3b6cf6", "🎞", "Video quality") + it("ds", "#19a974", "📱", "Device status") + it("set", "#6b6b78", "⚙️", "Settings");
+        sh.appendChild(row);
+        row.addEventListener("click", (e) => {
+          const b = e.target.closest("[data-x]"); if (!b) return; const a = b.dataset.x; ov.remove();
+          if (a === "rep") LS.reportSheet({ uid: host, uname: "this live" });
+          else if (a === "fb") { if (LS.openHelp) LS.openHelp(); }
+          else if (a === "vq") qualitySheet(); else if (a === "ds") deviceSheet(); else if (a === "set") settingsSheet();
+        });
+      }
+    }
+    return r;
+  };
+  window.addEventListener("hashchange", () => { if (!/#\/live\//.test(location.hash)) { LS.curLive = null; wake(false); } });
+})();
+  </script>
+  <script>
+/* Live Match: timed gift battle between the host and the guests. */
+(function () {
+  const LS = window.LS, sb = LS.sb;
+  const COL = ["#ffb62e", "#2fb8ff", "#ff3d8b", "#7a5cff", "#2ee66b", "#ff7a3d"];
+  const RANK = ["1st", "2nd", "3rd", "4th", "5th", "6th"];
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const fmt = (n) => (n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "K" : String(n));
+  const GIFTS = ["Rose", "Finger Heart", "Hearts", "Coffee", "Confetti"];
+  LS.matchAttach = function (o) {
+    const room = o.room; if (!room || !sb) return { stop() {} };
+    const bar = document.createElement("div"); bar.className = "mt-wrap hidden";
+    bar.innerHTML = '<div class="mt-bar"></div><div class="mt-timer"></div>';
+    room.appendChild(bar);
+    let gbtn = null;
+    if (!o.host) { gbtn = document.createElement("button"); gbtn.type = "button"; gbtn.className = "mt-gift hidden"; gbtn.textContent = "⚔️ Gift a player"; room.appendChild(gbtn); gbtn.onclick = () => openSheet(); }
+    let board = null, off = 0, dead = false, endedShown = 0, banner = null;
+    const rankOf = (uid) => { const i = board.scores.findIndex((x) => x.uid === uid); return i; };
+    function render() {
+      if (!board) { bar.classList.add("hidden"); if (gbtn) gbtn.classList.add("hidden"); return; }
+      const nowS = Date.now() + off, left = Math.max(0, Math.round((new Date(board.ends_at).getTime() - nowS) / 1000));
+      const running = board.status === "running" && left > 0;
+      if (!running && board.status === "ended" && !endedShown) endedShown = Date.now();
+      const recent = !running && endedShown && Date.now() - endedShown < 9000 && (nowS - new Date(board.ends_at).getTime()) < 20000;
+      if (!running && !recent) { bar.classList.add("hidden"); if (gbtn) gbtn.classList.add("hidden"); clearBadges(); return; }
+      if (running) endedShown = 0;
+      bar.classList.remove("hidden"); if (gbtn) gbtn.classList.toggle("hidden", !running);
+      const sc = board.scores, tot = sc.reduce((a, x) => a + x.score, 0);
+      LS.ensureNames(sc.map((x) => x.uid));
+      $bar().innerHTML = sc.map((x, i) => `<i style="flex:${tot ? Math.max(x.score, tot * 0.06) : 1};background:${COL[i % COL.length]}">${i === 0 ? RANK[0] + " (" + fmt(x.score) + ")" : ""}</i>`).join("");
+      bar.querySelector(".mt-timer").textContent = running ? "⚔️ " + String(Math.floor(left / 60)).padStart(2, "0") + ":" + String(left % 60).padStart(2, "0") : (sc[0] && sc[0].score > 0 ? "🏆 " + (LS.nameOf(sc[0].uid) || "Winner") + " wins!" : "Match over");
+      paintBadges();
+    }
+    const $bar = () => bar.querySelector(".mt-bar");
+    function clearBadges() { o.guests && o.guests.querySelectorAll(".mb").forEach((b) => b.remove()); }
+    function paintBadges() {
+      if (!o.guests || !board) return;
+      o.guests.querySelectorAll(".gtile").forEach((el) => {
+        const i = rankOf(el.dataset.id); let b = el.querySelector(".mb");
+        if (i < 0) { if (b) b.remove(); return; }
+        if (!b) { b = document.createElement("b"); b.className = "mb"; el.appendChild(b); }
+        b.style.background = COL[i % COL.length]; b.textContent = RANK[i] + " " + fmt(board.scores[i].score);
+      });
+    }
+    async function poll() {
+      if (dead) return;
+      try {
+        const { data } = await sb.rpc("match_board", { p_stream: o.stream });
+        if (data) { board = data; off = new Date(data.now).getTime() - Date.now(); } else board = null;
+      } catch (e) { /* ignore */ }
+      render();
+    }
+    const t1 = setInterval(poll, 3000), t2 = setInterval(() => { if (board) render(); }, 1000);
+    poll();
+    /* gift sheet (viewers) */
+    function openSheet() {
+      if (!board || !LS.user) { if (!LS.user) location.hash = "#/auth"; return; }
+      let target = null;
+      const ov = document.createElement("div"); ov.className = "mt-ov";
+      const sh = document.createElement("div"); sh.className = "mt-sh"; ov.appendChild(sh);
+      const gifts = GIFTS.map((n) => LS.GIFTS.find((g) => g.name === n)).filter(Boolean);
+      const draw = (msg) => {
+        sh.innerHTML = `<h4>Gift a player</h4><div class="mt-chips">${board.scores.map((x, i) => `<button data-u="${x.uid}" class="${x.uid === target ? "on" : ""}" style="--c:${COL[i % COL.length]}">${RANK[i]} · ${esc(LS.nameOf(x.uid) || "Player")} · ${fmt(x.score)}</button>`).join("")}</div>
+          <div class="mt-gr">${gifts.map((g) => `<button data-g="${g.name}">${g.icon}<small>${g.name}</small><small><i class="coin"></i> ${g.cost}</small></button>`).join("")}</div>
+          <div class="mt-msg">${esc(msg || (target ? "" : "Pick a player first."))}</div><button class="mt-x" type="button">Close</button>`;
+      };
+      draw();
+      sh.addEventListener("click", async (e) => {
+        if (e.target.closest(".mt-x")) { ov.remove(); return; }
+        const u = e.target.closest("[data-u]"); if (u) { target = u.dataset.u; draw(); return; }
+        const g = e.target.closest("[data-g]"); if (!g) return;
+        if (!target) { draw("Pick a player first."); return; }
+        const { data, error } = await sb.rpc("match_gift", { p_name: g.dataset.g, p_stream: o.stream, p_target: target });
+        if (error) { const m = error.message || ""; draw(/not_enough_coins/.test(m) ? "Not enough coins. Recharge first." : /no_match/.test(m) ? "The match has ended." : "Could not send. Try again."); return; }
+        LS.coins = data; poll(); draw("Sent " + g.dataset.g + "! 🎉");
+      });
+      ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+      document.body.appendChild(ov);
+    }
+    return { stop() { dead = true; clearInterval(t1); clearInterval(t2); bar.remove(); if (gbtn) gbtn.remove(); clearBadges(); } };
+  };
+  const css = document.createElement("style");
+  css.textContent = `.mt-wrap{position:absolute;left:0;right:0;top:0;z-index:7;pointer-events:none}.mt-wrap.hidden{display:none}
+.mt-bar{display:flex;height:22px;overflow:hidden;border-radius:0 0 8px 8px;background:#0008}
+.mt-bar i{font:700 12px/22px system-ui;color:#111;padding:0 8px;white-space:nowrap;overflow:hidden;font-style:normal;transition:flex .6s}
+.mt-timer{width:max-content;margin:6px auto 0;background:#000a;color:#fff;font:700 15px system-ui;padding:3px 12px;border-radius:14px}
+.gtile .mb{position:absolute;left:3px;bottom:3px;z-index:3;font:700 10px/1 system-ui;color:#111;padding:3px 6px;border-radius:9px}
+.mt-gift{position:absolute;left:50%;transform:translateX(-50%);top:62px;z-index:8;background:linear-gradient(90deg,#ff3d8b,#ff7a3d);color:#fff;border:0;border-radius:18px;padding:8px 16px;font-weight:700;cursor:pointer}
+.mt-gift.hidden{display:none}
+.mt-ov{position:fixed;inset:0;background:#0007;z-index:9998;display:flex;align-items:flex-end}
+.mt-sh{width:100%;background:#17171c;color:#fff;border-radius:18px 18px 0 0;padding:14px 14px 22px}
+.mt-sh h4{margin:0 0 10px;text-align:center}.mt-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.mt-chips button{background:#ffffff14;color:#fff;border:2px solid transparent;border-radius:14px;padding:6px 10px;font-size:13px}
+.mt-chips button.on{border-color:var(--c);background:#ffffff26}
+.mt-gr{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.mt-gr button{background:#ffffff10;border:0;color:#fff;border-radius:12px;padding:8px 2px;font-size:26px;display:flex;flex-direction:column;align-items:center}
+.mt-gr small{font-size:10px;opacity:.85}.mt-msg{min-height:20px;text-align:center;margin:10px 0 6px;font-size:13px}
+.mt-x{display:block;margin:0 auto;background:none;border:0;color:#aaa}`;
+  document.head.appendChild(css);
 })();
   </script>
   <script>
