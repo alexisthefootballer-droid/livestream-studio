@@ -3678,6 +3678,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     room.on(LK.RoomEvent.ParticipantConnected, () => { upd(); setTimeout(sendFx, 800); });
     room.on(LK.RoomEvent.ParticipantDisconnected, (p) => { if (gtiles) gtiles.remove(p.identity); upd(); });
     const mt = o.guestsEl && LS.matchAttach ? LS.matchAttach({ room: o.guestsEl.parentNode, guests: o.guestsEl, stream: row.id, host: true }) : null;
+    const tgStop = LS.topGifters ? LS.topGifters(row.id, document.getElementById("pv"), true) : null;
     const sw = gtiles && o.stage ? swapper(o.stage, gtiles, true) : null;
     if (sw) sw.setHost(o.stream);
     const stopSeats = o.seatsEl ? seatsPanel(o.seatsEl, row.id, roomName, { gt: gtiles, swapGet: () => (sw ? sw.want : null), swapSet: (u) => { if (sw) sw.setWant(u); }, onSlotTap: o.onSlotTap, onRequests: o.onRequests, onPending: o.onPending, onCfg: o.onCfg, api: o.reqApi }) : null;
@@ -3764,6 +3765,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         if (stopFeed) stopFeed();
         if (stopSeats) stopSeats();
         try { if (mt) mt.stop(); } catch (e) { /* ignore */ }
+        try { if (tgStop) tgStop(); } catch (e) { /* ignore */ }
         if (gtiles) gtiles.clear();
         gaudio.remove();
         try { await sb.rpc("host_set_seats", { p_stream: row.id, p_count: 0 }); } catch (e) { /* ignore */ }
@@ -3828,6 +3830,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           const myId = LS.user.id;
           const fxbar = $("#fxbar", v); if (fxbar) fxbar.style.display = "none";
           const vc = $("#viewers", v);
+          if (LS.topGifters) { const tgs = LS.topGifters(st.id, vc, false); stops.push(tgs); }
           const fb = $("#follow", v);
           if (fb) {
             if (st.host_id === myId) fb.style.display = "none";
@@ -9851,6 +9854,37 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
 .mt-gr button{background:#ffffff10;border:0;color:#fff;border-radius:12px;padding:8px 2px;font-size:26px;display:flex;flex-direction:column;align-items:center}
 .mt-gr small{font-size:10px;opacity:.85}.mt-msg{min-height:20px;text-align:center;margin:10px 0 6px;font-size:13px}
 .mt-x{display:block;margin:0 auto;background:none;border:0;color:#aaa}`;
+  document.head.appendChild(css);
+})();
+  </script>
+  <script>
+/* Top gifters: up to 3 avatars with rank badges beside the viewer count. */
+(function () {
+  const LS = window.LS, sb = LS.sb;
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const COL = ["#ffb62e", "#c9d3dc", "#d98b4a"];
+  LS.topGifters = function (stream, anchor, abs) {
+    if (!sb || !anchor || !anchor.parentNode) return () => {};
+    const el = document.createElement("span"); el.className = "tg" + (abs ? " tg-abs" : "");
+    anchor.parentNode.insertBefore(el, anchor);
+    let dead = false;
+    async function poll() {
+      if (dead) return;
+      try {
+        const { data } = await sb.rpc("top_gifters", { p_stream: stream });
+        const list = Array.isArray(data) ? data : [];
+        el.innerHTML = list.map((g, i) => `<i style="border-color:${COL[i]}" title="${esc(g.name || "")} · ${g.total}">${g.avatar ? `<img src="${esc(g.avatar)}" alt="">` : `<u>${esc((g.name || "?").slice(0, 1).toUpperCase())}</u>`}<b style="background:${COL[i]}">${i + 1}</b></i>`).join("");
+        el.style.display = list.length ? "" : "none";
+      } catch (e) { /* ignore */ }
+    }
+    poll(); const t = setInterval(poll, 8000);
+    return () => { dead = true; clearInterval(t); el.remove(); };
+  };
+  const css = document.createElement("style");
+  css.textContent = `.tg{display:inline-flex;align-items:center}.tg i{position:relative;width:30px;height:30px;border-radius:50%;border:2px solid;margin-left:-8px;background:#333;display:inline-block}
+.tg i:first-child{margin-left:0}.tg img,.tg u{width:100%;height:100%;border-radius:50%;object-fit:cover;display:grid;place-items:center;text-decoration:none;color:#fff;font:700 13px system-ui}
+.tg b{position:absolute;right:-4px;bottom:-4px;min-width:14px;height:14px;border-radius:7px;color:#111;font:700 10px/14px system-ui;text-align:center}
+.tg-abs{position:absolute;top:8px;right:84px;z-index:6}`;
   document.head.appendChild(css);
 })();
   </script>
