@@ -3274,6 +3274,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           ${sel("about", "📄", "About me", [["1", "Shown"], ["0", "Hidden"]], T.about ? "1" : "0")}
           ${swr("record", "⏺️", "Save a recording", "Saves your LIVE so you can replay or post it later. Not saved in Practice mode.", live())}
           ${go("recs", "🎞", "LIVE recordings")}
+          ${go("devstat", "📶", "Device status")}
           ${go("grp", "💬", "Group chats")}
           ${swr("guardian", "🛡️", "Guardian", "Let viewers compete each week to be your Guardian. The top gifter gets a shield in chat.", false)}
           ${swr("ai", "🤖", "AI-generated content", "Label your LIVE if it uses AI-made or AI-edited visuals or voices.")}
@@ -3342,6 +3343,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (b.id === "tlback") { vw = "main"; render(); return; }
       if (b.dataset.go === "seats") { ctx.close(); ctx.openSeats(); return; }
       if (b.dataset.go === "grp") { if (live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "End your LIVE first, then open Group chats in your Inbox."; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); } else { ctx.close(); location.hash = "#/inbox"; } return; }
+      if (b.dataset.go === "devstat") { ctx.close(); if (LS.deviceStatus) LS.deviceStatus(); return; }
       if (b.dataset.go === "recs") { if (live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "End your LIVE first, then open LIVE recordings."; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); } else { ctx.close(); location.hash = "#/recordings"; } return; }
       if (b.dataset.prem) { const kind = vw; LS.hostSetRemove(kind, b.dataset.prem).then(() => render()); return; }
       if (b.id === "tlpadd") {
@@ -3666,6 +3668,13 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     fx.vr = (o.tools && o.tools.vr) || "green";
     if (o.guestsEl) o.guestsEl.dataset.vr = fx.vr;
     LS.vrHost = (v) => { fx.vr = v; if (o.guestsEl) o.guestsEl.dataset.vr = v; sendFx(); };
+    LS.devIssues = LS.devIssues || [];
+    room.on(LK.RoomEvent.ConnectionQualityChanged, (q, p) => {
+      if (p !== room.localParticipant) return;
+      LS.lkQuality = String(q);
+      if (/poor|lost/i.test(LS.lkQuality)) { LS.devIssues.unshift({ t: Date.now(), m: "Connection " + LS.lkQuality }); LS.devIssues.length = Math.min(LS.devIssues.length, 8); }
+    });
+    room.on(LK.RoomEvent.Reconnecting, () => { LS.devIssues.unshift({ t: Date.now(), m: "Connection lost, reconnecting" }); LS.devIssues.length = Math.min(LS.devIssues.length, 8); });
     room.on(LK.RoomEvent.ActiveSpeakersChanged, (sp) => { if (gtiles) gtiles.speaking((sp || []).map((x) => x.identity)); });
     room.on(LK.RoomEvent.TrackSubscribed, (track, pub, p) => {
       if (track.kind === "video") { if (gtiles) gtiles.add(p.identity, track); }
@@ -9885,6 +9894,49 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
 .tg i:first-child{margin-left:0}.tg img,.tg u{width:100%;height:100%;border-radius:50%;object-fit:cover;display:grid;place-items:center;text-decoration:none;color:#fff;font:700 13px system-ui}
 .tg b{position:absolute;right:-4px;bottom:-4px;min-width:14px;height:14px;border-radius:7px;color:#111;font:700 10px/14px system-ui;text-align:center}
 .tg-abs{position:absolute;top:8px;right:84px;z-index:6}`;
+  document.head.appendChild(css);
+})();
+  </script>
+  <script>
+/* Device status: battery + connection check for the host. */
+(function () {
+  const LS = window.LS;
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  async function ping() {
+    const t0 = performance.now();
+    try { await fetch("/favicon-32.png?p=" + Date.now(), { cache: "no-store" }); return Math.round(performance.now() - t0); } catch (e) { return null; }
+  }
+  LS.deviceStatus = async function () {
+    const ov = document.createElement("div"); ov.className = "ds-ov";
+    const sh = document.createElement("div"); sh.className = "ds-sh"; ov.appendChild(sh);
+    sh.innerHTML = '<div class="ds-h"><b>Device status</b><button type="button" class="ds-x" aria-label="Close">✕</button></div><p class="ds-l">Checking…</p>';
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    ov.addEventListener("click", (e) => { if (e.target === ov || e.target.closest(".ds-x")) close(); });
+    let bat = null; try { if (navigator.getBattery) bat = await navigator.getBattery(); } catch (e) { /* ignore */ }
+    const ms = await ping();
+    const c = navigator.connection || {};
+    const slowType = /^(slow-2g|2g|3g)$/.test(c.effectiveType || "");
+    const q = String(LS.lkQuality || "");
+    const bad = slowType || (c.rtt && c.rtt > 450) || (c.downlink && c.downlink < 1.5) || (ms != null && ms > 900) || ms == null || /poor|lost/i.test(q);
+    const lvl = bat ? Math.round(bat.level * 100) : null;
+    const lowBat = bat && lvl < 15 && !bat.charging;
+    const rows = [];
+    rows.push(lowBat ? ["🪫", "Low battery (" + lvl + "%)", "Plug in your charger so your live does not stop."] : ["✅", "Device is stable", lvl != null ? "Battery " + lvl + "%" + (bat.charging ? " (charging)" : "") : ""]);
+    rows.push(bad ? ["📶", "Unstable connection", "Try moving closer to your router and limiting other devices on your network."] : ["✅", "Connection is good", ""]);
+    const det = [c.effectiveType ? "Network: " + c.effectiveType : "", c.downlink ? "Speed: " + c.downlink + " Mbps" : "", ms != null ? "Delay: " + ms + " ms" : "No reply from the server"].filter(Boolean).join(" · ");
+    const iss = (LS.devIssues || []).map((i) => `<li>${new Date(i.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${esc(i.m)}</li>`).join("");
+    sh.innerHTML = `<div class="ds-h"><b>Device status</b><button type="button" class="ds-x" aria-label="Close">✕</button></div>
+      ${rows.map((r) => `<div class="ds-r"><span>${r[0]}</span><div><b>${esc(r[1])}</b>${r[2] ? `<p>${esc(r[2])}</p>` : ""}</div></div>`).join("")}
+      <p class="ds-d">${esc(det)}</p>
+      <h5>Issue record</h5>${iss ? `<ul class="ds-i">${iss}</ul>` : '<p class="ds-d">No problems recorded in this live.</p>'}`;
+  };
+  const css = document.createElement("style");
+  css.textContent = `.ds-ov{position:fixed;inset:0;background:#0008;z-index:9998;display:flex;align-items:flex-end}
+.ds-sh{width:100%;background:#202024;color:#fff;border-radius:18px 18px 0 0;padding:16px 18px 26px;max-height:70vh;overflow:auto}
+.ds-h{display:flex;justify-content:space-between;align-items:center;font-size:20px;margin-bottom:10px}.ds-x{background:#ffffff1f;border:0;color:#fff;width:36px;height:36px;border-radius:50%;font-size:16px}
+.ds-r{display:flex;gap:12px;padding:10px 0;align-items:flex-start;font-size:17px}.ds-r span{font-size:22px}.ds-r p{margin:4px 0 0;color:#b9b9c0;font-size:14px}
+.ds-d{color:#9a9aa3;font-size:13px;margin:8px 0}.ds-l{color:#9a9aa3}.ds-sh h5{margin:14px 0 4px;font-size:15px}.ds-i{margin:0;padding-left:18px;color:#cfcfd6;font-size:14px}`;
   document.head.appendChild(css);
 })();
   </script>
