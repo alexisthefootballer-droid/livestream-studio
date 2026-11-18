@@ -3058,9 +3058,10 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   LS.profLine = async function (id) {
     if (!sb || !id) return "";
     if (!profInfo[id]) {
-      try { const { data } = await sb.from("profiles").select("country,birth_year").eq("id", id).maybeSingle(); profInfo[id] = data || {}; } catch (e) { profInfo[id] = {}; }
+      try { const { data } = await sb.from("profiles").select("country,birth_year,show_live_info").eq("id", id).maybeSingle(); profInfo[id] = data || {}; } catch (e) { profInfo[id] = {}; }
     }
-    const d = profInfo[id], age = d.birth_year ? new Date().getFullYear() - d.birth_year : null;
+    const d = profInfo[id]; if (d.show_live_info === false) return "";
+    const age = d.birth_year ? new Date().getFullYear() - d.birth_year : null;
     return [age, d.country ? "from " + d.country : ""].filter(Boolean).join(" ");
   };
 
@@ -5242,7 +5243,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["👤", "Account", "#/edit-profile"], ["🛍", "Store", "#/store"], ["🗑", "Delete account", "fn:deleteacct"], ["🛡", "Security & permissions", "fn:security"], ["📈", "Analytics", "#/live-analytics"],
       ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"]]],
     ["Visibility", [
-      ["🔒", "Private account", "fn:private"], ["🚫", "Blocked accounts", "#/blocked"]]],
+      ["🔒", "Private account", "fn:private"], ["🎁", "LIVE privacy", "fn:livepriv"], ["🚫", "Blocked accounts", "#/blocked"]]],
     ["Interactions", [
       ["💬", "Comments", "fn:comments"], ["@", "Mentions", "fn:mentions"], ["✉️", "Direct messages", "fn:dm"], ["🎬", "Reuse of content", "fn:reuse"],
       ["⬇️", "Downloads", "fn:downloads"], ["👥", "Following list", "fn:following"], ["♥", "Liked videos", "fn:liked"]]],
@@ -5311,6 +5312,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (a === "fn:family") { LS.openFamily(); return; }
       if (a === "fn:wellbeing") { LS.openWellbeing(); return; }
       if (a === "fn:private") { LS.openPrivate(); return; }
+      if (a === "fn:livepriv") { LS.openLivePrivacy(); return; }
       if (a === "fn:comments") { LS.openCommentsSetting(); return; }
       if (a === "fn:notif") { LS.openNotifSetting(); return; }
       if (a === "fn:offline") { if (LS.offlineSheet) LS.offlineSheet(); return; }
@@ -7131,6 +7133,23 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   }
   const note = (t) => `<p style="color:#9a9aa3;margin:10px 20px;font-size:14.5px;line-height:1.4">${t}</p>`;
 
+  LS.openLivePrivacy = function () {
+    overlay("LIVE privacy", async (box) => {
+      let pr = null;
+      try { const r = await sb.from("profiles").select("show_ranking,show_live_info").eq("id", LS.user.id).maybeSingle(); pr = r && r.data; } catch (e) { /* ignore */ }
+      pr = pr || {};
+      const on = (v) => (v === false ? "" : "checked");
+      box.innerHTML = `<div class="sp-card" style="margin-top:14px">
+        <label class="sp-sw"><div><b>Viewer and buyer ranking</b><small>Show your name and photo among the top gifters in a LIVE</small></div><input type="checkbox" class="switch" data-k="show_ranking" ${on(pr.show_ranking)}></label>
+        <label class="sp-sw"><div><b>Show my age and country</b><small>Show them in LIVE chat when you join (only what you added in Edit profile)</small></div><input type="checkbox" class="switch" data-k="show_live_info" ${on(pr.show_live_info)}></label></div>
+        ${note("Gifts you send still count for the host. These settings only change what other viewers can see about you.")}`;
+      box.addEventListener("change", async (e) => {
+        const k = e.target.dataset && e.target.dataset.k; if (!k) return;
+        const { error } = await sb.from("profiles").update({ [k]: e.target.checked }).eq("id", LS.user.id);
+        if (error) { e.target.checked = !e.target.checked; toast("Could not save. Try again."); } else toast("Saved");
+      });
+    });
+  };
   LS.openPrivate = function () {
     overlay("Private account", async (box) => {
       const s = await LS.getSettings(true);
