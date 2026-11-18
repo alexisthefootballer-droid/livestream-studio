@@ -9734,13 +9734,57 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
 
   function applyQuality(q) {
     const cl = LS.curLive, LK = window.LivekitClient; if (!cl || !LK) return;
-    const lv = q === "low" ? LK.VideoQuality.LOW : LK.VideoQuality.HIGH;
+    const cn = navigator.connection || {};
+    const slow = (cn.downlink && cn.downlink < 1.5) || /2g/.test(cn.effectiveType || "");
+    const lv = q === "low" ? LK.VideoQuality.LOW : (q === "480" || (q === "auto" && slow)) ? LK.VideoQuality.MEDIUM : LK.VideoQuality.HIGH;
     try { cl.room.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub) => { if (pub.kind === "video" && pub.setVideoQuality) pub.setVideoQuality(lv); })); } catch (e) { /* ignore */ }
   }
   function qualitySheet() {
     const cur = LS.vset.get("vq") || "auto";
-    sheet(`<h3>Video quality</h3>` + [["auto", "Auto", "Best for your connection"], ["high", "High", "Sharper video, uses more data"], ["low", "Low", "Saves data on a slow connection"]].map((o) => `<button class="lv-opt ${cur === o[0] ? "on" : ""}" data-q="${o[0]}"><b>${o[1]}</b><br><small style="color:#777">${o[2]}</small></button>`).join(""), (ov) => {
+    sheet(`<h3>Video quality</h3>` + [["auto", "Auto", "Best for your connection"], ["original", "Original", "Sharpest the host sends"], ["1080", "1080p", "Full HD"], ["720", "720p", "HD, uses less data"], ["480", "480p", "Saves data on a slow connection"]].map((o) => `<button class="lv-opt ${cur === o[0] ? "on" : ""}" data-q="${o[0]}"><b>${o[1]}</b><br><small style="color:#777">${o[2]}</small></button>`).join(""), (ov) => {
       ov.addEventListener("click", (e) => { const b = e.target.closest("[data-q]"); if (!b) return; LS.vset.set("vq", b.dataset.q); applyQuality(b.dataset.q); toast("Video quality: " + b.querySelector("b").textContent); ov.remove(); });
+    });
+  }
+
+  /* background player: keep a live going when you leave the app */
+  const bgMode = () => LS.vset.get("bgp") || "audio";
+  function pipVideo() {
+    const vs = Array.from(document.querySelectorAll(".room video")).filter((v) => v.srcObject && v.videoWidth);
+    vs.sort((a, b) => b.videoWidth * b.videoHeight - a.videoWidth * a.videoHeight);
+    return vs[0] || null;
+  }
+  function tryPip() { const v = pipVideo(); if (v && v.requestPictureInPicture && document.pictureInPictureEnabled && !document.pictureInPictureElement) return v.requestPictureInPicture().then(() => true, () => false); return Promise.resolve(false); }
+  function applyBg() {
+    try {
+      if (!("mediaSession" in navigator) || !window.MediaMetadata) return;
+      navigator.mediaSession.metadata = new MediaMetadata({ title: (LS.curLive && LS.curLive.title) || "LIVE", artist: "LiveStream Studio" });
+      try { navigator.mediaSession.setActionHandler("enterpictureinpicture", bgMode() === "pip" ? () => { tryPip(); } : null); } catch (e) { /* ignore */ }
+    } catch (e) { /* ignore */ }
+  }
+  let bgMuted = false;
+  document.addEventListener("visibilitychange", () => {
+    if (!LS.curLive) return;
+    const m = bgMode(), au = Array.from(document.querySelectorAll("audio"));
+    if (document.hidden) {
+      if (m === "none") { au.forEach((a) => { if (!a.muted) { a.muted = true; a.dataset.bgm = "1"; } }); bgMuted = true; }
+      else { applyBg(); if (m === "pip") tryPip(); au.forEach((a) => { if (a.paused) a.play().catch(() => {}); }); }
+    } else {
+      if (bgMuted) { au.forEach((a) => { if (a.dataset.bgm) { a.muted = false; delete a.dataset.bgm; } }); bgMuted = false; }
+      if (document.pictureInPictureElement && document.exitPictureInPicture) document.exitPictureInPicture().catch(() => {});
+    }
+  });
+  function bgSheet() {
+    const cur = bgMode();
+    sheet(`<h3>Background player</h3>` + [["pip", "Picture-in-picture (PiP)", "Keep LIVE videos playing in a floating window when you exit the app"], ["audio", "Audio", "Keep playing audio from LIVE videos when you exit the app"], ["none", "None", "Turn off background player"]].map((o) => `<button class="lv-opt ${cur === o[0] ? "on" : ""}" data-b="${o[0]}"><b>${o[1]}</b><br><small style="color:#777">${o[2]}</small></button>`).join(""), (ov) => {
+      ov.addEventListener("click", async (e) => {
+        const b = e.target.closest("[data-b]"); if (!b) return;
+        let m = b.dataset.b;
+        if (m === "pip") {
+          if (!document.pictureInPictureEnabled) { toast("Picture-in-picture is not available on this browser. Using audio instead."); m = "audio"; }
+          else { const ok = await tryPip(); if (!ok) toast("Floating window will open when you leave the app."); }
+        }
+        LS.vset.set("bgp", m); applyBg(); toast("Background player: " + (m === "pip" ? "Picture-in-picture" : m === "audio" ? "Audio" : "Off")); ov.remove();
+      });
     });
   }
 
@@ -9769,13 +9813,13 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
         const cl = LS.curLive, host = cl && cl.hostId;
         const row = document.createElement("div"); row.className = "sh-row last";
         const it = (a, c, ic, t) => `<button class="sh-it" data-x="${a}"><span class="c" style="background:${c}">${ic}</span>${t}</button>`;
-        row.innerHTML = (host && !(LS.user && LS.user.id === host) ? it("rep", "#555", "🚩", "Report") : "") + it("fb", "#e0a030", "💬", "Feedback") + it("vq", "#3b6cf6", "🎞", "Video quality") + it("ds", "#19a974", "📱", "Device status") + it("set", "#6b6b78", "⚙️", "Settings");
+        row.innerHTML = (host && !(LS.user && LS.user.id === host) ? it("rep", "#555", "🚩", "Report") : "") + it("fb", "#e0a030", "💬", "Feedback") + it("vq", "#3b6cf6", "🎞", "Video quality") + it("ds", "#19a974", "📱", "Device status") + it("bgp", "#8a5cf6", "🎧", "Background player") + it("set", "#6b6b78", "⚙️", "Settings");
         sh.appendChild(row);
         row.addEventListener("click", (e) => {
           const b = e.target.closest("[data-x]"); if (!b) return; const a = b.dataset.x; ov.remove();
           if (a === "rep") LS.reportSheet({ uid: host, uname: "this live" });
           else if (a === "fb") { if (LS.openHelp) LS.openHelp(); }
-          else if (a === "vq") qualitySheet(); else if (a === "ds") deviceSheet(); else if (a === "set") settingsSheet();
+          else if (a === "bgp") bgSheet(); else if (a === "vq") qualitySheet(); else if (a === "ds") deviceSheet(); else if (a === "set") settingsSheet();
         });
       }
     }
