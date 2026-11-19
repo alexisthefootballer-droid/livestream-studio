@@ -3276,6 +3276,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           ${swr("record", "⏺️", "Save a recording", "Saves your LIVE so you can replay or post it later. Not saved in Practice mode.", live())}
           ${go("recs", "🎞", "LIVE recordings")}
           ${go("devstat", "📶", "Device status")}
+          ${go("cohost", "🤝", "Co-host suggestions")}
           ${go("grp", "💬", "Group chats")}
           ${swr("guardian", "🛡️", "Guardian", "Let viewers compete each week to be your Guardian. The top gifter gets a shield in chat.", false)}
           ${swr("ai", "🤖", "AI-generated content", "Label your LIVE if it uses AI-made or AI-edited visuals or voices.")}
@@ -3344,6 +3345,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (b.id === "tlback") { vw = "main"; render(); return; }
       if (b.dataset.go === "seats") { ctx.close(); ctx.openSeats(); return; }
       if (b.dataset.go === "grp") { if (live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "End your LIVE first, then open Group chats in your Inbox."; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); } else { ctx.close(); location.hash = "#/inbox"; } return; }
+      if (b.dataset.go === "cohost") { if (!live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "Go LIVE first. Suggestions come from your viewers."; d.style.zIndex = 9999; document.body.appendChild(d); setTimeout(() => d.remove(), 2800); return; } ctx.close(); if (LS.cohostSheet) LS.cohostSheet({ stream: ctx.streamId(), host: true }); return; }
       if (b.dataset.go === "devstat") { ctx.close(); if (LS.deviceStatus) LS.deviceStatus(); return; }
       if (b.dataset.go === "recs") { if (live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "End your LIVE first, then open LIVE recordings."; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); } else { ctx.close(); location.hash = "#/recordings"; } return; }
       if (b.dataset.prem) { const kind = vw; LS.hostSetRemove(kind, b.dataset.prem).then(() => render()); return; }
@@ -9813,13 +9815,13 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
         const cl = LS.curLive, host = cl && cl.hostId;
         const row = document.createElement("div"); row.className = "sh-row last";
         const it = (a, c, ic, t) => `<button class="sh-it" data-x="${a}"><span class="c" style="background:${c}">${ic}</span>${t}</button>`;
-        row.innerHTML = (host && !(LS.user && LS.user.id === host) ? it("rep", "#555", "🚩", "Report") : "") + it("fb", "#e0a030", "💬", "Feedback") + it("vq", "#3b6cf6", "🎞", "Video quality") + it("ds", "#19a974", "📱", "Device status") + it("story", "#e0457b", "➕", "Add to Story") + it("bgp", "#8a5cf6", "🎧", "Background player") + it("set", "#6b6b78", "⚙️", "Settings");
+        row.innerHTML = (host && !(LS.user && LS.user.id === host) ? it("rep", "#555", "🚩", "Report") : "") + it("coh", "#2b8cff", "🤝", "Suggest co-host") + it("fb", "#e0a030", "💬", "Feedback") + it("vq", "#3b6cf6", "🎞", "Video quality") + it("ds", "#19a974", "📱", "Device status") + it("story", "#e0457b", "➕", "Add to Story") + it("bgp", "#8a5cf6", "🎧", "Background player") + it("set", "#6b6b78", "⚙️", "Settings");
         sh.appendChild(row);
         row.addEventListener("click", (e) => {
           const b = e.target.closest("[data-x]"); if (!b) return; const a = b.dataset.x; ov.remove();
           if (a === "rep") LS.reportSheet({ uid: host, uname: "this live" });
           else if (a === "fb") { if (LS.openHelp) LS.openHelp(); }
-          else if (a === "story") { if (LS.storySheet) LS.storySheet(); } else if (a === "bgp") bgSheet(); else if (a === "vq") qualitySheet(); else if (a === "ds") deviceSheet(); else if (a === "set") settingsSheet();
+          else if (a === "coh") { if (LS.cohostSheet) LS.cohostSheet({ stream: LS.curLive && LS.curLive.streamId, host: false }); } else if (a === "story") { if (LS.storySheet) LS.storySheet(); } else if (a === "bgp") bgSheet(); else if (a === "vq") qualitySheet(); else if (a === "ds") deviceSheet(); else if (a === "set") settingsSheet();
         });
       }
     }
@@ -10086,6 +10088,77 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
 .stc-t{font:700 18px system-ui}.stc-go{margin-top:20px;font:700 17px system-ui}.stc-by{margin-top:8px;font:600 15px system-ui}
 .st-add{display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;color:#111;border:0;border-radius:30px;padding:10px 30px;font-size:17px;min-width:78vw;max-width:340px}
 .st-cnt{color:#aaa;font-size:14px;cursor:pointer;padding:8px}`;
+  document.head.appendChild(css);
+})();
+  </script>
+  <script>
+/* Suggest co-host: viewers suggest and upvote creators, the host invites. */
+(function () {
+  const LS = window.LS, sb = LS.sb;
+  const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; d.style.zIndex = 9999; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
+  const av = (url, name) => url ? `<img src="${esc(url)}" alt="">` : `<u>${esc((name || "?").slice(0, 1).toUpperCase())}</u>`;
+  LS.cohostSheet = function (o) {
+    if (!sb || !LS.user) { location.hash = "#/auth"; return; }
+    if (!o || !o.stream) { toast("Open a LIVE first."); return; }
+    const ov = document.createElement("div"); ov.className = "ch-ov";
+    const sh = document.createElement("div"); sh.className = "ch-sh"; ov.appendChild(sh);
+    document.body.appendChild(ov);
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+    let board = [], found = [], follows = [], q = "", hostId = null;
+    const rowHtml = (p, right) => `<div class="ch-r"><span class="ch-a">${av(p.avatar, p.name)}</span><b>${esc(p.name || "user")}</b>${right}</div>`;
+    function draw() {
+      const mineSet = new Set(board.filter((b) => b.mine).map((b) => b.uid));
+      const sugg = board.map((b) => rowHtml(b, o.host ? `<span class="ch-v">▲ ${b.votes}</span><button data-inv="${b.uid}" data-n="${esc(b.name || "")}">Invite</button>` : `<button data-vote="${b.uid}" class="${b.mine ? "on" : ""}">▲ ${b.votes}</button>`)).join("");
+      const cand = (q ? found : follows).filter((p) => p.uid !== LS.user.id && p.uid !== hostId);
+      const list = cand.map((p) => rowHtml(p, mineSet.has(p.uid) ? `<span class="ch-v">Suggested ✔</span>` : `<button data-vote="${p.uid}">Suggest</button>`)).join("");
+      sh.innerHTML = `<div class="ch-h"><b>${o.host ? "Co-host suggestions" : "Suggest co-host"}</b><button class="ch-x" aria-label="Close">✕</button></div>
+        ${o.host ? "" : `<input class="ch-s" placeholder="Search creators" value="${esc(q)}">`}
+        <h5>${o.host ? "Suggested by your viewers" : "Suggestions (upvote the ones you like)"}</h5>${sugg || `<p class="ch-e">${o.host ? "No suggestions yet." : "No suggestions yet. Be the first."}</p>`}
+        ${o.host ? "" : `<h5>${q ? "Results" : "Creators you follow (" + follows.length + ")"}</h5>${list || `<p class="ch-e">${q ? "No creators found." : "No creators yet. Follow creators to suggest them."}</p>`}`}`;
+      const inp = sh.querySelector(".ch-s"); if (inp) { inp.focus(); inp.setSelectionRange(q.length, q.length); }
+    }
+    async function loadBoard() { try { const { data } = await sb.rpc("cohost_board", { p_stream: o.stream }); board = Array.isArray(data) ? data : []; } catch (e) { board = []; } }
+    async function search(txt) {
+      q = txt.trim().replace(/[%,()]/g, "");
+      if (!q) { found = []; draw(); return; }
+      try { const { data } = await sb.from("profiles").select("id,username,display_name,avatar_url").or(`username.ilike.%${q}%,display_name.ilike.%${q}%`).limit(8); found = (data || []).map((p) => ({ uid: p.id, name: p.display_name || p.username, avatar: p.avatar_url })); } catch (e) { found = []; }
+      draw();
+    }
+    sh.addEventListener("click", async (e) => {
+      if (e.target.closest(".ch-x")) { ov.remove(); return; }
+      const inv = e.target.closest("[data-inv]");
+      if (inv) { ov.remove(); if (LS.shareSheet) LS.shareSheet({ url: location.origin + "/#/live/" + o.stream, text: "Join my LIVE as a co-host on LiveStream Studio!", uid: inv.dataset.inv, uname: inv.dataset.n }); return; }
+      const v = e.target.closest("[data-vote]"); if (!v) return;
+      const uid = v.dataset.vote, mine = board.some((b) => b.uid === uid && b.mine);
+      const r = mine ? await sb.from("cohost_suggestions").delete().eq("stream_id", o.stream).eq("suggested_id", uid).eq("suggested_by", LS.user.id) : await sb.from("cohost_suggestions").insert({ stream_id: o.stream, suggested_id: uid });
+      if (r && r.error) { toast("Could not save. Try again."); return; }
+      await loadBoard(); draw();
+    });
+    let tm = null;
+    sh.addEventListener("input", (e) => { if (!e.target.classList.contains("ch-s")) return; clearTimeout(tm); const v = e.target.value; tm = setTimeout(() => search(v), 300); });
+    (async () => {
+      sh.innerHTML = '<p class="ch-e">Loading…</p>';
+      try { const { data } = await sb.from("streams").select("host_id").eq("id", o.stream).maybeSingle(); hostId = data && data.host_id; } catch (e) { /* ignore */ }
+      await loadBoard();
+      if (!o.host) {
+        try {
+          const ids = Array.from(await LS.myFollows());
+          if (ids.length) { const { data } = await sb.from("profiles").select("id,username,display_name,avatar_url").in("id", ids.slice(0, 40)); follows = (data || []).map((p) => ({ uid: p.id, name: p.display_name || p.username, avatar: p.avatar_url })); }
+        } catch (e) { /* ignore */ }
+      }
+      draw();
+    })();
+  };
+  const css = document.createElement("style");
+  css.textContent = `.ch-ov{position:fixed;inset:0;background:#0007;z-index:9998;display:flex;align-items:flex-end}
+.ch-sh{width:100%;max-height:82vh;overflow:auto;background:#fff;color:#111;border-radius:18px 18px 0 0;padding:16px 16px 26px}
+.ch-h{display:flex;justify-content:space-between;align-items:center;font-size:20px;margin-bottom:10px}.ch-x{background:#0001;border:0;width:34px;height:34px;border-radius:50%}
+.ch-s{width:100%;box-sizing:border-box;background:#f1f1f3;border:0;border-radius:10px;padding:12px;font-size:16px;margin-bottom:6px;color:#111}
+.ch-sh h5{margin:14px 0 6px;color:#666;font-size:14px}.ch-e{color:#888;text-align:center;padding:14px 0;font-size:14px}
+.ch-r{display:flex;align-items:center;gap:10px;padding:8px 0}.ch-r b{flex:1;font-weight:600}
+.ch-a{width:40px;height:40px;border-radius:50%;overflow:hidden;background:#ccc;display:inline-grid;place-items:center}.ch-a img{width:100%;height:100%;object-fit:cover}.ch-a u{text-decoration:none;font-weight:700}
+.ch-r button{background:#f1f1f3;border:0;border-radius:16px;padding:7px 14px;font-weight:600;color:#111}.ch-r button.on{background:#ff2d6f;color:#fff}.ch-v{color:#666;font-size:14px}`;
   document.head.appendChild(css);
 })();
   </script>
