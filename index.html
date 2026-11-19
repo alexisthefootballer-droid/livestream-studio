@@ -5247,7 +5247,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["👤", "Account", "#/edit-profile"], ["🛍", "Store", "#/store"], ["🗑", "Delete account", "fn:deleteacct"], ["🛡", "Security & permissions", "fn:security"], ["📈", "Analytics", "#/live-analytics"],
       ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"]]],
     ["Visibility", [
-      ["🔒", "Private account", "fn:private"], ["🎁", "LIVE privacy", "fn:livepriv"], ["🚫", "Blocked accounts", "#/blocked"]]],
+      ["🔒", "Private account", "fn:private"], ["🎁", "LIVE privacy", "fn:livepriv"], ["🏅", "Gifter level", "fn:gifter"], ["🚫", "Blocked accounts", "#/blocked"]]],
     ["Interactions", [
       ["💬", "Comments", "fn:comments"], ["@", "Mentions", "fn:mentions"], ["✉️", "Direct messages", "fn:dm"], ["🎬", "Reuse of content", "fn:reuse"],
       ["⬇️", "Downloads", "fn:downloads"], ["👥", "Following list", "fn:following"], ["♥", "Liked videos", "fn:liked"]]],
@@ -5317,6 +5317,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (a === "fn:wellbeing") { LS.openWellbeing(); return; }
       if (a === "fn:private") { LS.openPrivate(); return; }
       if (a === "fn:livepriv") { LS.openLivePrivacy(); return; }
+      if (a === "fn:gifter") { if (LS.gifterSheet) LS.gifterSheet(); return; }
       if (a === "fn:comments") { LS.openCommentsSetting(); return; }
       if (a === "fn:notif") { LS.openNotifSetting(); return; }
       if (a === "fn:offline") { if (LS.offlineSheet) LS.offlineSheet(); return; }
@@ -10253,6 +10254,83 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
 .md-sw{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#fff;border-radius:14px;padding:14px 16px}.md-sw small,.md-l small{display:block;color:#888;font-size:13px}
 .md-l{display:block;margin:16px 4px 6px;font-weight:600}.md-sh textarea{width:100%;box-sizing:border-box;border:0;border-radius:12px;padding:12px;font-size:16px;background:#fff;color:#111}
 .md-save{display:block;width:100%;margin-top:14px;background:#ff2d6f;color:#fff;border:0;border-radius:24px;padding:13px;font-size:17px;font-weight:700}`;
+  document.head.appendChild(css);
+})();
+  </script>
+  <script>
+/* Gifter levels: 1 point for each coin you send in gifts. Badge shows next to your name when you join a LIVE. */
+(function () {
+  const LS = window.LS, sb = LS.sb;
+  const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const TIERS = [
+    { n: "I", from: 1, to: 9, ic: "🔺", c: "#6cb8ff", g: "#173a8a,#2a64d8" },
+    { n: "II", from: 10, to: 19, ic: "🔷", c: "#5b8cff", g: "#1c2f8f,#3b55d6" },
+    { n: "III", from: 20, to: 29, ic: "💎", c: "#b36bff", g: "#43157f,#8a3fd1" },
+    { n: "IV", from: 30, to: 39, ic: "🔶", c: "#ffc83d", g: "#6a3d00,#d28a14" },
+    { n: "V", from: 40, to: 49, ic: "⬢", c: "#b05cff", g: "#3d0a7a,#a21de0" },
+    { n: "VI", from: 50, to: 100, ic: "👑", c: "#ff7ab8", g: "#7a0a3d,#e0307a" }
+  ];
+  const needFor = (lv) => 10 * (lv - 1) * (lv - 1); // total points needed to reach a level
+  LS.gifterLevel = function (xp) {
+    xp = Math.max(0, +xp || 0);
+    let lv = 1; while (lv < 100 && xp >= needFor(lv + 1)) lv++;
+    const t = TIERS.find((x) => lv >= x.from && lv <= x.to) || TIERS[0];
+    return { lv, tier: t, xp, cur: needFor(lv), next: lv < 100 ? needFor(lv + 1) : null };
+  };
+  LS.gifterBadge = (xp) => { const g = LS.gifterLevel(xp); return g.lv >= 2 ? g.tier.ic + " Lv." + g.lv : ""; };
+  const xpCache = {};
+  LS.gifterXpOf = async function (uid) {
+    if (!sb || !uid) return 0;
+    if (xpCache[uid] == null) { try { const { data } = await sb.rpc("gifter_xp", { p_user: uid }); xpCache[uid] = +data || 0; } catch (e) { xpCache[uid] = 0; } }
+    return xpCache[uid];
+  };
+  /* join lines get the badge */
+  const prevLine = LS.profLine;
+  if (prevLine) LS.profLine = async function (id) {
+    const [base, xp] = await Promise.all([prevLine.apply(this, arguments), LS.gifterXpOf(id)]);
+    const b = LS.gifterBadge(xp);
+    return [b, base].filter(Boolean).join(" · ");
+  };
+  LS.gifterSheet = async function () {
+    if (!sb || !LS.user) { location.hash = "#/auth"; return; }
+    const ov = document.createElement("div"); ov.className = "gl-ov";
+    ov.innerHTML = '<div class="gl-sh"><p class="gl-load">Loading…</p></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+    const sh = ov.firstChild;
+    let me = {}, xp = 0;
+    try { const r = await sb.from("profiles").select("display_name,username,avatar_url").eq("id", LS.user.id).maybeSingle(); me = (r && r.data) || {}; } catch (e) { /* ignore */ }
+    delete xpCache[LS.user.id]; xp = await LS.gifterXpOf(LS.user.id);
+    const g = LS.gifterLevel(xp);
+    let sel = TIERS.indexOf(g.tier);
+    function draw() {
+      const t = TIERS[sel], reached = g.lv >= t.from, here = g.tier === t;
+      const pct = g.next ? Math.round(((xp - g.cur) / (g.next - g.cur)) * 100) : 100;
+      sh.innerHTML = `<button class="gl-x" aria-label="Close">✕</button>
+        <div class="gl-top"><span class="gl-av">${me.avatar_url ? `<img src="${esc(me.avatar_url)}" alt="">` : `<u>${esc((me.display_name || me.username || "?").slice(0, 1).toUpperCase())}</u>`}</span>
+          <div><b class="gl-nm">${esc(me.display_name || me.username || "You")}</b><span class="gl-pill" style="background:${g.tier.c}33;color:${g.tier.c}">${g.tier.ic} ${g.lv}</span></div></div>
+        <div class="gl-tiers">${TIERS.map((x, i) => `<button data-t="${i}" class="${i === sel ? "on" : ""} ${g.lv >= x.from ? "" : "lock"}">${x.ic}</button>`).join("")}</div>
+        <div class="gl-card" style="background:linear-gradient(135deg,${t.g})"><div class="gl-big">${t.ic}</div><div class="gl-rn"><b>${t.n}</b><small>Lv.${t.from} – Lv.${t.to === 100 ? "100" : t.to}</small></div>
+          ${here ? `<div class="gl-p"><div class="gl-bar"><i style="width:${pct}%"></i></div><small>${g.next ? `${xp - g.cur} / ${g.next - g.cur} points to Lv.${g.lv + 1}` : "Top level reached"}</small></div>` : reached ? `<p class="gl-m">You passed this gifter level.</p>` : `<p class="gl-m">You haven't reached this gifter level yet.</p>`}</div>
+        <h4>Rewards</h4>
+        <div class="gl-rw ${reached ? "" : "lock"}"><span>${reached ? "" : "🔒 "}Lv.${t.from}</span><b>Gifter badge</b><em style="color:${t.c}">${t.ic} ${t.from}</em></div>
+        <p class="gl-n">Earn 1 point for every coin you send in gifts. Your badge shows next to your name when you join a LIVE.</p>`;
+    }
+    sh.addEventListener("click", (e) => { if (e.target.closest(".gl-x")) { ov.remove(); return; } const b = e.target.closest("[data-t]"); if (b) { sel = +b.dataset.t; draw(); } });
+    draw();
+  };
+  const css = document.createElement("style");
+  css.textContent = `.gl-ov{position:fixed;inset:0;background:#0008;z-index:9998;display:flex;align-items:flex-end}
+.gl-sh{position:relative;width:100%;max-height:90vh;overflow:auto;background:linear-gradient(#3a1a6e,#14103a 45%,#0d0b26);color:#fff;border-radius:22px 22px 0 0;padding:20px 16px 28px}
+.gl-load{text-align:center;padding:30px}.gl-x{position:absolute;right:14px;top:12px;background:#ffffff1f;border:0;color:#fff;width:34px;height:34px;border-radius:50%}
+.gl-top{display:flex;align-items:center;gap:14px;margin:6px 0 18px}.gl-av{width:64px;height:64px;border-radius:50%;overflow:hidden;background:#555;display:grid;place-items:center;border:3px solid #ffffff40}.gl-av img{width:100%;height:100%;object-fit:cover}.gl-av u{text-decoration:none;font-size:26px;font-weight:700}
+.gl-nm{display:block;font-size:21px;margin-bottom:6px}.gl-pill{display:inline-block;border-radius:8px;padding:3px 10px;font-weight:700;font-size:17px}
+.gl-tiers{display:flex;justify-content:space-between;margin:6px 4px 14px}.gl-tiers button{background:#ffffff12;border:2px solid transparent;border-radius:50%;width:48px;height:48px;font-size:22px}.gl-tiers button.on{border-color:#c98aff;background:#ffffff26}.gl-tiers button.lock{opacity:.5}
+.gl-card{position:relative;border-radius:18px;padding:22px 20px;min-height:170px;overflow:hidden;border:1px solid #ffffff22}
+.gl-big{position:absolute;right:16px;top:6px;font-size:96px;opacity:.9}.gl-rn b{font-size:52px;font-style:italic;display:block}.gl-rn small{opacity:.8;font-size:17px}
+.gl-m{position:absolute;left:20px;bottom:18px;margin:0;font-size:19px;font-weight:600;opacity:.95}.gl-p{margin-top:36px}.gl-bar{background:#00000055;height:10px;border-radius:6px;overflow:hidden}.gl-bar i{display:block;height:100%;background:#fff}.gl-p small{display:block;margin-top:8px;opacity:.9}
+.gl-sh h4{font-size:26px;margin:22px 2px 10px}.gl-rw{display:flex;align-items:center;gap:20px;background:#ffffff14;border-radius:14px;padding:22px 18px;font-size:19px}.gl-rw span{font-weight:700}.gl-rw b{flex:1;font-weight:600;opacity:.9}.gl-rw em{font-style:normal;font-weight:700;background:#ffffff1f;border-radius:10px;padding:4px 10px}.gl-rw.lock{opacity:.6}
+.gl-n{color:#b8b4d6;font-size:14px;margin:14px 2px 0}`;
   document.head.appendChild(css);
 })();
   </script>
