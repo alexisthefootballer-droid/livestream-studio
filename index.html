@@ -3277,6 +3277,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           ${go("recs", "🎞", "LIVE recordings")}
           ${go("devstat", "📶", "Device status")}
           ${go("cohost", "🤝", "Co-host suggestions")}
+          ${go("modset", "🛡️", "Moderator settings")}
           ${go("grp", "💬", "Group chats")}
           ${swr("guardian", "🛡️", "Guardian", "Let viewers compete each week to be your Guardian. The top gifter gets a shield in chat.", false)}
           ${swr("ai", "🤖", "AI-generated content", "Label your LIVE if it uses AI-made or AI-edited visuals or voices.")}
@@ -3345,6 +3346,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (b.id === "tlback") { vw = "main"; render(); return; }
       if (b.dataset.go === "seats") { ctx.close(); ctx.openSeats(); return; }
       if (b.dataset.go === "grp") { if (live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "End your LIVE first, then open Group chats in your Inbox."; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); } else { ctx.close(); location.hash = "#/inbox"; } return; }
+      if (b.dataset.go === "modset") { if (!live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "Go LIVE first."; d.style.zIndex = 9999; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); return; } ctx.close(); if (LS.modSheet) LS.modSheet({ stream: ctx.streamId() }); return; }
       if (b.dataset.go === "cohost") { if (!live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "Go LIVE first. Suggestions come from your viewers."; d.style.zIndex = 9999; document.body.appendChild(d); setTimeout(() => d.remove(), 2800); return; } ctx.close(); if (LS.cohostSheet) LS.cohostSheet({ stream: ctx.streamId(), host: true }); return; }
       if (b.dataset.go === "devstat") { ctx.close(); if (LS.deviceStatus) LS.deviceStatus(); return; }
       if (b.dataset.go === "recs") { if (live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "End your LIVE first, then open LIVE recordings."; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); } else { ctx.close(); location.hash = "#/recordings"; } return; }
@@ -10159,6 +10161,98 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
 .ch-r{display:flex;align-items:center;gap:10px;padding:8px 0}.ch-r b{flex:1;font-weight:600}
 .ch-a{width:40px;height:40px;border-radius:50%;overflow:hidden;background:#ccc;display:inline-grid;place-items:center}.ch-a img{width:100%;height:100%;object-fit:cover}.ch-a u{text-decoration:none;font-weight:700}
 .ch-r button{background:#f1f1f3;border:0;border-radius:16px;padding:7px 14px;font-weight:600;color:#111}.ch-r button.on{background:#ff2d6f;color:#fff}.ch-v{color:#666;font-size:14px}`;
+  document.head.appendChild(css);
+})();
+  </script>
+  <script>
+/* Moderator settings: comment settings, muted and blocked accounts. */
+(function () {
+  const LS = window.LS, sb = LS.sb;
+  const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; d.style.zIndex = 9999; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
+  const av = (url, name) => url ? `<img src="${esc(url)}" alt="">` : `<u>${esc((name || "?").slice(0, 1).toUpperCase())}</u>`;
+  LS.modSheet = function (o) {
+    if (!sb || !LS.user) { location.hash = "#/auth"; return; }
+    if (!o || !o.stream) return;
+    const ov = document.createElement("div"); ov.className = "md-ov";
+    const sh = document.createElement("div"); sh.className = "md-sh"; ov.appendChild(sh);
+    document.body.appendChild(ov);
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+    let view = "home", mutes = [], chat = [], cfg = { chat_strict: false, blocked_words: "" };
+    const head = (t, back) => `<div class="md-h">${back ? '<button class="md-b" data-go="home">‹</button>' : "<span></span>"}<b>${t}</b><button class="md-b" data-close="1">✕</button></div>`;
+    const person = (p, btns) => `<div class="md-r"><span class="md-a">${av(p.avatar, p.name)}</span><b>${esc(p.name || "user")}</b>${btns}</div>`;
+    function draw() {
+      if (view === "home") {
+        sh.innerHTML = head("Moderator settings") + `<div class="md-card"><button data-go="comment">Comment settings<i>›</i></button><button data-go="muted">Muted accounts<small>Muted for the rest of the LIVE</small><i>›</i></button><button data-go="blocked">Blocked accounts<i>›</i></button></div>`;
+      } else if (view === "comment") {
+        sh.innerHTML = head("Comment settings", true) + `<label class="md-sw"><div><b>Strict chat filter</b><small>Also hide rude, mocking or off-topic messages.</small></div><input type="checkbox" id="mdst" ${cfg.chat_strict ? "checked" : ""}></label>
+          <label class="md-l">Blocked words<small>Separate words with commas.</small></label><textarea id="mdw" maxlength="1000" rows="3" placeholder="word1, word2">${esc(cfg.blocked_words || "")}</textarea><button class="md-save" id="mdsave">Save</button>`;
+      } else if (view === "muted") {
+        const m = mutes.filter((x) => x.kind === "mute");
+        sh.innerHTML = head("Muted accounts", true) + (m.length ? m.map((p) => person(p, `<button data-un="${p.uid}">Unmute</button>`)).join("") : `<p class="md-e">No muted accounts.</p>`)
+          + `<h5>Recent chatters</h5>` + (chat.length ? chat.map((p) => person(p, `<button data-mu="${p.uid}">Mute</button><button data-bl="${p.uid}" class="red">Block</button>`)).join("") : `<p class="md-e">No one has chatted yet.</p>`);
+      } else if (view === "blocked") {
+        const m = mutes.filter((x) => x.kind === "block");
+        sh.innerHTML = head("Blocked accounts", true) + `<p class="md-n">Blocked people cannot chat or ask to join as a guest in this LIVE.</p>` + (m.length ? m.map((p) => person(p, `<button data-un="${p.uid}">Unblock</button>`)).join("") : `<p class="md-e">No blocked accounts.</p>`);
+      }
+    }
+    async function refresh() {
+      try { const { data } = await sb.rpc("mod_list_mutes", { p_stream: o.stream }); mutes = Array.isArray(data) ? data : []; } catch (e) { mutes = []; }
+      try { const { data } = await sb.rpc("mod_recent_chatters", { p_stream: o.stream }); chat = Array.isArray(data) ? data : []; } catch (e) { chat = []; }
+    }
+    async function setKind(uid, kind) {
+      const { error } = await sb.rpc("mod_set_mute", { p_stream: o.stream, p_user: uid, p_kind: kind });
+      if (error) { toast(/cannot_target/.test(error.message || "") ? "You cannot do that to the host or a moderator." : "Could not save. Try again."); return; }
+      await refresh(); draw();
+    }
+    sh.addEventListener("click", async (e) => {
+      if (e.target.closest("[data-close]")) { ov.remove(); return; }
+      const g = e.target.closest("[data-go]"); if (g) { view = g.dataset.go; draw(); return; }
+      const un = e.target.closest("[data-un]"); if (un) return setKind(un.dataset.un, "none");
+      const mu = e.target.closest("[data-mu]"); if (mu) return setKind(mu.dataset.mu, "mute");
+      const bl = e.target.closest("[data-bl]"); if (bl) return setKind(bl.dataset.bl, "block");
+      if (e.target.id === "mdsave") {
+        const { error } = await sb.rpc("mod_chat_settings", { p_stream: o.stream, p_strict: sh.querySelector("#mdst").checked, p_words: sh.querySelector("#mdw").value.trim() });
+        if (error) toast("Could not save. Try again."); else { toast("Saved ✔"); cfg.chat_strict = sh.querySelector("#mdst").checked; cfg.blocked_words = sh.querySelector("#mdw").value.trim(); view = "home"; draw(); }
+      }
+    });
+    (async () => {
+      sh.innerHTML = '<p class="md-e">Loading…</p>';
+      try { const { data } = await sb.from("streams").select("chat_strict,blocked_words").eq("id", o.stream).maybeSingle(); if (data) cfg = data; } catch (e) { /* ignore */ }
+      await refresh(); draw();
+    })();
+  };
+  /* moderators see "Moderator settings" in the share sheet of a live */
+  const prevShare = LS.shareSheet;
+  LS.shareSheet = function (o) {
+    const r = prevShare.apply(this, arguments);
+    const cl = LS.curLive;
+    if (o && o.live && cl && cl.streamId && LS.user && sb) {
+      sb.rpc("is_stream_mod", { p_stream: cl.streamId }).then(({ data }) => {
+        if (data !== true) return;
+        const ovs = document.querySelectorAll(".sh-ov"), ov = ovs[ovs.length - 1], row = ov && ov.querySelector(".sh-row.last");
+        if (!row || row.querySelector("[data-mod]")) return;
+        const b = document.createElement("button"); b.className = "sh-it"; b.dataset.mod = "1";
+        b.innerHTML = '<span class="c" style="background:#5b5bd6">🛡</span>Moderator settings';
+        b.addEventListener("click", (e) => { e.stopPropagation(); ov.remove(); LS.modSheet({ stream: cl.streamId }); });
+        row.insertBefore(b, row.firstChild);
+      }, () => {});
+    }
+    return r;
+  };
+  const css = document.createElement("style");
+  css.textContent = `.md-ov{position:fixed;inset:0;background:#0007;z-index:9998;display:flex;align-items:flex-end}
+.md-sh{width:100%;max-height:84vh;overflow:auto;background:#f4f4f6;color:#111;border-radius:18px 18px 0 0;padding:14px 14px 26px}
+.md-h{display:flex;justify-content:space-between;align-items:center;font-size:20px;margin-bottom:12px}.md-b{background:none;border:0;font-size:22px;width:34px;height:34px;color:#111}
+.md-card{background:#fff;border-radius:14px;overflow:hidden}.md-card button{display:flex;align-items:center;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid #eee;padding:18px 16px;font-size:18px;color:#111;gap:8px;flex-wrap:wrap}
+.md-card button i{margin-left:auto;font-style:normal;color:#999}.md-card small{flex-basis:100%;color:#888;font-size:14px;margin-top:-4px}
+.md-r{display:flex;align-items:center;gap:10px;padding:9px 0;background:#fff;margin-bottom:1px;padding-left:10px;padding-right:10px}.md-r b{flex:1;font-weight:600}
+.md-a{width:40px;height:40px;border-radius:50%;overflow:hidden;background:#ccc;display:inline-grid;place-items:center}.md-a img{width:100%;height:100%;object-fit:cover}.md-a u{text-decoration:none;font-weight:700}
+.md-r button{background:#eee;border:0;border-radius:16px;padding:7px 12px;font-weight:600;color:#111}.md-r button.red{background:#ffe3e8;color:#c4143c}
+.md-sh h5{margin:14px 2px 6px;color:#666;font-size:14px}.md-e{color:#888;text-align:center;padding:16px 0;font-size:14px}.md-n{color:#666;font-size:14px;margin:0 2px 10px}
+.md-sw{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#fff;border-radius:14px;padding:14px 16px}.md-sw small,.md-l small{display:block;color:#888;font-size:13px}
+.md-l{display:block;margin:16px 4px 6px;font-weight:600}.md-sh textarea{width:100%;box-sizing:border-box;border:0;border-radius:12px;padding:12px;font-size:16px;background:#fff;color:#111}
+.md-save{display:block;width:100%;margin-top:14px;background:#ff2d6f;color:#fff;border:0;border-radius:24px;padding:13px;font-size:17px;font-weight:700}`;
   document.head.appendChild(css);
 })();
   </script>
