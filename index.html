@@ -3278,6 +3278,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           ${go("devstat", "📶", "Device status")}
           ${go("cohost", "🤝", "Co-host suggestions")}
           ${go("modset", "🛡️", "Moderator settings")}
+          ${go("promote", "🚀", "LIVE Promote")}
           ${go("grp", "💬", "Group chats")}
           ${swr("guardian", "🛡️", "Guardian", "Let viewers compete each week to be your Guardian. The top gifter gets a shield in chat.", false)}
           ${swr("ai", "🤖", "AI-generated content", "Label your LIVE if it uses AI-made or AI-edited visuals or voices.")}
@@ -3346,6 +3347,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (b.id === "tlback") { vw = "main"; render(); return; }
       if (b.dataset.go === "seats") { ctx.close(); ctx.openSeats(); return; }
       if (b.dataset.go === "grp") { if (live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "End your LIVE first, then open Group chats in your Inbox."; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); } else { ctx.close(); location.hash = "#/inbox"; } return; }
+      if (b.dataset.go === "promote") { if (!live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "Go LIVE first."; d.style.zIndex = 9999; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); return; } ctx.close(); if (LS.promoteSheet) LS.promoteSheet({ stream: ctx.streamId() }); return; }
       if (b.dataset.go === "modset") { if (!live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "Go LIVE first."; d.style.zIndex = 9999; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); return; } ctx.close(); if (LS.modSheet) LS.modSheet({ stream: ctx.streamId() }); return; }
       if (b.dataset.go === "cohost") { if (!live()) { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = "Go LIVE first. Suggestions come from your viewers."; d.style.zIndex = 9999; document.body.appendChild(d); setTimeout(() => d.remove(), 2800); return; } ctx.close(); if (LS.cohostSheet) LS.cohostSheet({ stream: ctx.streamId(), host: true }); return; }
       if (b.dataset.go === "devstat") { ctx.close(); if (LS.deviceStatus) LS.deviceStatus(); return; }
@@ -4251,19 +4253,20 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (!sb) { box.innerHTML = ""; return; }
       try {
         const since = new Date(Date.now() - 60000).toISOString();
-        const { data } = await wt(sb.from("streams").select("id,host_id,title,category,viewer_count").eq("is_live", true).gt("last_seen", since).order("viewer_count", { ascending: false }).limit(50), 10000);
+        const { data } = await wt(sb.from("streams").select("id,host_id,title,category,viewer_count,promoted_until").eq("is_live", true).gt("last_seen", since).order("viewer_count", { ascending: false }).limit(50), 10000);
         if (dead) return;
         const rows = data || [];
         await ensureNames(rows.map((r) => r.host_id));
         const fset = await LS.myFollows();
-        rows.sort((a2, b2) => (fset.has(b2.host_id) ? 1 : 0) - (fset.has(a2.host_id) ? 1 : 0));
+        const pro = (r2) => (r2.promoted_until && new Date(r2.promoted_until).getTime() > Date.now() ? 1 : 0);
+        rows.sort((a2, b2) => (pro(b2) - pro(a2)) || ((fset.has(b2.host_id) ? 1 : 0) - (fset.has(a2.host_id) ? 1 : 0)));
         if (dead) return;
         box.innerHTML = rows.length
           ? `<div class="note" style="padding:8px 16px"><b>Live now</b></div>` + rows.map((r) => {
             const nm = names[r.host_id] || "Host", h = hueOf(r.host_id);
             return `<a class="row-item" href="#/live/${r.id}">
               <span class="ring sm" style="--h:${h}">${avatar(nm, h, 52)}</span>
-              <div class="grow"><b>${esc(r.title || "Live now")}</b><small>${esc(nm)} · ${esc(r.category || "Live")}${fset.has(r.host_id) ? " · ✅ Following" : ""}</small></div>
+              <div class="grow"><b>${esc(r.title || "Live now")}</b><small>${esc(nm)} · ${esc(r.category || "Live")}${fset.has(r.host_id) ? " · ✅ Following" : ""}${r.promoted_until && new Date(r.promoted_until).getTime() > Date.now() ? " · 🚀 Promoted" : ""}</small></div>
               <div class="right"><span class="badge live">LIVE</span><small>👁 ${fmtN(r.viewer_count || 0)}</small></div>
             </a>`;
           }).join("") + `<div class="note" style="padding:8px 16px">Sample lives</div>`
@@ -4615,8 +4618,9 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
     if (!sb) return [];
     try {
       const since = new Date(Date.now() - 60000).toISOString();
-      const { data } = await sb.from("streams").select("id,host_id,title,category,viewer_count").eq("is_live", true).gt("last_seen", since).order("viewer_count", { ascending: false }).limit(30);
-      return data || [];
+      const { data } = await sb.from("streams").select("id,host_id,title,category,viewer_count,promoted_until").eq("is_live", true).gt("last_seen", since).order("viewer_count", { ascending: false }).limit(30);
+      const pro = (r2) => (r2.promoted_until && new Date(r2.promoted_until).getTime() > Date.now() ? 1 : 0);
+      return (data || []).sort((a2, b2) => pro(b2) - pro(a2));
     } catch (e) { return []; }
   }
 
@@ -10331,6 +10335,63 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
 .gl-m{position:absolute;left:20px;bottom:18px;margin:0;font-size:19px;font-weight:600;opacity:.95}.gl-p{margin-top:36px}.gl-bar{background:#00000055;height:10px;border-radius:6px;overflow:hidden}.gl-bar i{display:block;height:100%;background:#fff}.gl-p small{display:block;margin-top:8px;opacity:.9}
 .gl-sh h4{font-size:26px;margin:22px 2px 10px}.gl-rw{display:flex;align-items:center;gap:20px;background:#ffffff14;border-radius:14px;padding:22px 18px;font-size:19px}.gl-rw span{font-weight:700}.gl-rw b{flex:1;font-weight:600;opacity:.9}.gl-rw em{font-style:normal;font-weight:700;background:#ffffff1f;border-radius:10px;padding:4px 10px}.gl-rw.lock{opacity:.6}
 .gl-n{color:#b8b4d6;font-size:14px;margin:14px 2px 0}`;
+  document.head.appendChild(css);
+})();
+  </script>
+  <script>
+/* LIVE Promote: spend coins to show your live at the top of the Live list. */
+(function () {
+  const LS = window.LS, sb = LS.sb;
+  const PACKS = [{ m: 30, c: 200, t: "30 minutes" }, { m: 60, c: 350, t: "1 hour", best: true }, { m: 180, c: 900, t: "3 hours" }];
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; d.style.zIndex = 9999; document.body.appendChild(d); setTimeout(() => d.remove(), 2800); };
+  LS.promoteSheet = async function (o) {
+    if (!sb || !LS.user) { location.hash = "#/auth"; return; }
+    if (!o || !o.stream) return;
+    try { if (LS.refreshBalance) await LS.refreshBalance(); } catch (e) { /* ignore */ }
+    let goal = "viewers", pack = 1, busy = false;
+    const ov = document.createElement("div"); ov.className = "pm-ov";
+    const sh = document.createElement("div"); sh.className = "pm-sh"; ov.appendChild(sh);
+    document.body.appendChild(ov);
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+    function draw(msg) {
+      const bal = LS.coins == null ? "…" : LS.coins, P = PACKS[pack], short = LS.coins != null && LS.coins < P.c;
+      sh.innerHTML = `<div class="pm-hd"><b>LIVE Promote</b><button class="pm-x" aria-label="Close">✕</button></div>
+        <div class="pm-hero"><b>Get your LIVE seen</b><p>Your LIVE shows at the top of the Live list with a 🚀 Promoted tag.</p></div>
+        <div class="pm-box"><h4>Choose your goal</h4>
+          <label class="pm-o"><span>📺 More LIVE viewers</span><input type="radio" name="g" value="viewers" ${goal === "viewers" ? "checked" : ""}></label>
+          <label class="pm-o"><span>👥 More followers</span><input type="radio" name="g" value="followers" ${goal === "followers" ? "checked" : ""}></label></div>
+        <div class="pm-box"><h4>Choose how long</h4>
+          ${PACKS.map((x, i) => `<label class="pm-p ${i === pack ? "on" : ""}">${x.best ? '<em>Best pick</em>' : ""}<span><b>${x.t}</b><small>At the top of the Live list</small></span><strong>🪙 ${x.c}</strong><input type="radio" name="p" value="${i}" ${i === pack ? "checked" : ""}></label>`).join("")}</div>
+        <div class="pm-bal">Your coins: 🪙 ${bal}</div>
+        <div class="pm-bar"><div><small>Total</small><b>🪙 ${P.c}</b></div><button class="pm-pay" ${busy ? "disabled" : ""}>${short ? "Recharge coins" : "Pay with coins"}</button></div>
+        <div class="pm-msg">${msg || ""}</div>`;
+    }
+    sh.addEventListener("change", (e) => { if (e.target.name === "g") goal = e.target.value; if (e.target.name === "p") pack = +e.target.value; draw(); });
+    sh.addEventListener("click", async (e) => {
+      if (e.target.closest(".pm-x")) { ov.remove(); return; }
+      if (!e.target.closest(".pm-pay")) return;
+      const P = PACKS[pack];
+      if (LS.coins != null && LS.coins < P.c) { ov.remove(); location.hash = "#/store"; return; }
+      busy = true; draw();
+      const { data, error } = await sb.rpc("promote_live", { p_stream: o.stream, p_minutes: P.m, p_goal: goal });
+      busy = false;
+      if (error) { draw(/not_enough_coins/.test(error.message || "") ? "Not enough coins." : "Could not promote. Try again."); return; }
+      LS.coins = data; ov.remove(); toast("🚀 Promoted for " + P.t + "!");
+    });
+    draw();
+  };
+  const css = document.createElement("style");
+  css.textContent = `.pm-ov{position:fixed;inset:0;background:#0007;z-index:9998;display:flex;align-items:flex-end}
+.pm-sh{width:100%;max-height:92vh;overflow:auto;background:#fdeef2;color:#111;border-radius:20px 20px 0 0;padding:14px 14px 22px}
+.pm-hd{display:flex;justify-content:space-between;align-items:center;font-size:20px}.pm-x{background:#0000000d;border:0;width:34px;height:34px;border-radius:50%}
+.pm-hero{margin:14px 4px}.pm-hero b{font-size:21px}.pm-hero p{margin:4px 0 0;color:#555}
+.pm-box{background:#fff;border-radius:16px;padding:14px;margin-top:12px}.pm-box h4{margin:0 0 6px;font-size:19px}
+.pm-o{display:flex;justify-content:space-between;align-items:center;padding:12px 2px;font-size:17px}
+.pm-p{position:relative;display:flex;align-items:center;gap:10px;border:2px solid #e7e7ea;border-radius:14px;padding:16px 12px;margin-top:10px}.pm-p.on{border-color:#ff2d55;background:#fff2f5}
+.pm-p span{flex:1}.pm-p small{display:block;color:#777;margin-top:2px}.pm-p strong{font-size:17px}.pm-p em{position:absolute;left:12px;top:-11px;background:#ff2d55;color:#fff;font-style:normal;font-size:12px;font-weight:700;border-radius:8px;padding:2px 8px}
+.pm-bal{text-align:center;color:#666;margin:12px 0 4px}.pm-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;border-radius:16px;padding:12px 14px;margin-top:6px}
+.pm-bar small{display:block;color:#777}.pm-bar b{font-size:20px}.pm-pay{background:#ff2d55;color:#fff;border:0;border-radius:26px;padding:14px 28px;font-size:17px;font-weight:700}.pm-pay[disabled]{opacity:.6}
+.pm-msg{color:#c4143c;text-align:center;min-height:18px;margin-top:8px;font-size:14px}`;
   document.head.appendChild(css);
 })();
   </script>
