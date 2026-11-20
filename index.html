@@ -3639,6 +3639,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ...(o.tools ? { watch_who: o.tools.watch, show_about: o.tools.about, blocked_words: o.tools.blocked || "", chat_strict: !!o.tools.strict } : {}), last_seen: new Date().toISOString(),
     }).select().single();
     if (error || !row) throw new Error("Could not start the live (" + ((error && error.message) || "no row") + ").");
+    try { sb.rpc("event_mark_live", { p_stream: row.id }).then(() => {}, () => {}); } catch (e) { /* ignore */ }
     const room = new LK.Room({ adaptiveStream: true, dynacast: true });
     let actx = null, mixDest = null, micNode = null, loopNode = null, loopVol = null;
     const fail = async (e) => { try { await sb.from("streams").update({ is_live: false }).eq("id", row.id); } catch (x) { /* ignore */ } try { room.disconnect(); } catch (x) { /* ignore */ } throw e; };
@@ -5257,7 +5258,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["🔔", "Notifications", "fn:notif"], ["⏳", "Time and well-being", "fn:wellbeing"], ["🏠", "Family Pairing", "fn:family"]]],
     ["Account", [
       ["👤", "Account", "#/edit-profile"], ["🛍", "Store", "#/store"], ["🗑", "Delete account", "fn:deleteacct"], ["🛡", "Security & permissions", "fn:security"], ["📈", "Analytics", "#/live-analytics"],
-      ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"]]],
+      ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"], ["👥", "Find people", "#/find-people"], ["📅", "LIVE Events", "#/events"]]],
     ["Visibility", [
       ["🔒", "Private account", "fn:private"], ["🎁", "LIVE privacy", "fn:livepriv"], ["🏅", "Gifter level", "fn:gifter"], ["🚫", "Blocked accounts", "#/blocked"]]],
     ["Interactions", [
@@ -10566,6 +10567,549 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
 })();
 </script>
   <script>
+/* Find people, Scan QR, Connect Now, LIVE Events, event settings, profile display order. */
+(function () {
+  const LS = window.LS, S = LS.screens, sb = LS.sb, esc = LS.esc, $ = LS.$;
+  const st = document.createElement("style");
+  st.textContent = `
+  .fp{min-height:100%;background:#000;color:#fff;padding-bottom:40px}
+  .fp-top{display:flex;align-items:center;justify-content:space-between;padding:14px 12px 10px;position:sticky;top:0;background:#000;z-index:5}
+  .fp-top b{font-size:20px;font-weight:700;position:absolute;left:0;right:0;text-align:center;pointer-events:none}
+  .fp-top button,.fp-top a{background:none;border:0;color:#fff;font-size:26px;padding:6px 10px;text-decoration:none;position:relative;z-index:1}
+  .fp-search{display:flex;align-items:center;gap:10px;background:#1f1f23;border-radius:12px;margin:8px 16px 10px;padding:0 14px}
+  .fp-search input{flex:1;background:none;border:0;color:#fff;font-size:18px;padding:13px 0;outline:0;min-width:0}
+  .fp-hub{margin-top:4px}
+  .fp-row{display:flex;align-items:center;gap:16px;padding:13px 16px;width:100%;background:none;border:0;color:#fff;text-align:left;font:inherit;cursor:pointer}
+  .fp-ic{width:60px;height:60px;border-radius:50%;display:grid;place-items:center;font-size:28px;flex:none}
+  .fp-row b{display:block;font-size:20px;font-weight:700}
+  .fp-row small{display:block;color:#9a9aa3;font-size:16px;margin-top:2px}
+  .fp-row .go{margin-left:auto;color:#9a9aa3;font-size:26px}
+  .fp-h{font-size:21px;font-weight:700;padding:22px 16px 8px}
+  .sg{padding:12px 16px 14px;border-bottom:1px solid #1d1d22}
+  .sg-h{display:flex;align-items:center;gap:14px}
+  .sg-av{width:64px;height:64px;border-radius:50%;overflow:hidden;flex:none;background:#333;display:block}
+  .sg-av>*{width:100%;height:100%;object-fit:cover}
+  .sg-t{flex:1;min-width:0}
+  .sg-t b{display:block;font-size:19px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sg-t small{display:flex;align-items:center;gap:6px;color:#9a9aa3;font-size:16px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sg-t small img{width:24px;height:24px;border-radius:50%;object-fit:cover;margin-left:-2px;border:1px solid #000}
+  .fp-fb{background:#fe2c55;border:0;color:#fff;font-weight:700;font-size:16px;border-radius:8px;padding:11px 14px;flex:none}
+  .fp-fb.on{background:#2a2a30;color:#fff}
+  .sg-x{background:none;border:0;color:#9a9aa3;font-size:26px;padding:4px 6px;flex:none}
+  .sg-th{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-top:12px;border-radius:12px;overflow:hidden}
+  .sg-th a{aspect-ratio:3/4;background:#222;display:block;overflow:hidden}
+  .sg-th img,.sg-th video{width:100%;height:100%;object-fit:cover;display:block}
+  .fp-empty{color:#9a9aa3;text-align:center;padding:30px 24px;font-size:17px;line-height:1.45}
+  /* scan */
+  .sc{position:fixed;inset:0;background:#050308;color:#fff;z-index:140;overflow:hidden}
+  .sc video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.55}
+  .sc-top{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;padding:14px 12px;z-index:3}
+  .sc-top button{background:none;border:0;color:#fff;font-size:28px;padding:6px 10px}
+  .sc-top b{position:absolute;left:0;right:0;text-align:center;font-size:20px;pointer-events:none}
+  .sc-fr{position:absolute;left:50%;top:44%;width:min(66vw,300px);height:min(66vw,300px);transform:translate(-50%,-50%);z-index:2}
+  .sc-fr i{position:absolute;width:24px;height:24px;border:4px solid #fff}
+  .sc-fr i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0;border-top-left-radius:6px}
+  .sc-fr i:nth-child(2){right:0;top:0;border-left:0;border-bottom:0;border-top-right-radius:6px}
+  .sc-fr i:nth-child(3){left:0;bottom:0;border-right:0;border-top:0;border-bottom-left-radius:6px}
+  .sc-fr i:nth-child(4){right:0;bottom:0;border-left:0;border-top:0;border-bottom-right-radius:6px}
+  .sc-ln{position:absolute;left:0;right:0;top:0;height:70px;background:linear-gradient(180deg,transparent,rgba(255,255,255,.25));border-bottom:2px solid #fff;animation:scl 2.4s ease-in-out infinite}
+  @keyframes scl{0%{transform:translateY(0)}100%{transform:translateY(calc(min(66vw,300px) - 70px))}}
+  .sc-lt{position:absolute;left:0;right:0;top:calc(44% + min(33vw,150px) + 24px);text-align:center;z-index:3;font-size:20px;font-weight:700;background:none;border:0;color:#fff;width:100%}
+  .sc-hint{position:absolute;left:0;right:0;top:calc(44% + min(33vw,150px) + 76px);text-align:center;z-index:3;color:#cfcfd6;font-size:17px;padding:0 20px}
+  .sc-bot{position:absolute;left:0;right:0;bottom:34px;display:flex;justify-content:space-around;z-index:3}
+  .sc-bot button{background:none;border:0;color:#fff;font-size:17px;display:flex;flex-direction:column;align-items:center;gap:8px}
+  .sc-bot i{width:70px;height:70px;border-radius:50%;background:#2c2c30;display:grid;place-items:center;font-size:30px;font-style:normal}
+  /* events */
+  .ev-tabs{display:flex;border-bottom:1px solid #26262b}
+  .ev-tabs button{flex:1;background:none;border:0;color:#9a9aa3;font-size:19px;font-weight:700;padding:14px 0;border-bottom:3px solid transparent;margin-bottom:-1px}
+  .ev-tabs button.on{color:#fff;border-color:#fff}
+  .ev-empty{padding:58px 28px 0}
+  .ev-empty h2{font-size:34px;line-height:1.15;text-align:center;margin:0 0 40px;font-weight:800}
+  .ev-f{display:flex;gap:16px;margin-bottom:34px}
+  .ev-f i{font-style:normal;font-size:30px;width:34px;flex:none}
+  .ev-f b{display:block;font-size:21px;font-weight:700}
+  .ev-f p{color:#cfcfd6;margin:6px 0 0;font-size:18px;line-height:1.4}
+  .ev-cta{position:fixed;left:24px;right:24px;bottom:22px;background:#fe2c55;color:#fff;border:0;border-radius:10px;padding:19px;font-size:21px;font-weight:700;z-index:6}
+  .ev-card{background:#17171b;border-radius:16px;margin:12px 16px;padding:16px}
+  .ev-card h3{margin:0 0 4px;font-size:20px}
+  .ev-card .d{color:#ffb020;font-weight:600;font-size:16px}
+  .ev-card p{color:#cfcfd6;margin:8px 0 0;font-size:16px;line-height:1.4}
+  .ev-card .h{display:flex;align-items:center;gap:10px;margin-top:12px;color:#9a9aa3;font-size:15px}
+  .ev-card .h span{width:30px;height:30px;border-radius:50%;overflow:hidden;display:block}
+  .ev-card .h span>*{width:100%;height:100%;object-fit:cover}
+  .ev-acts{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  .ev-acts button,.ev-acts a{background:#2a2a30;color:#fff;border:0;border-radius:10px;padding:11px 16px;font-size:16px;font-weight:600;text-decoration:none}
+  .ev-acts .pri{background:#fe2c55}
+  .ev-sh{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:160;display:flex;align-items:flex-end}
+  .ev-sh>div{background:#1b1b20;width:100%;border-radius:20px 20px 0 0;padding:18px 18px 26px;max-height:90vh;overflow:auto;color:#fff}
+  .ev-sh h3{margin:0 0 14px;font-size:21px;text-align:center}
+  .ev-sh label{display:block;color:#9a9aa3;font-size:15px;margin:12px 0 6px}
+  .ev-sh input,.ev-sh textarea{width:100%;box-sizing:border-box;background:#0f0f12;border:1px solid #2c2c33;border-radius:10px;color:#fff;font-size:17px;padding:12px;font-family:inherit}
+  .ev-sh .msg{color:#ff6b81;min-height:20px;margin-top:10px;font-size:15px}
+  .ev-sh .go{width:100%;background:#fe2c55;color:#fff;border:0;border-radius:12px;padding:16px;font-size:19px;font-weight:700;margin-top:10px}
+  .ev-sh .it{display:block;width:100%;background:none;border:0;color:#fff;text-align:left;padding:15px 4px;font-size:19px;border-bottom:1px solid #26262b}
+  .ev-pc{margin:10px 16px;background:#17171b;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:12px;color:#fff;text-decoration:none}
+  .ev-pc i{font-style:normal;font-size:26px}
+  .ev-pc div{flex:1;min-width:0}
+  .ev-pc b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ev-pc small{color:#ffb020;font-size:14px}
+  .ev-pc button{background:#fe2c55;color:#fff;border:0;border-radius:8px;padding:9px 14px;font-weight:700;font-size:15px}
+  .ev-pc button.on{background:#2a2a30}
+  .ev-chip{display:inline-block;margin-top:6px;background:rgba(0,0,0,.55);border:1px solid #ffffff55;border-radius:999px;padding:5px 12px;font-size:13.5px;color:#fff;text-decoration:none}
+  .ev-ban{position:fixed;left:10px;right:10px;top:10px;z-index:300;background:#fe2c55;color:#fff;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 8px 24px #0008}
+  .ev-ban span{flex:1;font-size:15.5px}
+  .ev-ban a{background:#fff;color:#fe2c55;text-decoration:none;font-weight:700;border-radius:8px;padding:8px 12px}
+  .ev-ban button{background:none;border:0;color:#fff;font-size:22px}
+  .ev-set{background:#1f1f23;border-radius:14px;margin:12px 16px;padding:16px;display:flex;gap:12px;align-items:flex-start}
+  .ev-set b{display:block;font-size:20px;margin-bottom:6px}
+  .ev-set p{color:#a9a9b2;margin:0;font-size:16.5px;line-height:1.4}
+  .ev-sw{position:relative;width:60px;height:34px;flex:none}
+  .ev-sw input{opacity:0;position:absolute;inset:0;width:100%;height:100%;margin:0}
+  .ev-sw i{position:absolute;inset:0;background:#58585e;border-radius:17px;transition:.2s}
+  .ev-sw i:after{content:"";position:absolute;left:4px;top:4px;width:26px;height:26px;background:#fff;border-radius:50%;transition:.2s}
+  .ev-sw input:checked+i{background:#fe2c55}
+  .ev-sw input:checked+i:after{left:30px}
+  .do-row{display:flex;align-items:center;justify-content:space-between;padding:18px 16px;font-size:21px;font-weight:700;touch-action:none;background:#222}
+  .do-row.drag{background:#33333a;position:relative;z-index:2}
+  .do-row i{font-style:normal;color:#9a9aa3;font-size:26px;padding:0 6px;cursor:grab}
+  `;
+  document.head.appendChild(st);
+
+  const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.style.zIndex = 9999; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); };
+  const vurl = (p) => (sb && p ? sb.storage.from("videos").getPublicUrl(p).data.publicUrl : "");
+  const myName = () => (LS.myProfile && LS.myProfile.username) || ((LS.user && LS.user.email) || "you").split("@")[0];
+  const myLink = () => location.origin + "/#/u/" + myName();
+  const INVITE = () => "Join me on LiveStream Studio: " + myLink();
+  const fmtD = (s) => { try { return new Date(s).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); } catch (e) { return String(s); } };
+  const ava = (pr, n) => (LS.photo ? LS.photo(pr, n) : "");
+  const need = () => { if (!sb || !LS.user) { location.hash = "#/auth"; return false; } return true; };
+  const doShare = async (text, url) => {
+    try { if (navigator.share) { await navigator.share({ title: "LiveStream Studio", text, url }); return; } } catch (e) { return; }
+    try { await navigator.clipboard.writeText(url); toast("Link copied"); } catch (e) { toast(url); }
+  };
+
+  /* ---------- follow button wiring ---------- */
+  function wireFollow(root, follows) {
+    root.addEventListener("click", async (e) => {
+      const b = e.target.closest(".fp-fb"); if (!b) return;
+      e.preventDefault();
+      if (b.classList.contains("on")) return;
+      b.disabled = true;
+      const r = await LS.setFollow(b.dataset.uid, true);
+      b.disabled = false;
+      if (!r) { toast("Could not follow. Try again."); return; }
+      b.classList.add("on"); b.textContent = r === "requested" ? "Requested" : "Following";
+      if (follows) follows.add(b.dataset.uid);
+    });
+  }
+  const personHtml = (p, label, follows) => `<div class="sg"><div class="sg-h">
+      <a class="sg-av" href="#/u/${esc(p.username)}">${ava(p, 64)}</a>
+      <div class="sg-t"><b>${esc(p.display_name || p.username)}</b><small>${esc(label)}</small></div>
+      <button class="fp-fb ${follows && follows.has(p.id) ? "on" : ""}" data-uid="${p.id}" type="button">${follows && follows.has(p.id) ? "Following" : "Follow"}</button></div></div>`;
+
+  /* ---------- Find people ---------- */
+  const DIS = "ls.sgdis";
+  const getDis = () => { try { return JSON.parse(localStorage.getItem(DIS) || "[]"); } catch (e) { return []; } };
+  const addDis = (id) => { try { localStorage.setItem(DIS, JSON.stringify(getDis().concat(id).slice(-200))); } catch (e) { /* ignore */ } };
+  S.findPeople = function (view) {
+    if (!need()) return;
+    view.innerHTML = `<div class="fp">
+      <div class="fp-top"><button id="fpb" aria-label="Back">←</button><b>Find people</b><a href="#/scan" aria-label="Scan">⛶</a></div>
+      <div class="fp-search"><span>🔍</span><input id="fpq" type="search" placeholder="Search by name or username" autocomplete="off" maxlength="30"></div>
+      <div id="fpbody"></div></div>`;
+    $("#fpb", view).addEventListener("click", () => { history.length > 1 ? history.back() : (location.hash = "#/profile"); });
+    const body = $("#fpbody", view);
+    let dead = false, follows = new Set(), t = null, seq = 0;
+    wireFollow(view, follows);
+    const hub = () => {
+      body.innerHTML = `<div class="fp-hub">
+        <button class="fp-row" data-a="near"><span class="fp-ic" style="background:#8b5cf6">📡</span><span><b>Connect Now</b><small>Find friends around you.</small></span><span class="go">›</span></button>
+        <button class="fp-row" data-a="qr"><span class="fp-ic" style="background:#f97316">▣</span><span><b>Use QR code</b><small>Show or scan each other's QR codes.</small></span><span class="go">›</span></button>
+        <button class="fp-row" data-a="inv"><span class="fp-ic" style="background:#f5b301">➦</span><span><b>Invite friends</b><small>Share your profile to connect.</small></span><span class="go">›</span></button>
+        <button class="fp-row" data-a="con"><span class="fp-ic" style="background:#16a34a">📞</span><span><b>Contacts</b><small>Sync or find contacts.</small></span><span class="go">›</span></button>
+        <button class="fp-row" data-a="fb"><span class="fp-ic" style="background:#1877f2;font-weight:800;font-family:Arial">f</span><span><b>Facebook</b><small>Invite your Facebook friends.</small></span><span class="go">›</span></button>
+      </div><div class="fp-h" id="sgh" style="display:none">Suggested accounts</div><div id="sglist"></div>`;
+      loadSug();
+    };
+    async function loadSug() {
+      try {
+        const [{ data }, f] = await Promise.all([sb.rpc("suggested_accounts", { p_limit: 14 }), LS.myFollows()]);
+        if (dead || $("#fpq", view).value.trim()) return;
+        follows = f; const dis = new Set(getDis());
+        const list = (Array.isArray(data) ? data : []).filter((p) => !dis.has(p.id));
+        const box = $("#sglist", view); if (!box) return;
+        if (!list.length) return;
+        $("#sgh", view).style.display = "block";
+        box.innerHTML = list.map((p) => {
+          const th = (p.thumbs || []).map((x) => `<a href="#/u/${esc(p.username)}">${x.thumb ? `<img loading="lazy" alt="" src="${esc(vurl(x.thumb))}">` : `<video muted preload="metadata" src="${esc(vurl(x.video))}#t=0.5"></video>`}</a>`).join("");
+          const sub = p.follows_me ? ((p.mutual || []).length ? `Friends with ${(p.mutual || []).map((u) => u ? `<img alt="" src="${esc(u)}">` : "").join("")}` : "Follows you") : "People you may know";
+          return `<div class="sg" data-id="${p.id}"><div class="sg-h">
+            <a class="sg-av" href="#/u/${esc(p.username)}">${ava(p, 64)}</a>
+            <div class="sg-t"><b>${esc(p.display_name || p.username)}</b><small>${sub}</small></div>
+            <button class="fp-fb" data-uid="${p.id}" type="button">${p.follows_me ? "Follow back" : "Follow"}</button>
+            <button class="sg-x" data-x="${p.id}" type="button" aria-label="Dismiss">✕</button></div>${th ? `<div class="sg-th">${th}</div>` : ""}</div>`;
+        }).join("");
+      } catch (e) { /* ignore */ }
+    }
+    async function search(q) {
+      const my = ++seq;
+      body.innerHTML = `<div class="fp-empty">Searching…</div>`;
+      const clean = q.replace(/[^\w .]/g, "").trim();
+      if (!clean) { hub(); return; }
+      try {
+        const [{ data }, f] = await Promise.all([sb.from("profiles").select("id,username,display_name,avatar_url,bio").or(`username.ilike.%${clean}%,display_name.ilike.%${clean}%`).neq("id", LS.user.id).limit(25), LS.myFollows()]);
+        if (dead || my !== seq) return;
+        follows = f;
+        body.innerHTML = (data && data.length) ? data.map((p) => personHtml(p, "@" + p.username, follows)).join("") : `<div class="fp-empty">No accounts found for "${esc(clean)}".</div>`;
+      } catch (e) { if (my === seq) body.innerHTML = `<div class="fp-empty">Could not search. Check your internet.</div>`; }
+    }
+    $("#fpq", view).addEventListener("input", (e) => { clearTimeout(t); const v = e.target.value; t = setTimeout(() => (v.trim() ? search(v) : hub()), 300); });
+    body.addEventListener("click", async (e) => {
+      const x = e.target.closest("[data-x]");
+      if (x) { addDis(x.dataset.x); const card = x.closest(".sg"); if (card) card.remove(); return; }
+      const a = e.target.closest("[data-a]"); if (!a) return;
+      const k = a.dataset.a;
+      if (k === "near") location.hash = "#/nearby";
+      else if (k === "qr") location.hash = "#/scan";
+      else if (k === "inv") doShare(INVITE(), myLink());
+      else if (k === "fb") window.open("https://www.facebook.com/sharer/sharer.php?u=" + encodeURIComponent(myLink()), "_blank");
+      else if (k === "con") {
+        if (navigator.contacts && navigator.contacts.select) {
+          try {
+            const picked = await navigator.contacts.select(["name", "tel"], { multiple: true });
+            const tels = (picked || []).map((c) => (c.tel && c.tel[0]) || "").filter(Boolean);
+            if (tels.length === 1) location.href = "sms:" + tels[0].replace(/[^\d+]/g, "") + "?body=" + encodeURIComponent(INVITE());
+            else if (tels.length > 1) doShare(INVITE(), myLink());
+          } catch (er) { /* cancelled */ }
+        } else doShare(INVITE(), myLink());
+      }
+    });
+    hub();
+    return () => { dead = true; clearTimeout(t); };
+  };
+
+  /* ---------- Connect Now: people in your country ---------- */
+  S.nearby = function (view) {
+    if (!need()) return;
+    view.innerHTML = `<div class="fp"><div class="fp-top"><button id="nb" aria-label="Back">←</button><b>Connect Now</b><span style="width:44px"></span></div><div id="nbody"><div class="fp-empty">Looking for people around you…</div></div></div>`;
+    $("#nb", view).addEventListener("click", () => { location.hash = "#/find-people"; });
+    let dead = false; const follows = new Set();
+    wireFollow(view, follows);
+    (async () => {
+      const body = $("#nbody", view);
+      let country = LS.myProfile && LS.myProfile.country;
+      if (!country) { try { const { data } = await sb.from("profiles").select("country").eq("id", LS.user.id).maybeSingle(); country = data && data.country; } catch (e) { /* ignore */ } }
+      if (dead) return;
+      if (!country) { body.innerHTML = `<div class="fp-empty">Add your country in Edit profile to find friends around you.<br><br><a class="fp-fb" style="display:inline-block;text-decoration:none" href="#/edit-profile">Edit profile</a></div>`; return; }
+      try {
+        const [{ data }, f] = await Promise.all([sb.from("profiles").select("id,username,display_name,avatar_url,country").ilike("country", country).neq("id", LS.user.id).order("created_at", { ascending: false }).limit(40), LS.myFollows()]);
+        if (dead) return;
+        f.forEach((i) => follows.add(i));
+        body.innerHTML = `<div class="fp-h" style="padding-top:6px">People in ${esc(country)}</div>` + ((data && data.length) ? data.map((p) => personHtml(p, "@" + p.username, follows)).join("") : `<div class="fp-empty">Nobody else from ${esc(country)} yet. Invite friends from Find people.</div>`);
+      } catch (e) { body.innerHTML = `<div class="fp-empty">Could not load people. Try again.</div>`; }
+    })();
+    return () => { dead = true; };
+  };
+
+  /* ---------- Scan QR ---------- */
+  let jsqrP = null;
+  const loadJsQR = () => jsqrP || (jsqrP = new Promise((res, rej) => { if (window.jsQR) return res(window.jsQR); const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"; s.onload = () => res(window.jsQR); s.onerror = () => rej(new Error("jsqr")); document.head.appendChild(s); }));
+  S.scan = function (view) {
+    if (!need()) return;
+    view.innerHTML = `<div class="sc">
+      <video id="scv" playsinline muted autoplay></video>
+      <div class="sc-top"><button id="scb" aria-label="Back">←</button><b>Scan</b></div>
+      <div class="sc-fr"><i></i><i></i><i></i><i></i><div class="sc-ln"></div></div>
+      <button class="sc-lt" id="sclight" type="button">🔦 Tap to turn light on</button>
+      <div class="sc-hint" id="schint">Scan your friend's QR code to connect</div>
+      <div class="sc-bot"><button id="scmy" type="button"><i>▣</i>My QR code</button><button id="scgal" type="button"><i>🖼</i>Gallery</button></div>
+      <input type="file" id="scfile" accept="image/*" hidden></div>`;
+    let dead = false, stream = null, raf = 0, det = null, torch = false, busy = false;
+    const vid = $("#scv", view), cv = document.createElement("canvas"), cx = cv.getContext("2d", { willReadFrequently: true });
+    $("#scb", view).addEventListener("click", () => { history.length > 1 ? history.back() : (location.hash = "#/find-people"); });
+    $("#scmy", view).addEventListener("click", () => { location.hash = "#/qr"; });
+    $("#scgal", view).addEventListener("click", () => $("#scfile", view).click());
+    const hint = (t) => { const h = $("#schint", view); if (h) h.textContent = t; };
+    function handle(text) {
+      const m = String(text || "").match(/#\/u\/([\w]+)/);
+      if (m) { dead = true; location.hash = "#/u/" + m[1]; return true; }
+      hint("That QR code isn't a LiveStream Studio profile."); setTimeout(() => hint("Scan your friend's QR code to connect"), 2200);
+      return false;
+    }
+    async function decode(src, w, h) {
+      if ("BarcodeDetector" in window) {
+        try { det = det || new window.BarcodeDetector({ formats: ["qr_code"] }); const r = await det.detect(src); if (r && r[0]) return r[0].rawValue; return null; } catch (e) { /* fall through */ }
+      }
+      try {
+        const jq = await loadJsQR();
+        cv.width = w; cv.height = h; cx.drawImage(src, 0, 0, w, h);
+        const d = cx.getImageData(0, 0, w, h); const r = jq(d.data, w, h); return r ? r.data : null;
+      } catch (e) { return null; }
+    }
+    async function loop() {
+      if (dead) return;
+      if (vid.readyState >= 2 && !busy) {
+        busy = true;
+        const txt = await decode(vid, Math.min(640, vid.videoWidth || 640), Math.round(Math.min(640, vid.videoWidth || 640) * (vid.videoHeight || 480) / (vid.videoWidth || 640)));
+        busy = false;
+        if (txt && handle(txt)) return;
+      }
+      raf = setTimeout(loop, 250);
+    }
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        if (dead) { stream.getTracks().forEach((t) => t.stop()); return; }
+        vid.srcObject = stream; await vid.play().catch(() => {});
+        loop();
+      } catch (e) { hint("Allow camera access to scan, or use Gallery."); }
+    })();
+    $("#sclight", view).addEventListener("click", async () => {
+      const tr = stream && stream.getVideoTracks()[0];
+      const caps = tr && tr.getCapabilities ? tr.getCapabilities() : {};
+      if (!tr || !caps.torch) { toast("Light is not available on this phone."); return; }
+      try { torch = !torch; await tr.applyConstraints({ advanced: [{ torch }] }); $("#sclight", view).textContent = torch ? "🔦 Tap to turn light off" : "🔦 Tap to turn light on"; } catch (e) { torch = false; toast("Could not turn on the light."); }
+    });
+    $("#scfile", view).addEventListener("change", async (e) => {
+      const f = e.target.files && e.target.files[0]; e.target.value = ""; if (!f) return;
+      hint("Reading the picture…");
+      try {
+        const bmp = await createImageBitmap(f);
+        const txt = await decode(bmp, bmp.width, bmp.height);
+        if (txt) { handle(txt); } else { hint("No QR code found in that picture."); setTimeout(() => hint("Scan your friend's QR code to connect"), 2400); }
+      } catch (er) { hint("Could not read that picture."); }
+    });
+    return () => { dead = true; clearTimeout(raf); if (stream) stream.getTracks().forEach((t) => t.stop()); };
+  };
+
+  /* ---------- LIVE Events ---------- */
+  function sheet(html) {
+    const ov = document.createElement("div"); ov.className = "ev-sh"; ov.innerHTML = `<div>${html}</div>`;
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+    document.body.appendChild(ov); return ov;
+  }
+  function createSheet(done) {
+    const d = new Date(Date.now() + 3600 * 1000); d.setMinutes(0, 0, 0);
+    const val = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    const ov = sheet(`<h3>Create an event</h3>
+      <label>Event name</label><input id="evt" maxlength="60" placeholder="What is your LIVE about?">
+      <label>When</label><input id="evw" type="datetime-local" value="${val}">
+      <label>Description (optional)</label><textarea id="evd" rows="3" maxlength="300" placeholder="Tell viewers what to expect"></textarea>
+      <div class="msg" id="evm"></div><button class="go" id="evg" type="button">Create event</button>`);
+    $("#evg", ov).addEventListener("click", async () => {
+      const t = $("#evt", ov).value.trim(), w = $("#evw", ov).value, m = $("#evm", ov);
+      if (!t) { m.textContent = "Give your event a name."; return; }
+      const when = new Date(w); if (!w || isNaN(when)) { m.textContent = "Pick a date and time."; return; }
+      m.style.color = "#9a9aa3"; m.textContent = "Creating…";
+      const { error } = await sb.rpc("create_live_event", { p_title: t, p_desc: $("#evd", ov).value.trim(), p_starts: when.toISOString() });
+      m.style.color = "#ff6b81";
+      if (error) { m.textContent = /past/.test(error.message) ? "Pick a time in the future." : /limit/.test(error.message) ? "You can have up to 10 upcoming events." : /far/.test(error.message) ? "Pick a date within 90 days." : "Could not create the event."; return; }
+      ov.remove(); toast("Event created"); done();
+    });
+  }
+  const evCard = (e, tab) => `<div class="ev-card" data-id="${e.id}"><h3>${esc(e.title)}</h3><div class="d">${e.status === "live" ? "🔴 LIVE now" : "📅 " + esc(fmtD(e.starts_at))}</div>
+    ${e.description ? `<p>${esc(e.description)}</p>` : ""}
+    <div class="h"><span>${ava({ avatar_url: e.host_avatar, username: e.host_username, display_name: e.host_name }, 30)}</span>${esc(e.host_name || "")} · ${Number(e.registered) || 0} registered</div>
+    <div class="ev-acts">${e.status === "live" && e.live_stream ? `<a class="pri" href="#/live/${e.live_stream}">Watch LIVE</a>` : ""}
+      ${tab === "created" ? `${e.status === "scheduled" ? `<a class="pri" href="#/golive">Go LIVE</a>` : ""}<button data-sh="${e.id}" type="button">Share</button>${e.status === "scheduled" ? `<button data-cx="${e.id}" type="button">Cancel</button>` : ""}` : `<button data-un="${e.id}" type="button">Unregister</button>`}</div></div>`;
+  S.events = function (view) {
+    if (!need()) return;
+    let tab = "created", dead = false;
+    view.innerHTML = `<div class="fp"><div class="fp-top"><button id="evb" aria-label="Back">←</button><b>LIVE Events</b><span><button id="evm" aria-label="More">•••</button><button id="evh" aria-label="Help">?</button></span></div>
+      <div class="ev-tabs"><button data-t="created" class="on">Created</button><button data-t="registered">Registered</button></div><div id="evbody"></div><button class="ev-cta" id="evnew" type="button">Create an event</button></div>`;
+    $("#evb", view).addEventListener("click", () => { history.length > 1 ? history.back() : (location.hash = "#/profile"); });
+    const body = $("#evbody", view);
+    const empty = `<div class="ev-empty"><h2>Create an event for your next LIVE</h2>
+      <div class="ev-f"><i>🗓</i><div><b>Announce LIVE schedule</b><p>The event link will appear on your promotional videos and profile page. Viewers can register in advance.</p></div></div>
+      <div class="ev-f"><i>🔔</i><div><b>Keep viewers notified</b><p>Followers and registered viewers will be notified when the event starts.</p></div></div></div>`;
+    async function load() {
+      body.innerHTML = `<div class="fp-empty">Loading…</div>`;
+      const { data, error } = await sb.rpc("event_list", { p_tab: tab });
+      if (dead) return;
+      if (error) { body.innerHTML = `<div class="fp-empty">Could not load events.</div>`; return; }
+      const list = Array.isArray(data) ? data : [];
+      $("#evnew", view).style.display = tab === "created" ? "" : "none";
+      if (!list.length) { body.innerHTML = tab === "created" ? empty : `<div class="fp-empty" style="padding-top:80px">You haven't registered for any events yet.<br>Open an event link to register.</div>`; return; }
+      body.innerHTML = list.map((e) => evCard(e, tab)).join("") + `<div style="height:90px"></div>`;
+    }
+    view.addEventListener("click", async (e) => {
+      const t = e.target.closest("[data-t]");
+      if (t) { tab = t.dataset.t; view.querySelectorAll(".ev-tabs button").forEach((b) => b.classList.toggle("on", b === t)); load(); return; }
+      if (e.target.closest("#evnew")) { createSheet(load); return; }
+      if (e.target.closest("#evm")) { const ov = sheet(`<button class="it" id="evs">⚙️ Event settings</button>`); $("#evs", ov).addEventListener("click", () => { ov.remove(); location.hash = "#/event-settings"; }); return; }
+      if (e.target.closest("#evh")) { sheet(`<h3>About LIVE Events</h3><p style="color:#cfcfd6;line-height:1.5;font-size:17px">Create an event to tell people when your next LIVE starts. Viewers can register, and followers and registered viewers get an alert in the app when you go LIVE. Start your LIVE close to the event time and it is marked as live automatically.</p>`); return; }
+      const sh = e.target.closest("[data-sh]"), cx = e.target.closest("[data-cx]"), un = e.target.closest("[data-un]");
+      if (sh) { doShare("Join my LIVE event on LiveStream Studio", location.origin + "/#/event/" + sh.dataset.sh); return; }
+      if (cx) { if (!confirm("Cancel this event?")) return; await sb.rpc("event_cancel", { p_event: cx.dataset.cx }); load(); return; }
+      if (un) { await sb.rpc("event_register", { p_event: un.dataset.un, p_on: false }); load(); }
+    });
+    load();
+    return () => { dead = true; };
+  };
+
+  /* single event page (from a shared link) */
+  S.event = function (view, id) {
+    if (!need()) return;
+    view.innerHTML = `<div class="fp"><div class="fp-top"><button id="eb" aria-label="Back">←</button><b>LIVE Event</b><span style="width:44px"></span></div><div id="ebody"><div class="fp-empty">Loading…</div></div></div>`;
+    $("#eb", view).addEventListener("click", () => { location.hash = "#/events"; });
+    let dead = false;
+    (async () => {
+      const body = $("#ebody", view);
+      const { data: e } = await sb.from("live_events").select("*").eq("id", id).maybeSingle();
+      if (dead) return;
+      if (!e || e.status === "cancelled") { body.innerHTML = `<div class="fp-empty">This event is not available.</div>`; return; }
+      const [{ data: p }, { data: r }, { count }] = await Promise.all([
+        sb.from("profiles").select("username,display_name,avatar_url").eq("id", e.host_id).maybeSingle(),
+        sb.from("event_registrations").select("event_id").eq("event_id", id).eq("user_id", LS.user.id).maybeSingle(),
+        sb.from("event_registrations").select("event_id", { count: "exact", head: true }).eq("event_id", id)]).catch(() => [{}, {}, {}]);
+      if (dead) return;
+      let reg = !!r; const mine = e.host_id === LS.user.id;
+      const draw = () => {
+        body.innerHTML = evCard({ id: e.id, title: e.title, description: e.description, starts_at: e.starts_at, status: e.status, host_name: p && (p.display_name || p.username), host_username: p && p.username, host_avatar: p && p.avatar_url, registered: (count || 0) + (reg && !r ? 1 : 0), live_stream: e.stream_id }, "x").replace(/<button data-un[^>]*>Unregister<\/button>/, mine ? "" : `<button class="${reg ? "" : "pri"}" id="evreg" type="button">${reg ? "Registered ✓" : "Register"}</button>`);
+        const b = $("#evreg", body); if (b) b.addEventListener("click", async () => { await sb.rpc("event_register", { p_event: id, p_on: !reg }); reg = !reg; draw(); toast(reg ? "You'll be notified when it starts." : "Unregistered"); });
+      };
+      draw();
+    })();
+    return () => { dead = true; };
+  };
+
+  S.eventSettings = function (view) {
+    if (!need()) return;
+    view.innerHTML = `<div class="fp"><div class="fp-top"><button id="esb" aria-label="Back">←</button><b>Event settings</b><span style="width:44px"></span></div>
+      <div class="ev-set"><div style="flex:1"><b>Future event promotion</b><p>Promote LIVE Events on your videos. Only your next upcoming event will be promoted. Event links will only be shown in “For You” and “Following”.</p></div>
+      <label class="ev-sw"><input type="checkbox" id="esw"><i></i></label></div></div>`;
+    $("#esb", view).addEventListener("click", () => { location.hash = "#/events"; });
+    let dead = false;
+    sb.from("profiles").select("promote_events").eq("id", LS.user.id).maybeSingle().then(({ data }) => { if (!dead && data) $("#esw", view).checked = !!data.promote_events; });
+    $("#esw", view).addEventListener("change", async (e) => {
+      const on = e.target.checked;
+      const { error } = await sb.from("profiles").update({ promote_events: on }).eq("id", LS.user.id);
+      if (error) { e.target.checked = !on; toast("Could not save."); }
+    });
+    return () => { dead = true; };
+  };
+
+  /* event card on profiles */
+  function profileEventCard(view, hostId, mine) {
+    (async () => {
+      try {
+        for (let i = 0; i < 24 && !$(".pf-btns", view); i++) await new Promise((r) => setTimeout(r, 250));
+        const row = $(".pf-btns", view); if (!row || $(".ev-pc", view)) return;
+        const { data: e } = await sb.rpc("event_next_for", { p_host: hostId });
+        if (!e || !e.id || !view.isConnected) return;
+        let reg = !!e.me_registered;
+        const a = document.createElement("div"); a.className = "ev-pc";
+        const draw = () => { a.innerHTML = `<i>📅</i><div><b>${esc(e.title)}</b><small>${e.status === "live" ? "🔴 LIVE now" : esc(fmtD(e.starts_at))} · ${Number(e.registered) + (reg && !e.me_registered ? 1 : 0)} registered</small></div>${mine ? `<button class="on" data-go type="button">Manage</button>` : e.status === "live" && e.stream_id ? `<button data-w type="button">Watch</button>` : `<button class="${reg ? "on" : ""}" data-r type="button">${reg ? "Registered" : "Register"}</button>`}`; };
+        draw();
+        a.addEventListener("click", async (ev) => {
+          if (ev.target.closest("[data-go]")) { location.hash = "#/events"; return; }
+          if (ev.target.closest("[data-w]")) { location.hash = "#/live/" + e.stream_id; return; }
+          if (ev.target.closest("[data-r]")) { await sb.rpc("event_register", { p_event: e.id, p_on: !reg }); reg = !reg; draw(); }
+        });
+        row.parentNode.insertBefore(a, row.nextSibling);
+      } catch (er) { /* ignore */ }
+    })();
+  }
+  const prevProfile = S.profile;
+  S.profile = function (view) {
+    const c = prevProfile.apply(this, arguments);
+    if (LS.user && sb) {
+      profileEventCard(view, LS.user.id, true);
+      const qr = view.querySelector('.drawer a[href="#/qr"]');
+      if (qr && !view.querySelector('.drawer a[href="#/find-people"]')) {
+        const mk = (h, ic, t) => { const a = document.createElement("a"); a.className = "dr-item"; a.href = h; a.innerHTML = `<span class="dr-ic">${ic}</span><b>${t}</b><span class="dr-go">›</span>`; return a; };
+        qr.parentNode.insertBefore(mk("#/find-people", "👥", "Find people"), qr);
+        qr.parentNode.insertBefore(mk("#/events", "📅", "LIVE Events"), qr);
+      }
+      applyOrder(view);
+    }
+    return c;
+  };
+  const prevUser = S.userProfile;
+  S.userProfile = function (view, uname) {
+    const c = prevUser.apply(this, arguments);
+    if (LS.user && sb) sb.from("profiles").select("id").eq("username", uname).maybeSingle().then(({ data }) => { if (data && data.id !== LS.user.id) profileEventCard(view, data.id, false); }, () => {});
+    return c;
+  };
+  const prevDisc = S.discover;
+  S.discover = function (view) {
+    const c = prevDisc.apply(this, arguments);
+    const top = view.querySelector(".topbar");
+    if (top && LS.user && !top.querySelector(".fp-link")) { const a = document.createElement("a"); a.className = "icon-btn fp-link"; a.href = "#/find-people"; a.setAttribute("aria-label", "Find people"); a.textContent = "👥"; a.style.cssText = "margin-left:auto;text-decoration:none;font-size:22px"; top.appendChild(a); }
+    return c;
+  };
+
+  /* chip on videos in For You / Following when the host turned on Future event promotion */
+  const seen = new Map();
+  let chipTimer = null;
+  function chips() {
+    chipTimer = null;
+    if (!sb || !LS.user) return;
+    const infos = Array.from(document.querySelectorAll(".fy-item[data-i] .fy-info"));
+    const names = new Set();
+    infos.forEach((el) => { const b = el.querySelector("b"); const u = b && b.textContent.replace(/^@/, ""); if (u && !seen.has(u)) names.add(u); });
+    const paint = () => infos.forEach((el) => {
+      if (el.querySelector(".ev-chip")) return;
+      const b = el.querySelector("b"); const u = b && b.textContent.replace(/^@/, ""); const e = u && seen.get(u);
+      if (e) { const a = document.createElement("a"); a.className = "ev-chip"; a.href = "#/event/" + e.id; a.textContent = "📅 " + e.title + " · " + fmtD(e.starts_at); el.appendChild(a); }
+    });
+    if (!names.size) { paint(); return; }
+    names.forEach((n) => seen.set(n, null));
+    sb.rpc("promoted_events", { p_usernames: Array.from(names) }).then(({ data }) => { (data || []).forEach((e) => seen.set(e.username, e)); paint(); }, () => {});
+  }
+  new MutationObserver(() => { if (!chipTimer) chipTimer = setTimeout(chips, 600); }).observe(document.body, { childList: true, subtree: true });
+
+  /* in-app alert when a LIVE event you follow or registered for starts */
+  const shown = new Set();
+  async function alerts() {
+    if (!sb || !LS.user || document.hidden) return;
+    try {
+      const { data } = await sb.rpc("event_alerts");
+      (data || []).forEach((e) => {
+        if (shown.has(e.id)) return; shown.add(e.id);
+        const b = document.createElement("div"); b.className = "ev-ban";
+        b.innerHTML = `<span>🔔 <b>${esc(e.host_name)}</b> started the LIVE event “${esc(e.title)}”</span><a href="#/live/${e.stream_id}">Watch</a><button type="button" aria-label="Close">✕</button>`;
+        b.querySelector("button").addEventListener("click", () => b.remove()); b.querySelector("a").addEventListener("click", () => b.remove());
+        document.body.appendChild(b); setTimeout(() => b.remove(), 20000);
+      });
+    } catch (e) { /* ignore */ }
+  }
+  setInterval(alerts, 60000); setTimeout(alerts, 8000);
+
+  /* ---------- Edit profile: change display order ---------- */
+  const OKEY = "ls.pforder";
+  const ITEMS = { bal: ["Balance", '.pf-btns a[href="#/recharge"]'], earn: ["Earnings", '.pf-btns a[href="#/earnings"]'], live: ["Go Live", '.pf-btns a[href="#/golive"]'] };
+  const getOrder = () => { try { const o = JSON.parse(localStorage.getItem(OKEY) || "[]"); const base = Object.keys(ITEMS); return o.filter((k) => ITEMS[k]).concat(base.filter((k) => o.indexOf(k) < 0)); } catch (e) { return Object.keys(ITEMS); } };
+  function applyOrder(view) {
+    const row = view.querySelector(".pf-btns"); if (!row) return;
+    getOrder().forEach((k) => { const el = row.querySelector(ITEMS[k][1].replace(".pf-btns ", "")); if (el) row.appendChild(el); });
+  }
+  const prevEdit = S.editProfile;
+  S.editProfile = function (view) {
+    const c = prevEdit.apply(this, arguments);
+    const cnt = $("#ecnt", view);
+    if (cnt) {
+      const h = document.createElement("h4"); h.className = "er-sec"; h.textContent = "Change display order";
+      const card = document.createElement("div"); card.className = "er-card"; card.style.overflow = "hidden";
+      let order = getOrder();
+      const draw = () => { card.innerHTML = order.map((k) => `<div class="do-row" data-k="${k}"><span>${ITEMS[k][0]}</span><i>☰</i></div>`).join(""); };
+      draw();
+      let drag = null;
+      card.addEventListener("pointerdown", (e) => { const h2 = e.target.closest("i"); if (!h2) return; drag = h2.parentNode; drag.classList.add("drag"); card.setPointerCapture(e.pointerId); e.preventDefault(); });
+      card.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        const rows = Array.from(card.children);
+        for (const r of rows) { if (r === drag) continue; const b = r.getBoundingClientRect(); if (e.clientY > b.top && e.clientY < b.bottom) { const before = rows.indexOf(drag) > rows.indexOf(r); card.insertBefore(drag, before ? r : r.nextSibling); break; } }
+      });
+      const end = () => { if (!drag) return; drag.classList.remove("drag"); drag = null; order = Array.from(card.children).map((r) => r.dataset.k); try { localStorage.setItem(OKEY, JSON.stringify(order)); } catch (e) { /* ignore */ } };
+      card.addEventListener("pointerup", end); card.addEventListener("pointercancel", end);
+      cnt.parentNode.insertBefore(h, cnt); cnt.parentNode.insertBefore(card, cnt);
+    }
+    return c;
+  };
+})();
+</script>
+  <script>
 /* Tiny hash router. */
 (function () {
   const LS = window.LS;
@@ -10590,6 +11134,12 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
     [/^\/blocked$/, S.blocked, "thread"],
     [/^\/studio$/, S.studio, "thread"],
     [/^\/qr$/, S.qr, "thread"],
+    [/^\/find-people$/, S.findPeople, "thread"],
+    [/^\/nearby$/, S.nearby, "thread"],
+    [/^\/scan$/, S.scan, "thread"],
+    [/^\/events$/, S.events, "thread"],
+    [/^\/event\/([\w-]+)$/, S.event, "thread"],
+    [/^\/event-settings$/, S.eventSettings, "thread"],
     [/^\/activity$/, S.activity, "thread"],
     [/^\/history\/(watch|comments|search|ads|mentions|account|reuse)$/, S.history, "thread"],
     [/^\/live-analytics$/, S.liveAnalytics, "thread"],
