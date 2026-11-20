@@ -3288,7 +3288,9 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
           ${sel("match", "⚔️", "Live Match", [["0", "Off / stop"], ["120", "Start · 2 min"], ["180", "Start · 3 min"], ["300", "Start · 5 min"]], "0")}
           ${sel("vr", "🎙", "Voice rings", [["green", "Green"], ["pink", "Pink"], ["blue", "Blue"], ["gold", "Gold"], ["rainbow", "Rainbow"], ["off", "Off"]], T.vr || "green")}
           ${LS.mus ? sel("music", "🎵", "Reel music", [["none", "Off"]].concat(LS.mus.tracks.map((t) => [t.id, t.icon + " " + t.name])).concat(LS.mus.list().length ? [["list", "📀 My playlist (" + LS.mus.list().length + ")"]] : []), LS.mus.currentId()) : ""}
-          ${LS.mus && LS.mus.currentId() === "list" ? go("musnext", "⏭", "Next song", esc(LS.mus.currentName().slice(0, 16))) : ""}
+          ${LS.mus && LS.mus.currentId() !== "none" ? go("musplay", LS.mus.isPaused() ? "▶" : "⏸", LS.mus.isPaused() ? "Resume music" : "Pause music", esc(LS.mus.currentName().slice(0, 16))) : ""}
+          ${LS.mus && LS.mus.currentId() !== "none" ? go("musstop", "⏹", "Stop music", "") : ""}
+          ${LS.mus && LS.mus.currentId() === "list" ? go("musnext", "⏭", "Next song", "") : ""}
           ${sel("disc", "📢", "Content disclosure", [["none", "None"], ["brand", "Own brand"], ["paid", "Paid partnership"]], T.disc || "none")}
         </div>
         <div class="tl-card">
@@ -3366,6 +3368,8 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         LS.hostSetAdd(kind, u).then((r) => { b.disabled = false; if (r === "ok") render(); else msg.textContent = r; });
         return;
       }
+      if (b.dataset.go === "musplay") { if (LS.mus) LS.mus.toggle(); render(); return; }
+      if (b.dataset.go === "musstop") { if (LS.mus) LS.mus.stop(); render(); return; }
       if (b.dataset.go === "musnext") { if (LS.mus) LS.mus.next(); render(); return; }
       if (b.dataset.go) { vw = b.dataset.go; render(); return; }
       if (b.id === "tlsave") {
@@ -10426,13 +10430,15 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
     { id: "hype", name: "Epic Hype", icon: "⚡", bpm: 128, bars: [[57, "min"], [60, "maj"], [55, "maj"], [53, "maj"]], pad: "sawtooth", bass: "xxxxxxxxxxxxxxxx", bw: "sawtooth", arp: "x.x.x.x.x.x.x.x.", aw: "square", av: 0.025, k: "x...x...x...x...", s: "....x.......x...", h: "..x...x...x...x.", sw: 0 },
   ];
   const stl = document.createElement("style");
-  stl.textContent = `.mpl-ctl{display:flex;gap:8px;margin:12px 0 8px}.mpl-ctl button{flex:1;background:#23232b;color:#fff;border:0;border-radius:12px;padding:12px 6px;font-size:16px;font-weight:600}
+  stl.textContent = `
+  .mpl-ctl{display:flex;gap:8px;margin:12px 0 8px}.mpl-ctl button{flex:1;background:#23232b;color:#fff;border:0;border-radius:12px;padding:12px 6px;font-size:16px;font-weight:600}
   .mpl{max-height:280px;overflow:auto;background:#15151a;border-radius:14px;margin-bottom:6px}.mpl-r{display:flex;align-items:center;border-bottom:1px solid #1f1f26}.mpl-r.on{background:#2a1a30}
   .mpl-n{flex:1;display:flex;align-items:center;gap:12px;background:none;border:0;color:#fff;text-align:left;padding:13px 12px;font-size:16px;min-width:0}.mpl-n b{width:26px;text-align:center;color:#fe2c55;font-size:15px;flex:none}.mpl-n span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mpl-clr{display:block;width:100%;background:#23232b;color:#cfcfd6;border:0;border-radius:12px;padding:12px;font-size:15px;margin:2px 0 6px}.mpl-ctl button{font-size:22px}
   .mpl-x{background:none;border:0;color:#9a9aa3;font-size:20px;padding:12px 16px}`;
   document.head.appendChild(stl);
   let ctx = null, bus = null, out = null, noise = null, timer = null, cfg = null, step = 0, next = 0, arpN = 0;
-  let curId = "none", fileEl = null, fileNode = null, PL = [], plIdx = 0, tmpId = 0, badRun = 0, curUrl = null;
+  let isHeld = false, curId = "none", fileEl = null, fileNode = null, PL = [], plIdx = 0, tmpId = 0, badRun = 0, curUrl = null;
   /* the playlist is kept on this phone (IndexedDB) so it is still there next time */
   let db = null;
   const idb = () => new Promise((res) => { if (db) return res(db); try { const r = indexedDB.open("ls-music", 1); r.onupgradeneeded = () => r.result.createObjectStore("tracks", { keyPath: "id", autoIncrement: true }); r.onsuccess = () => { db = r.result; res(db); }; r.onerror = () => res(null); } catch (e) { res(null); } });
@@ -10489,7 +10495,7 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
   }
   function halt() {
     if (timer) { clearInterval(timer); timer = null; }
-    cfg = null;
+    cfg = null; isHeld = false;
     if (fileEl) { try { fileEl.pause(); } catch (e) { /* ignore */ } }
   }
   function ensureEl() {
@@ -10506,6 +10512,20 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
     currentId: () => curId,
     currentName: () => curId === "list" ? ((PL[plIdx] || {}).name || "") : ((TR.find((t) => t.id === curId) || {}).name || ""),
     list: () => PL,
+    isPaused: () => isHeld,
+    pause() {
+      if (curId === "none" || isHeld) return;
+      isHeld = true;
+      if (curId === "list") { if (fileEl) fileEl.pause(); } else if (timer) { clearInterval(timer); timer = null; }
+      emit();
+    },
+    resume() {
+      if (curId === "none" || !isHeld) return;
+      isHeld = false; ensure();
+      if (curId === "list") { if (fileEl) fileEl.play().catch(() => {}); } else if (cfg && !timer) { next = ctx.currentTime + 0.05; timer = setInterval(sched, 25); }
+      emit();
+    },
+    toggle() { if (isHeld) api.resume(); else api.pause(); },
     index: () => plIdx,
     on(f) { cbs.push(f); },
     off(f) { const i = cbs.indexOf(f); if (i >= 0) cbs.splice(i, 1); },
@@ -10561,9 +10581,10 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
         TR.map((t) => `<button class="chip ${curId === t.id ? "on" : ""}" data-mus="${t.id}">${t.icon} ${t.name}</button>`).join("");
     },
     plHtml() {
-      if (!PL.length) return `<p class="note">Add as many songs as you like. They play one after another and start again from the first.</p>`;
-      return `<div class="mpl-ctl"><button type="button" data-pc="prev">⏮</button><button type="button" data-pc="next">⏭</button><button type="button" data-pc="clear">🗑 Clear all</button></div>
-        <div class="mpl">${PL.map((t, i) => `<div class="mpl-r ${curId === "list" && i === plIdx ? "on" : ""}"><button type="button" class="mpl-n" data-pj="${i}"><b>${curId === "list" && i === plIdx ? "▶" : i + 1}</b><span>${t.name.replace(/[<>&"]/g, "")}</span></button><button type="button" class="mpl-x" data-px="${i}" aria-label="Remove">✕</button></div>`).join("")}</div>`;
+      const on = curId !== "none", lst = PL.length > 0;
+      const bar = on || lst ? `<div class="mpl-ctl">${lst ? `<button type="button" data-pc="prev" aria-label="Previous song">⏮</button>` : ""}${on ? `<button type="button" data-pc="pp" aria-label="${isHeld ? "Resume" : "Pause"}">${isHeld ? "▶" : "⏸"}</button>` : ""}${lst ? `<button type="button" data-pc="next" aria-label="Next song">⏭</button>` : ""}${on ? `<button type="button" data-pc="stop" aria-label="Stop music">⏹</button>` : ""}</div>` : "";
+      if (!lst) return bar + `<p class="note">Add as many songs as you like. They play one after another and start again from the first.</p>`;
+      return bar + `<div class="mpl">${PL.map((t, i) => `<div class="mpl-r ${curId === "list" && i === plIdx ? "on" : ""}"><button type="button" class="mpl-n" data-pj="${i}"><b>${curId === "list" && i === plIdx ? (isHeld ? "⏸" : "▶") : i + 1}</b><span>${t.name.replace(/[<>&"]/g, "")}</span></button><button type="button" class="mpl-x" data-px="${i}" aria-label="Remove">✕</button></div>`).join("")}</div><button type="button" class="mpl-clr" data-pc="clear">🗑 Clear all songs</button>`;
     },
     plWire(root) {
       const box = $("#muspl", root); if (!box) return;
@@ -10573,7 +10594,14 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
         const j = e.target.closest("[data-pj]"), x = e.target.closest("[data-px]"), c = e.target.closest("[data-pc]");
         if (j) api.playIdx(+j.dataset.pj);
         else if (x) api.remove(+x.dataset.px);
-        else if (c) { if (c.dataset.pc === "next") { if (curId !== "list") api.playIdx(plIdx); else api.next(); } else if (c.dataset.pc === "prev") { if (curId !== "list") api.playIdx(plIdx); else api.prev(); } else if (confirm("Remove all your songs?")) api.clearList(); }
+        else if (c) {
+          const k = c.dataset.pc;
+          if (k === "pp") api.toggle();
+          else if (k === "stop") api.stop();
+          else if (k === "next") { if (curId !== "list") api.playIdx(plIdx); else api.next(); }
+          else if (k === "prev") { if (curId !== "list") api.playIdx(plIdx); else api.prev(); }
+          else if (confirm("Remove all your songs?")) api.clearList();
+        }
       });
       const f = $("#musfile", root);
       if (f) f.addEventListener("change", async (e) => { const files = Array.from(e.target.files || []); e.target.value = ""; if (files.length) { const n = await api.add(files); const nt = $("#musnote", root); if (nt && !n) nt.textContent = "Pick audio files (mp3, m4a, wav…)."; } });
@@ -10585,7 +10613,7 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
       const paint = () => {
         if (!root.isConnected) { api.off(paint); return; }
         if (ch) ch.innerHTML = api.chips();
-        if (note) note.textContent = curId === "none" ? "" : "Playing: " + api.currentName() + ". Viewers hear it with your voice.";
+        if (note) note.textContent = curId === "none" ? "" : (isHeld ? "Paused: " : "Playing: ") + api.currentName() + ". Viewers hear it with your voice.";
       };
       api.on(paint);
       if (ch) ch.addEventListener("click", (e) => {
