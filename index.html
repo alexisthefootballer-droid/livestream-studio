@@ -2828,7 +2828,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
   /* ---------- streamer earnings + withdrawals ---------- */
   S.earnings = function (view) {
     if (!sb || !LS.user) { location.hash = "#/auth"; return; }
-    const MIN = 10;
+    const MIN = 50;
     const usd = (m) => "$" + (Number(m || 0) / 1e6).toFixed(2);
     const when = (t) => new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
     const stat = { pending: "Waiting for payment", paid: "Paid", rejected: "Rejected (returned to balance)" };
@@ -7973,7 +7973,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="pb" aria-label="Back">←</button><div>Plan and ads</div></div>
       <div class="sp-s">Your plan</div>
       <div class="sp-card"><div class="sp-r" style="display:block"><b style="font-size:20px">Free plan</b><em style="font-style:normal;color:#9a9aa3;display:block;margin-top:4px">Everything in the app is free to use.</em></div>
-        ${row("Go LIVE and upload videos", "Included")}${row("Creator earnings", "You keep 40% of gifts you receive")}${row("Withdrawals", "From $10, paid manually")}</div>
+        ${row("Go LIVE and upload videos", "Included")}${row("Creator earnings", "You keep 40% of gifts you receive")}${row("Withdrawals", "From $50, paid manually")}</div>
       <div class="sp-s">Ads</div>
       <div class="sp-card">${row("No ads", "This app does not show ads, and does not sell your data to advertisers.")}${link("Ads activity history", "See your ad history", "#/history/ads")}</div>
       <div class="sp-s">Money</div>
@@ -8588,7 +8588,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     ["How do I go LIVE?", "Tap the + button in the middle of the bottom bar, then Go Live. Allow camera and microphone when asked. Your followers get an alert if they turned on live notifications."],
     ["How do guests join my LIVE?", "Viewers tap Request to join. You accept them from the Requests list. You can have up to 8 guests on stage and you can mute or remove anyone."],
     ["How do coins and gifts work?", "Coins are bought in Wallet (1 coin costs $0.0155). Viewers send gifts with coins, and the streamer receives 40% of the gift value."],
-    ["How do I withdraw my earnings?", "Open Settings → Plan and ads or Analytics to see your earnings. You can ask for a withdrawal from $10. Withdrawals are paid manually, so they take a little time."],
+    ["How do I withdraw my earnings?", "Open Settings → Plan and ads or Analytics to see your earnings. You can ask for a withdrawal from $50. Withdrawals are paid manually, so they take a little time."],
     ["How do I upload a video?", "Go to your profile and tap Upload video. Choose an MP4, WebM or MOV video up to 50 MB, add a caption and tap Post."],
     ["How do I delete my video?", "Open your video from your profile and tap the 🗑 button."],
     ["How do I make my account private?", "Go to Settings → Private account. Then only people you approve can follow you and see your videos."],
@@ -8723,7 +8723,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       ["Buying coins", "Coins are bought in Wallet. 1 coin costs $0.0155. Coins have no cash value outside the app and can not be turned back into money."],
       ["Sending gifts", "Viewers send gifts with coins during LIVE. Gifts can not be taken back once sent."],
       ["Creator earnings", "The streamer receives 40% of the value of gifts they get. The rest covers payment fees, running costs and the platform."],
-      ["Withdrawals", "You can ask to withdraw from $10. Withdrawals are checked and paid manually, so they can take some time. We may refuse or hold payments linked to fraud or broken rules."],
+      ["Withdrawals", "You can ask to withdraw from $50. Withdrawals are checked and paid manually, so they can take some time. We may refuse or hold payments linked to fraud or broken rules."],
       ["Refunds", "Coin purchases are final unless the law says otherwise or something went wrong with your payment. Contact us from Help Center."]]],
     ["©️", "Copyright", [
       ["Your work", "Post only videos and music you created or have permission to use."],
@@ -8762,7 +8762,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
 (function () {
   const LS = window.LS, sb = LS.sb, $ = LS.$;
   const toast = (t) => { const d = document.createElement("div"); d.className = "sp-toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 4000); };
-  const BLOCK = { pending_withdrawal: "You have a withdrawal waiting to be paid. Wait until it is paid, then try again.", has_earnings: "You have earnings of $10 or more. Withdraw them first (Settings → Wallet), then you can delete your account." };
+  const BLOCK = { pending_withdrawal: "You have a withdrawal waiting to be paid. Wait until it is paid, then try again.", has_earnings: "You have earnings of $50 or more. Withdraw them first (Settings → Wallet), then you can delete your account." };
   async function wipeFiles(uid) {
     for (const b of ["videos", "avatars"]) {
       try {
@@ -8783,7 +8783,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
       <div style="padding:10px 20px">
         <h2 style="margin:8px 0 10px;font-size:22px;color:#ff5c7a">Delete your account?</h2>
         <p style="color:#cfcfd6;line-height:1.5;font-size:16px;margin:0 0 12px">This permanently deletes:</p>
-        <div style="color:#cfcfd6;line-height:1.7;font-size:16px">• Your profile, photo and bio<br>• All your videos, comments, likes and saves<br>• Your messages, followers and following<br>• Your coins and any earnings under $10<br>• Your settings and history</div>
+        <div style="color:#cfcfd6;line-height:1.7;font-size:16px">• Your profile, photo and bio<br>• All your videos, comments, likes and saves<br>• Your messages, followers and following<br>• Your coins and any earnings under $50<br>• Your settings and history</div>
         <p style="color:#ff8a9c;line-height:1.5;font-size:15.5px;margin:14px 0">This can not be undone. Coins and earnings are lost and are not refunded.</p>
         <p style="color:#9a9aa3;font-size:15px;margin:0 0 6px">Type <b style="color:#fff">DELETE</b> to confirm:</p>
         <input id="xc" autocomplete="off" autocapitalize="characters" style="width:100%;box-sizing:border-box;background:#2a2a30;color:#fff;border:0;border-radius:10px;padding:13px;font-size:17px">
