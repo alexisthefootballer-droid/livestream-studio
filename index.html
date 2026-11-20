@@ -2839,7 +2839,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         <span style="width:40px"></span>
       </header>
       <div class="rc-bal">Available: <b id="ebal">…</b></div>
-      <div class="rc-notice">Streamers earn 40% of the value of gifts sent to them. Minimum withdrawal is $${MIN}. Payments are sent to your PayPal by hand, usually within a few days.<div id="eextra" style="margin-top:6px"></div></div>
+      <div class="rc-notice">Streamers earn 30% of the value of gifts sent to them. Minimum withdrawal is $${MIN}. Payments are sent to your PayPal by hand, usually within a few days.<div id="eextra" style="margin-top:6px"></div></div>
       <div class="pad">
         <input id="epp" type="email" inputmode="email" autocomplete="email" placeholder="Your PayPal email" style="width:100%;padding:14px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:inherit;font-size:16px">
         <div class="formmsg" id="emsg" role="status"></div>
@@ -5495,7 +5495,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       const sum = (k) => wk.reduce((a, s) => a + s[k], 0);
       body.innerHTML = `<h2>You're on a roll, ${esc(name)}!</h2>
         <div class="card"><div class="stats"><div><small>Peak viewers</small><b>${fmt(sum("viewers"))}</b></div><div><small>LIVE duration</small><b>${durShort(sum("secs"))}</b></div><div><small>Gift coins</small><b>${fmt(sum("coins"))}</b></div></div><small style="color:#9a9aa3;display:block;margin-top:10px">Last 7 days · ${wk.length} LIVE${wk.length === 1 ? "" : "s"}</small></div>
-        <div class="card"><h3>LIVE rewards</h3><small style="color:#9a9aa3">Streamers earn 40% of the value of gifts. See your balance and withdraw in Earnings.</small></div>`;
+        <div class="card"><h3>LIVE rewards</h3><small style="color:#9a9aa3">Streamers earn 30% of the value of gifts. See your balance and withdraw in Earnings.</small></div>`;
     }
     view.querySelector(".tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (b && b.dataset.t !== tab) { tab = b.dataset.t; paint(); } });
     paint();
@@ -7977,7 +7977,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     ov.innerHTML = `<div class="sp"><div class="sp-top"><button id="pb" aria-label="Back">←</button><div>Plan and ads</div></div>
       <div class="sp-s">Your plan</div>
       <div class="sp-card"><div class="sp-r" style="display:block"><b style="font-size:20px">Free plan</b><em style="font-style:normal;color:#9a9aa3;display:block;margin-top:4px">Everything in the app is free to use.</em></div>
-        ${row("Go LIVE and upload videos", "Included")}${row("Creator earnings", "You keep 40% of gifts you receive")}${row("Withdrawals", "From $50, paid manually")}</div>
+        ${row("Go LIVE and upload videos", "Included")}${row("Creator earnings", "You keep 30% of gifts you receive")}${row("Withdrawals", "From $50, paid manually")}</div>
       <div class="sp-s">Ads</div>
       <div class="sp-card">${row("No ads", "This app does not show ads, and does not sell your data to advertisers.")}${link("Ads activity history", "See your ad history", "#/history/ads")}</div>
       <div class="sp-s">Money</div>
@@ -8591,7 +8591,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
   const FAQ = [
     ["How do I go LIVE?", "Tap the + button in the middle of the bottom bar, then Go Live. Allow camera and microphone when asked. Your followers get an alert if they turned on live notifications."],
     ["How do guests join my LIVE?", "Viewers tap Request to join. You accept them from the Requests list. You can have up to 8 guests on stage and you can mute or remove anyone."],
-    ["How do coins and gifts work?", "Coins are bought in Wallet (1 coin costs $0.0155). Viewers send gifts with coins, and the streamer receives 40% of the gift value."],
+    ["How do coins and gifts work?", "Coins are bought in Wallet (1 coin costs $0.0155). Viewers send gifts with coins, and the streamer receives 30% of the gift value."],
     ["How do I withdraw my earnings?", "Open Settings → Plan and ads or Analytics to see your earnings. You can ask for a withdrawal from $50. Withdrawals are paid manually, so they take a little time."],
     ["How do I upload a video?", "Go to your profile and tap Upload video. Choose an MP4, WebM or MOV video up to 50 MB, add a caption and tap Post."],
     ["How do I delete my video?", "Open your video from your profile and tap the 🗑 button."],
@@ -8726,7 +8726,7 @@ window.LSQR=function(text){for(var t=2;t<=30;t++){try{var q=new Q(t,EC.M);q.addD
     ["💰", "Coins, Gifts and Payments", [
       ["Buying coins", "Coins are bought in Wallet. 1 coin costs $0.0155. Coins have no cash value outside the app and can not be turned back into money."],
       ["Sending gifts", "Viewers send gifts with coins during LIVE. Gifts can not be taken back once sent."],
-      ["Creator earnings", "The streamer receives 40% of the value of gifts they get. The rest covers payment fees, running costs and the platform."],
+      ["Creator earnings", "The streamer receives 30% of the value of gifts they get. The rest covers payment fees, running costs and the platform."],
       ["Withdrawals", "You can ask to withdraw from $50. Withdrawals are checked and paid manually, so they can take some time. We may refuse or hold payments linked to fraud or broken rules."],
       ["Refunds", "Coin purchases are final unless the law says otherwise or something went wrong with your payment. Contact us from Help Center."]]],
     ["©️", "Copyright", [
