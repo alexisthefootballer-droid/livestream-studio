@@ -2904,11 +2904,27 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         const { data: rows, error } = await sb.rpc("admin_list_withdrawals");
         const l = $("#alist", view);
         if (error || !rows) { l.innerHTML = `<div class="pad">Could not load.</div>`; return; }
-        l.innerHTML = rows.length ? rows.map((w) => `<div class="row-item" style="align-items:flex-start;flex-wrap:wrap"><div class="grow"><b>${usd(w.amount_micro)} · @${esc(w.username || "?")}</b><small>PayPal: ${esc(w.paypal_email)}<br>${when(w.created_at)} · ${stat[w.status] || esc(w.status)}${w.note ? " · " + esc(w.note) : ""}</small></div>${w.status === "pending" ? `<div style="display:flex;gap:6px"><button class="btn" data-paid="${w.id}">Paid</button><button class="btn" data-rej="${w.id}">Reject</button></div>` : ""}</div>`).join("") : `<div class="pad" style="color:var(--muted)">No requests yet.</div>`;
+        l.innerHTML = rows.length ? rows.map((w) => `<div class="row-item" style="align-items:flex-start;flex-wrap:wrap"><div class="grow"><b>${usd(w.amount_micro)} · @${esc(w.username || "?")}</b><small>PayPal: ${esc(w.paypal_email)}<br>${when(w.created_at)} · ${stat[w.status] || esc(w.status)}${w.note ? " · " + esc(w.note) : ""}</small></div>${w.status === "pending" ? `<div style="display:flex;gap:6px"><button class="btn" data-pay="${w.id}">Pay with PayPal</button><button class="btn" data-paid="${w.id}">Paid</button><button class="btn" data-rej="${w.id}">Reject</button></div>` : ""}</div>`).join("") : `<div class="pad" style="color:var(--muted)">No requests yet.</div>`;
       };
       refreshAdmin = render;
       render();
       box.addEventListener("click", async (e) => {
+        const pay = e.target.closest("[data-pay]");
+        if (pay) {
+          if (!confirm("Send this payment now from your PayPal balance?")) return;
+          pay.disabled = true; pay.textContent = "Sending…";
+          const m = $("#amsg", view);
+          try {
+            const { data, error } = await sb.functions.invoke("paypal-payout", { body: { id: +pay.dataset.pay } });
+            if (error || !data || !data.ok) {
+              let d = (data && (data.detail || data.error)) || "";
+              try { if (!d && error && error.context) { const j = await error.context.json(); d = j.detail || j.error || ""; } } catch (x) {}
+              m.textContent = "PayPal did not send it" + (d ? ": " + d : ".") + " Nothing was taken. Check PayPal Payouts is approved and your PayPal balance has money.";
+            } else m.textContent = "Sent $" + data.amount + " through PayPal.";
+          } catch (x) { m.textContent = "Check your internet and try again."; }
+          render();
+          return;
+        }
         const paid = e.target.closest("[data-paid]"), rej = e.target.closest("[data-rej]");
         if (!paid && !rej) return;
         const id = +(paid || rej).dataset[paid ? "paid" : "rej"];
