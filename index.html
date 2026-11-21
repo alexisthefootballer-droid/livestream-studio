@@ -9765,7 +9765,27 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
       ${sw("gfx", "Gift animations", "Show big gift animations from other viewers.")}
       ${sw("wake", "Keep screen on", "Stop the screen from turning off while you watch.")}
       ${sl("screen", "Screen time", "Remind me after I watch for a while.", [[0, "Off"], [15, "15 min"], [30, "30 min"], [60, "1 hour"]])}
-      ${sl("giftlim", "Gift limit notification", "Warn me when my gifts reach this many coins.", [[0, "Off"], [50, "50"], [200, "200"], [1000, "1,000"]])}`, (ov) => {
+      ${sl("giftlim", "Gift limit notification", "Warn me when my gifts reach this many coins.", [[0, "Off"], [50, "50"], [200, "200"], [1000, "1,000"]])}
+      ${LS.user ? `<div class="lv-row"><div>Viewer and buyer ranking<small>Allow your name and photo to show among the top gifters in a LIVE.</small></div><input class="lv-sw" type="checkbox" data-p="show_ranking" checked></div>
+      <div class="lv-row"><div>Show my age and country<small>Show them in LIVE chat when you join (only what you added in Edit profile).</small></div><input class="lv-sw" type="checkbox" data-p="show_live_info" checked></div>
+      <button class="lv-opt" data-go="gifter"><b>🏅 Gifter level</b><br><small style="color:#777">See your level and rewards.</small></button>
+      <button class="lv-opt" data-go="blocked"><b>🚫 Blocked accounts</b><br><small style="color:#777">People you blocked.</small></button>` : ""}`, (ov) => {
+      if (LS.user && LS.sb) {
+        LS.sb.from("profiles").select("show_ranking,show_live_info").eq("id", LS.user.id).maybeSingle().then((r) => {
+          const d = (r && r.data) || {};
+          ov.querySelectorAll("[data-p]").forEach((el) => { el.checked = d[el.dataset.p] !== false; });
+        }).catch(() => {});
+      }
+      ov.addEventListener("click", (e) => {
+        const g = e.target.closest("[data-go]"); if (!g) return;
+        ov.remove();
+        if (g.dataset.go === "gifter") { if (LS.gifterSheet) LS.gifterSheet(); } else location.hash = "#/blocked";
+      });
+      ov.addEventListener("change", async (e) => {
+        const el = e.target, p = el.dataset && el.dataset.p; if (!p || !LS.user) return;
+        const { error } = await LS.sb.from("profiles").update({ [p]: el.checked }).eq("id", LS.user.id);
+        if (error) { el.checked = !el.checked; toast("Could not save. Try again."); } else toast("Saved");
+      });
       ov.addEventListener("change", (e) => {
         const el = e.target, k = el.dataset && el.dataset.k; if (!k) return;
         if (el.type === "checkbox") { v.set(k, el.checked); if (k === "wake") wake(el.checked); }
@@ -9855,13 +9875,13 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
         const cl = LS.curLive, host = cl && cl.hostId;
         const row = document.createElement("div"); row.className = "sh-row last";
         const it = (a, c, ic, t) => `<button class="sh-it" data-x="${a}"><span class="c" style="background:${c}">${ic}</span>${t}</button>`;
-        row.innerHTML = (host && !(LS.user && LS.user.id === host) ? it("rep", "#555", "🚩", "Report") : "") + it("coh", "#2b8cff", "🤝", "Suggest co-host") + it("fb", "#e0a030", "💬", "Feedback") + it("vq", "#3b6cf6", "🎞", "Video quality") + it("ds", "#19a974", "📱", "Device status") + it("story", "#e0457b", "➕", "Add to Story") + it("bgp", "#8a5cf6", "🎧", "Background player") + it("set", "#6b6b78", "⚙️", "Settings");
+        row.innerHTML = (host && !(LS.user && LS.user.id === host) ? it("rep", "#555", "🚩", "Report") : "") + it("coh", "#2b8cff", "🤝", "Suggest co-host") + it("fb", "#e0a030", "💬", "Feedback") + it("vq", "#3b6cf6", "🎞", "Video quality") + it("ds", "#19a974", "📱", "Device status") + it("story", "#e0457b", "➕", "Add to Story") + it("pc", "#444", "🖥️", "Watch on computer") + it("bgp", "#8a5cf6", "🎧", "Background player") + it("set", "#6b6b78", "⚙️", "Settings");
         sh.appendChild(row);
         row.addEventListener("click", (e) => {
           const b = e.target.closest("[data-x]"); if (!b) return; const a = b.dataset.x; ov.remove();
           if (a === "rep") LS.reportSheet({ uid: host, uname: "this live" });
           else if (a === "fb") { if (LS.openHelp) LS.openHelp(); }
-          else if (a === "coh") { if (LS.cohostSheet) LS.cohostSheet({ stream: LS.curLive && LS.curLive.streamId, host: false }); } else if (a === "story") { if (LS.storySheet) LS.storySheet(); } else if (a === "bgp") bgSheet(); else if (a === "vq") qualitySheet(); else if (a === "ds") deviceSheet(); else if (a === "set") settingsSheet();
+          else if (a === "coh") { if (LS.cohostSheet) LS.cohostSheet({ stream: LS.curLive && LS.curLive.streamId, host: false }); } else if (a === "story") { if (LS.storySheet) LS.storySheet(); } else if (a === "pc") { const link = location.href.split("?")[0]; (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(() => toast("Link copied. Open it in a browser on your computer."), () => toast("Open this page on your computer: " + link)); } else if (a === "bgp") bgSheet(); else if (a === "vq") qualitySheet(); else if (a === "ds") deviceSheet(); else if (a === "set") settingsSheet();
         });
       }
     }
