@@ -2898,8 +2898,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       if (data !== true) return;
       const box = $("#eadmin", view);
       box.innerHTML = `<h3 class="sec">Admin: withdrawal requests</h3><div class="list" id="alist"><div class="pad" style="color:var(--muted)">Loading…</div></div>
-        <div class="pad"><div class="formmsg" id="amsg" role="status"></div><small style="color:var(--muted)">Test the screens: add fake earnings to your own account.</small>
-        <div style="display:flex;gap:8px;margin-top:8px"><input id="atest" type="number" inputmode="numeric" min="1" max="1000" placeholder="Dollars (1-1000)" style="flex:1;padding:12px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:inherit;font-size:16px"><button class="btn" id="atestgo" type="button">Add</button></div></div>`;
+        <div class="pad"><div class="formmsg" id="amsg" role="status"></div></div>`;
       const render = async () => {
         const { data: rows, error } = await sb.rpc("admin_list_withdrawals");
         const l = $("#alist", view);
@@ -2934,13 +2933,6 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         const { error } = await sb.rpc("admin_mark_withdrawal", { p_id: id, p_status: paid ? "paid" : "rejected", p_note: note });
         $("#amsg", view).textContent = error ? "Could not update." : "Updated.";
         render();
-      });
-      $("#atestgo", view).addEventListener("click", async () => {
-        const n = Math.floor(+$("#atest", view).value || 0);
-        if (n < 1) return;
-        const { error } = await sb.rpc("admin_add_test_earnings", { p_dollars: n });
-        $("#amsg", view).textContent = error ? "Could not add." : `Added $${n} test earnings.`;
-        load();
       });
     }).catch(() => {});
   };
