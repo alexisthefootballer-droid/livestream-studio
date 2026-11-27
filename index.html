@@ -5272,7 +5272,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
       ["🔔", "Notifications", "fn:notif"], ["⏳", "Time and well-being", "fn:wellbeing"], ["🏠", "Family Pairing", "fn:family"]]],
     ["Account", [
       ["👤", "Account", "#/edit-profile"], ["🛍", "Store", "#/store"], ["🗑", "Delete account", "fn:deleteacct"], ["🛡", "Security & permissions", "fn:security"], ["📈", "Analytics", "#/live-analytics"],
-      ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"], ["👥", "Find people", "#/find-people"], ["📅", "LIVE Events", "#/events"]]],
+      ["↪️", "Share profile", "fn:share"], ["👛", "Wallet", "#/recharge"], ["👥", "Find people", "#/find-people"], ["📅", "LIVE Events", "#/events"], ["🎬", "Promo video", "#/promo"], ["▶️", "How to use the app", "fn:tour"]]],
     ["Visibility", [
       ["🔒", "Private account", "fn:private"], ["🎁", "LIVE privacy", "fn:livepriv"], ["🏅", "Gifter level", "fn:gifter"], ["🚫", "Blocked accounts", "#/blocked"]]],
     ["Interactions", [
@@ -5317,6 +5317,7 @@ button.tl-val { background: none; border: 0; cursor: pointer; }
         try { sessionStorage.clear(); } catch (er) { /* ignore */ }
         toast("Space freed up"); return;
       }
+      if (a === "fn:tour") { if (LS.showTour) LS.showTour(true); return; }
       if (a === "fn:deleteacct") { LS.openDeleteAccount(); return; }
       if (a === "fn:terms") { LS.openTerms(); return; }
       if (a === "fn:privacy") { LS.openPrivacyCenter(); return; }
@@ -10915,6 +10916,32 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
   };
 
   /* ---------- Connect Now: people in your country ---------- */
+  /* ---------- Promo video (watch, share, download) ---------- */
+  S.promo = function (view) {
+    const site = location.origin + "/";
+    view.innerHTML = `<div class="fp"><div class="fp-top"><button id="prb" aria-label="Back">←</button><b>Promo video</b><span style="width:44px"></span></div>
+      <div style="padding:14px 16px;text-align:center">
+        <video id="prv" src="ad.mp4" poster="ad-poster.png" controls playsinline preload="metadata" style="width:100%;max-width:360px;border-radius:18px;background:#000"></video>
+        <p style="color:#9a9aa3;margin:12px 0 14px;font-size:14.5px;line-height:1.4">Share this video on TikTok, Facebook, YouTube and WhatsApp to invite people to LiveStream Studio.</p>
+        <button class="btn" id="prs" type="button" style="width:100%;margin-bottom:10px">Share video</button>
+        <a class="btn" id="prd" href="ad.mp4" download="LiveStream-Studio-promo.mp4" style="display:block;text-decoration:none;text-align:center;width:100%;margin-bottom:10px">Download video</a>
+        <button class="btn" id="prc" type="button" style="width:100%">Copy app link</button>
+        <div id="prm" style="margin-top:10px;color:#9a9aa3;font-size:14px;min-height:20px"></div>
+      </div></div>`;
+    const msg = (t) => { $("#prm", view).textContent = t; };
+    $("#prb", view).addEventListener("click", () => { history.length > 1 ? history.back() : (location.hash = "#/settings"); });
+    $("#prc", view).addEventListener("click", async () => { try { await navigator.clipboard.writeText(site); msg("Link copied."); } catch (e) { msg(site); } });
+    $("#prs", view).addEventListener("click", async () => {
+      try {
+        const r = await fetch("ad.mp4"); const blob = await r.blob();
+        const file = new File([blob], "LiveStream-Studio-promo.mp4", { type: "video/mp4" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "LiveStream Studio", text: "Go LIVE. Get gifts. Get paid. " + site }); return; }
+      } catch (e) { if (e && e.name === "AbortError") return; }
+      try { if (navigator.share) { await navigator.share({ title: "LiveStream Studio", text: "Go LIVE. Get gifts. Get paid.", url: site }); return; } } catch (e) { if (e && e.name === "AbortError") return; }
+      try { await navigator.clipboard.writeText(site); msg("Link copied. Paste it anywhere to share."); } catch (e) { msg(site); }
+    });
+  };
+
   S.nearby = function (view) {
     if (!need()) return;
     view.innerHTML = `<div class="fp"><div class="fp-top"><button id="nb" aria-label="Back">←</button><b>Connect Now</b><span style="width:44px"></span></div><div id="nbody"><div class="fp-empty">Looking for people around you…</div></div></div>`;
@@ -11263,6 +11290,7 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
     [/^\/find-people$/, S.findPeople, "thread"],
     [/^\/nearby$/, S.nearby, "thread"],
     [/^\/scan$/, S.scan, "thread"],
+    [/^\/promo$/, S.promo, "thread"],
     [/^\/events$/, S.events, "thread"],
     [/^\/event\/([\w-]+)$/, S.event, "thread"],
     [/^\/event-settings$/, S.eventSettings, "thread"],
@@ -11304,6 +11332,44 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
   render();
 })();
 
+</script>
+
+<script>
+/* First-screen "How to use the app" video. Shows once on first open, replay from Settings. */
+(function () {
+  const KEY = "ls.tourSeen";
+  const seen = () => { try { return localStorage.getItem(KEY) === "1"; } catch (e) { return false; } };
+  const mark = () => { try { localStorage.setItem(KEY, "1"); } catch (e) { /* ignore */ } };
+  let open = false;
+  function show(force) {
+    if (open) return; open = true;
+    const ov = document.createElement("div");
+    ov.id = "tour-ov";
+    ov.setAttribute("role", "dialog"); ov.setAttribute("aria-label", "How to use LiveStream Studio");
+    ov.style.cssText = "position:fixed;inset:0;z-index:99999;background:#0b0b12;display:flex;align-items:center;justify-content:center;color:#fff;font-family:inherit";
+    ov.innerHTML = '<video id="tour-v" src="tour.mp4" poster="tour-poster.jpg" muted playsinline autoplay preload="auto" style="max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;background:#0b0b12"></video>'
+      + '<button id="tour-skip" type="button" style="position:absolute;top:max(14px,env(safe-area-inset-top));right:14px;background:#000a;color:#fff;border:1px solid #ffffff44;border-radius:22px;padding:9px 18px;font-size:15px;font-weight:600">Skip</button>'
+      + '<button id="tour-snd" type="button" aria-label="Sound" style="position:absolute;top:max(14px,env(safe-area-inset-top));left:14px;background:#000a;color:#fff;border:1px solid #ffffff44;border-radius:22px;padding:9px 14px;font-size:17px">🔇</button>'
+      + '<div style="position:absolute;left:0;right:0;bottom:0;padding:0 18px max(18px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px;background:linear-gradient(transparent,#000b)">'
+      + '<div style="height:4px;border-radius:2px;background:#ffffff33;overflow:hidden"><i id="tour-bar" style="display:block;height:100%;width:0;background:linear-gradient(90deg,#ff2d7a,#ff8a3d)"></i></div>'
+      + '<button id="tour-go" type="button" style="border:0;border-radius:30px;padding:15px;font-size:17px;font-weight:700;color:#fff;background:linear-gradient(90deg,#ff2d7a,#ff8a3d)">Get started</button></div>';
+    document.body.appendChild(ov);
+    const v = ov.querySelector("#tour-v");
+    const close = () => { mark(); open = false; try { v.pause(); } catch (e) { /* ignore */ } ov.remove(); };
+    ov.querySelector("#tour-skip").onclick = close;
+    ov.querySelector("#tour-go").onclick = close;
+    ov.querySelector("#tour-snd").onclick = (e) => { v.muted = !v.muted; e.currentTarget.textContent = v.muted ? "🔇" : "🔊"; if (v.paused) v.play().catch(() => {}); };
+    v.addEventListener("timeupdate", () => { if (v.duration) ov.querySelector("#tour-bar").style.width = (v.currentTime / v.duration * 100) + "%"; });
+    v.addEventListener("ended", close);
+    v.addEventListener("error", close);
+    v.addEventListener("click", () => { if (v.paused) v.play().catch(() => {}); else v.pause(); });
+    const p = v.play(); if (p && p.catch) p.catch(() => { /* autoplay blocked: tap the video to play */ });
+  }
+  window.LS = window.LS || {};
+  LS.showTour = show;
+  const h = location.hash;
+  if (!seen() && (h === "" || h === "#" || h === "#/")) show(false);
+})();
 </script>
 </body>
 </html>
