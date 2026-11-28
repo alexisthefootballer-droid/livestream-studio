@@ -11367,8 +11367,8 @@ dragon:`<defs><linearGradient id="a12" x1="0" y1="0" x2="1" y2="1"><stop offset=
   }
   window.LS = window.LS || {};
   LS.showTour = show;
-  const h = location.hash;
-  if (!seen() && (h === "" || h === "#" || h === "#/")) show(false);
+  /* Plays every time the app is opened, before anyone can sign in or use it. */
+  show(false);
 })();
 </script>
 </body>
